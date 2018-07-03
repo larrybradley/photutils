@@ -6,7 +6,11 @@ WFC3 ISR 2016-12).
 """
 
 import copy
+import sys
+import time
 import warnings
+from functools import partial
+from multiprocessing import Pool, cpu_count
 
 import numpy as np
 from astropy.modeling.fitting import TRFLSQFitter
@@ -105,33 +109,44 @@ class EPSFFitter:
         epsf = epsf.copy()
 
         # perform the fit
-        fitted_stars = []
-        for star in stars:
-            if isinstance(star, EPSFStar):
-                fitted_star = self._fit_star(epsf, star, self.fitter,
-                                             self.fitter_kwargs,
-                                             self.fitter_has_fit_info,
-                                             self.fit_boxsize)
 
-            elif isinstance(star, LinkedEPSFStar):
-                fitted_star = []
-                for linked_star in star:
-                    fitted_star.append(
-                        self._fit_star(epsf, linked_star, self.fitter,
-                                       self.fitter_kwargs,
-                                       self.fitter_has_fit_info,
-                                       self.fit_boxsize))
+        #fitted_stars = []
+        #for star in stars:
 
-                fitted_star = LinkedEPSFStar(fitted_star)
-                fitted_star.constrain_centers()
-
-            else:
-                raise TypeError('stars must contain only EPSFStar and/or '
-                                'LinkedEPSFStar objects.')
-
-            fitted_stars.append(fitted_star)
+        func = partial(self._fit_a_star, epsf=epsf)
+        #with Pool(processes=cpu_count()-1) as pool:
+        with Pool() as pool:
+            fitted_stars = pool.map(func, stars)
+            #fitted_stars.append(fitted_star)
 
         return EPSFStars(fitted_stars)
+
+    def _fit_a_star(self, star, epsf=None):
+
+        if isinstance(star, EPSFStar):
+            fitted_star = self._fit_star(epsf, star, self.fitter,
+                                            self.fitter_kwargs,
+                                            self.fitter_has_fit_info,
+                                            self.fit_boxsize)
+
+        elif isinstance(star, LinkedEPSFStar):
+            fitted_star = []
+            for linked_star in star:
+                fitted_star.append(
+                    self._fit_star(epsf, linked_star, self.fitter,
+                                    self.fitter_kwargs,
+                                    self.fitter_has_fit_info,
+                                    self.fit_boxsize))
+
+            fitted_star = LinkedEPSFStar(fitted_star)
+            fitted_star.constrain_centers()
+
+        else:
+            raise TypeError('stars must contain only EPSFStar and/or '
+                            'LinkedEPSFStar objects.')
+
+        return fitted_star
+
 
     def _fit_star(self, epsf, star, fitter, fitter_kwargs,
                   fitter_has_fit_info, fit_boxsize):
