@@ -10,6 +10,7 @@ from astropy.coordinates import SkyCoord
 from astropy.table import QTable
 import astropy.units as u
 from astropy.utils import deprecated, lazyproperty
+from astropy.utils.decorators import deprecated_renamed_argument
 from astropy.utils.exceptions import AstropyUserWarning
 from astropy.wcs.utils import pixel_to_skycoord
 import numpy as np
@@ -1661,7 +1662,7 @@ def source_properties(data, segment_img, error=None, mask=None,
     if not sources_props:
         raise ValueError('No sources are defined.')
 
-    return SourceCatalog(sources_props, wcs=wcs)
+    return SourceCatalog(sources_props)
 
 
 class SourceCatalog:
@@ -1669,6 +1670,7 @@ class SourceCatalog:
     Class to hold source catalogs.
     """
 
+    @deprecated_renamed_argument('wcs', None, 0.7)
     def __init__(self, properties_list, wcs=None):
         if isinstance(properties_list, SourceProperties):
             self._data = [properties_list]
@@ -1679,7 +1681,20 @@ class SourceCatalog:
         else:
             raise ValueError('invalid input.')
 
-        self.wcs = wcs
+        if wcs is not None:
+            self.wcs = wcs
+        else:
+            wcs_ref = self._data[0]._wcs
+            if wcs_ref is None:
+                self.wcs = None
+            else:
+                if not all(obj._wcs is wcs_ref for obj in self._data):
+                    raise ValueError('The WCS objects for the sources in '
+                                     'properties_list do not all agree.  '
+                                     'The WCS for the first source, i.e. '
+                                     'properties_list[0], will be used.')
+                self.wcs = wcs_ref
+
         self._cache = {}
 
     def __len__(self):
