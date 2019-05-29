@@ -4,6 +4,7 @@ This module provides tools for calculating the properties of sources
 defined by a segmentation image.
 """
 
+import time
 import warnings
 
 from astropy.coordinates import SkyCoord
@@ -652,6 +653,8 @@ class SourceProperties:
         The ``x`` coordinate of the centroid within the source segment.
         """
 
+        #time.sleep(2)
+        print('calc xcentroid')
         return self.centroid[1]
 
     @lazyproperty
@@ -1016,6 +1019,7 @@ class SourceProperties:
         (automatically masked).
         """
 
+        print('calc source_sum')
         if self._is_completely_masked:
             return np.nan * self._data_unit  # table output needs unit
         else:
@@ -1701,14 +1705,17 @@ class SourceCatalog:
         return len(self._data)
 
     def __getitem__(self, index):
-        return self._data[index]
+        #return self._data[index]
+        return self.__class__(self._data[index])
 
     def __delitem__(self, index):
         del self._data[index]
 
     def __iter__(self):
-        for i in self._data:
-            yield i
+        for i in range(len(self)):
+            yield self.__getitem__(i)
+        #for i in self._data:
+        #    yield i
 
     def __str__(self):
         cls_name = '<{0}.{1}>'.format(self.__class__.__module__,
@@ -1722,26 +1729,33 @@ class SourceCatalog:
 
     def __getattr__(self, attr):
         if attr not in self._cache:
-            values = [getattr(p, attr) for p in self._data]
+            if len(self) == 1:
+                values = getattr(self._data[0], attr)
+            else:
+                values = [getattr(p, attr) for p in self._data]
 
-            if isinstance(values[0], u.Quantity):
-                # turn list of Quantities into a Quantity array
-                values = u.Quantity(values)
-            if isinstance(values[0], SkyCoord):  # pragma: no cover
-                # failsafe: turn list of SkyCoord into a SkyCoord array
-                values = SkyCoord(values)
+                if isinstance(values[0], u.Quantity):
+                    # turn list of Quantities into a Quantity array
+                    values = u.Quantity(values)
+                if isinstance(values[0], SkyCoord):  # pragma: no cover
+                    # failsafe: turn list of SkyCoord into a SkyCoord array
+                    values = SkyCoord(values)
 
             self._cache[attr] = values
 
         return self._cache[attr]
 
     @lazyproperty
-    def _none_list(self):
+    def _none(self):
         """
         Return a list of `None` values, used by SkyCoord properties if
         ``wcs`` is `None`.
         """
-        return [None] * len(self._data)
+
+        if len(self) == 1:
+            return None
+        else:
+            return [None] * len(self._data)
 
     @lazyproperty
     def background_at_centroid(self):
@@ -1774,14 +1788,14 @@ class SourceCatalog:
             return pixel_to_skycoord(self.xcentroid, self.ycentroid,
                                      self.wcs, origin=0)
         else:
-            return self._none_list
+            return self._none
 
     @lazyproperty
     def sky_centroid_icrs(self):
         if self.wcs is not None:
             return self.sky_centroid.icrs
         else:
-            return self._none_list
+            return self._none
 
     @lazyproperty
     def sky_bbox_ll(self):
@@ -1790,7 +1804,7 @@ class SourceCatalog:
                                      self.bbox_ymin.value - 0.5,
                                      self.wcs, origin=0)
         else:
-            return self._none_list
+            return self._none
 
     @lazyproperty
     def sky_bbox_ul(self):
@@ -1799,7 +1813,7 @@ class SourceCatalog:
                                      self.bbox_ymax.value + 0.5,
                                      self.wcs, origin=0)
         else:
-            return self._none_list
+            return self._none
 
     @lazyproperty
     def sky_bbox_lr(self):
@@ -1808,7 +1822,7 @@ class SourceCatalog:
                                      self.bbox_ymin.value - 0.5,
                                      self.wcs, origin=0)
         else:
-            return self._none_list
+            return self._none
 
     @lazyproperty
     def sky_bbox_ur(self):
@@ -1817,7 +1831,7 @@ class SourceCatalog:
                                      self.bbox_ymax.value + 0.5,
                                      self.wcs, origin=0)
         else:
-            return self._none_list
+            return self._none
 
     def to_table(self, columns=None, exclude_columns=None):
         """
@@ -1884,7 +1898,12 @@ class SourceCatalog:
         2 2.0909090909 2.3636363636       55.0
         """
 
-        return _properties_table(self, columns=columns,
+        if len(self) == 1:
+            obj = self._data[0]
+        else:
+            obj = self
+
+        return _properties_table(obj, columns=columns,
                                  exclude_columns=exclude_columns)
 
 
