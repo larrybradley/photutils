@@ -125,6 +125,8 @@ def detect_threshold(data, snr, background=None, error=None, mask=None,
                                  'must have the same shape as the input '
                                  'data.')
 
+    print(background, error, snr)
+
     return background + (error * snr)
 
 

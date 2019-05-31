@@ -201,7 +201,7 @@ class SourceProperties:
         if mask is np.ma.nomask:
             mask = None
         if mask is not None:
-            mask = np.asanyarray(mask)
+            mask = np.asarray(mask)
             if mask.shape != data.shape:
                 raise ValueError('mask and data must have the same shape.')
 
@@ -230,6 +230,8 @@ class SourceProperties:
         else:
             self._filtered_data = data
 
+        #print('setting data')
+        self._data = np.asanyarray(data, dtype=float)
         self._data = data
         self._segment_img = segment_img
         self._error = error
@@ -654,7 +656,7 @@ class SourceProperties:
         """
 
         #time.sleep(2)
-        print('calc xcentroid')
+        #print('calc xcentroid')
         return self.centroid[1]
 
     @lazyproperty
@@ -1019,7 +1021,7 @@ class SourceProperties:
         (automatically masked).
         """
 
-        print('calc source_sum')
+        #print('calc source_sum')
         if self._is_completely_masked:
             return np.nan * self._data_unit  # table output needs unit
         else:
@@ -1635,6 +1637,8 @@ def source_properties(data, segment_img, error=None, mask=None,
     <Quantity -42.4996777 deg>
     """
 
+    data = np.asanyarray(data, dtype=np.float)
+
     if not isinstance(segment_img, SegmentationImage):
         segment_img = SegmentationImage(segment_img)
 
@@ -1777,6 +1781,7 @@ class SourceCatalog:
 
     @lazyproperty
     def sky_centroid(self):
+        print('calc sky_cen')
         if self.wcs is not None:
             # For a large catalog, it's much faster to calculate world
             # coordinates using the complete list of (x, y) instead of
