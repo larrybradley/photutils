@@ -33,9 +33,3 @@ steps:
     pip install pytest pytest-astropy pytest-azurepipelines
     pytest
   displayName: 'pytest'
-
-- task: PublishTestResults@2
-    inputs:
-      testResultsFiles: '**/test-results.xml'
-      testRunTitle: 'Python $(python.version)'
-    condition: succeededOrFailed()
