@@ -5,13 +5,15 @@ for prime-time (i.e., is not considered a stable public API), but is
 included either for experimentation or as legacy code.
 """
 
-from astropy.modeling import Fittable2DModel, Parameter
-from astropy.modeling.fitting import LevMarLSQFitter
-from astropy.nddata.utils import extract_array, subpixel_indices
-from astropy.table import Table
 import numpy as np
+from astropy.table import Table
+from astropy.modeling import Parameter, Fittable2DModel
+from astropy.modeling.fitting import LevMarLSQFitter
+from astropy.nddata.utils import subpixel_indices, extract_array
+from astropy import wcs as fitswcs
 
-from ..utils.interpolation import _mask_to_mirrored_num
+from ..utils import mask_to_mirrored_num
+
 
 __all__ = ['DiscretePRF', 'Reproject']
 
@@ -272,7 +274,7 @@ class DiscretePRF(Fittable2DModel):
                                         prf_nan[size // 2, size // 2]):
                                     continue
                                 else:
-                                    extracted_prf = _mask_to_mirrored_num(
+                                    extracted_prf = mask_to_mirrored_num(
                                         extracted_prf, prf_nan,
                                         (size // 2, size // 2))
                         # Normalize and add extracted PRF to data cube
@@ -311,31 +313,54 @@ class Reproject:
         self.wcs_rectified = wcs_rectified
 
     @staticmethod
-    def _reproject(wcs1, wcs2, x, y):
+    def _reproject(wcs1, wcs2):
         """
         Perform the forward transformation of ``wcs1`` followed by the
         inverse transformation of ``wcs2``.
 
         Parameters
         ----------
-        wcs1, wcs2 : WCS objects
-            World coordinate system (WCS) transformations that support
-            the `astropy shared interface for WCS
-            <https://docs.astropy.org/en/stable/wcs/wcsapi.html>`_ (e.g.
-            `astropy.wcs.WCS`, `gwcs.wcs.WCS`).
+        wcs1, wcs2 : `~astropy.wcs.WCS` or `~gwcs.wcs.WCS`
+            The WCS objects.
 
         Returns
         -------
-        x, y:  float or array-like of float
-            The pixel coordinates.
+        result : func
+            Function to compute the transformations.  It takes x, y
+            positions in ``wcs1`` and returns x, y positions in
+            ``wcs2``.  The input and output x, y positions are zero
+            indexed.
         """
 
-        try:
-            skycoord = wcs1.pixel_to_world(x, y)
-            return wcs2.world_to_pixel(skycoord)
-        except AttributeError:
-            raise ValueError('Input wcs objects do not support the shared '
-                             'WCS interface.')
+        import gwcs
+
+        forward_origin = []
+        if isinstance(wcs1, fitswcs.WCS):
+            forward = wcs1.all_pix2world
+            forward_origin = [0]
+        elif isinstance(wcs2, gwcs.wcs.WCS):
+            forward = wcs1.forward_transform
+        else:
+            raise ValueError('wcs1 must be an astropy.wcs.WCS or '
+                             'gwcs.wcs.WCS object.')
+
+        inverse_origin = []
+        if isinstance(wcs2, fitswcs.WCS):
+            inverse = wcs2.all_world2pix
+            inverse_origin = [0]
+        elif isinstance(wcs2, gwcs.wcs.WCS):
+            inverse = wcs2.forward_transform.inverse
+        else:
+            raise ValueError('wcs2 must be an astropy.wcs.WCS or '
+                             'gwcs.wcs.WCS object.')
+
+        def _reproject_func(x, y):
+            forward_args = [x, y] + forward_origin
+            sky = forward(*forward_args)
+            inverse_args = sky + inverse_origin
+            return inverse(*inverse_args)
+
+        return _reproject_func
 
     def to_rectified(self, x, y):
         """
@@ -354,7 +379,8 @@ class Reproject:
             The zero-index pixel coordinates in the rectified image.
         """
 
-        return self._reproject(self.wcs_original, self.wcs_rectified, x, y)
+        return self._reproject(self.wcs_original,
+                               self.wcs_rectified)(x, y)
 
     def to_original(self, x, y):
         """
@@ -373,4 +399,5 @@ class Reproject:
             (unrectified) image.
         """
 
-        return self._reproject(self.wcs_rectified, self.wcs_original, x, y)
+        return self._reproject(self.wcs_rectified,
+                               self.wcs_original)(x, y)

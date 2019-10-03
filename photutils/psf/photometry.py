@@ -1,24 +1,22 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-"""
-This module provides classes to perform PSF-fitting photometry.
-"""
+"""Module which provides classes to perform PSF Photometry"""
 
+import numpy as np
 import warnings
 
 from astropy.modeling.fitting import LevMarLSQFitter
 from astropy.nddata.utils import overlap_slices
-from astropy.stats import SigmaClip, gaussian_sigma_to_fwhm
-from astropy.table import Column, Table, hstack, vstack
+from astropy.stats import gaussian_sigma_to_fwhm, SigmaClip
+from astropy.table import Table, Column, vstack, hstack
 from astropy.utils.exceptions import AstropyUserWarning
-import numpy as np
 
 from .groupstars import DAOGroup
-from .utils import (_extract_psf_fitting_names, get_grouped_psf_model,
-                    subtract_psf)
+from .utils import (get_grouped_psf_model, subtract_psf,
+                    _extract_psf_fitting_names)
 from ..aperture import CircularAperture, aperture_photometry
 from ..background import MMMBackground
 from ..detection import DAOStarFinder
-from ..utils.exceptions import NoDetectionsWarning
+
 
 __all__ = ['BasicPSFPhotometry', 'IterativelySubtractedPSFPhotometry',
            'DAOPhotPSFPhotometry']
@@ -50,7 +48,7 @@ class BasicPSFPhotometry:
         ``y_0``, and ``group_id``. The column ``group_id`` should cotain
         integers starting from ``1`` that indicate which group a given
         source belongs to. See, e.g., `~photutils.psf.DAOGroup`.
-    bkg_estimator : callable, instance of any `~photutils.background.BackgroundBase` subclass, or None
+    bkg_estimator : callable, instance of any `~photutils.BackgroundBase` subclass, or None
         ``bkg_estimator`` should be able to compute either a scalar
         background or a 2D background of a given 2D image. See, e.g.,
         `~photutils.background.MedianBackground`.  If None, no
@@ -88,18 +86,10 @@ class BasicPSFPhotometry:
         Fitter object used to compute the optimized centroid positions
         and/or flux of the identified sources. See
         `~astropy.modeling.fitting` for more details on fitters.
-    aperture_radius : `None` or float
+    aperture_radius : float or None
         The radius (in units of pixels) used to compute initial
-        estimates for the fluxes of sources.  ``aperture_radius`` must
-        be set if initial flux guesses are not input to the photometry
-        class via the ``init_guesses`` keyword.  For tabular PSF models
-        (e.g. an `EPSFModel`), you must input the ``aperture_radius``
-        keyword.  For analytical PSF models, alternatively you may
-        define a FWHM attribute on your input psf_model.
-    extra_output_cols : list of str, optional
-        List of additional columns for parameters derived by any of the
-        intermediate fitting steps (e.g., ``finder``), such as roundness or
-        sharpness.
+        estimates for the fluxes of sources. If ``None``, one FWHM will
+        be used if it can be determined from the ``psf_model``.
 
     Notes
     -----
@@ -123,8 +113,7 @@ class BasicPSFPhotometry:
     """
 
     def __init__(self, group_maker, bkg_estimator, psf_model, fitshape,
-                 finder=None, fitter=LevMarLSQFitter(), aperture_radius=None,
-                 extra_output_cols=None):
+                 finder=None, fitter=LevMarLSQFitter(), aperture_radius=None):
         self.group_maker = group_maker
         self.bkg_estimator = bkg_estimator
         self.psf_model = psf_model
@@ -135,7 +124,6 @@ class BasicPSFPhotometry:
         self._pars_to_set = None
         self._pars_to_output = None
         self._residual_image = None
-        self._extra_output_cols = extra_output_cols
 
     @property
     def fitshape(self):
@@ -174,7 +162,9 @@ class BasicPSFPhotometry:
         elif value is None:
             self._aperture_radius = value
         else:
-            raise ValueError('aperture_radius must be a positive number')
+            raise ValueError('aperture_radius must be a real-valued '
+                             'number, received aperture_radius = {}'
+                             .format(value))
 
     def get_residual_image(self):
         """
@@ -224,10 +214,7 @@ class BasicPSFPhotometry:
             used to estimate initial values for the fluxes. Additional
             columns of the form '<parametername>_0' will be used to set
             the initial guess for any parameters of the ``psf_model``
-            model that are not fixed. If ``init_guesses`` supplied with
-            ``extra_output_cols`` the initial values are used; if the columns
-            specified in ``extra_output_cols`` are not given in
-            ``init_guesses`` then NaNs will be returned.
+            model that are not fixed.
 
         Returns
         -------
@@ -252,33 +239,16 @@ class BasicPSFPhotometry:
                 self.aperture_radius = (self.psf_model.sigma.value *
                                         gaussian_sigma_to_fwhm)
 
-        if self.aperture_radius is None:
-            if init_guesses is None:
-                raise ValueError('aperture_radius was not input and could '
-                                 'not be determined by the input psf_model '
-                                 '(e.g. an EPSFModel).  For tabular PSF '
-                                 'models, you must input the aperture_radius '
-                                 'keyword.  For analytical PSF models, you '
-                                 'must either input the aperture_radius '
-                                 'keyword or define a fwhm or sigma '
-                                 'attribute on your input psf_model.')
-
-            if (init_guesses is not None and
-                    'flux_0' not in init_guesses.colnames):
-                raise ValueError('init_guesses were input, but the "flux_0" '
-                                 'column was not present.  Initial fluxes '
-                                 'cannot be calculated because '
-                                 'aperture_radius must was not input and '
-                                 'could not be determined by the input '
-                                 'psf_model (e.g. an EPSFModel).  For '
-                                 'analytical PSF models, you must either '
-                                 'input the aperture_radius keyword or '
-                                 'define a fwhm or sigma attribute on your '
-                                 'input psf_model.')
-
         if init_guesses is not None:
             # make sure the code does not modify user's input
             init_guesses = init_guesses.copy()
+            if self.aperture_radius is None:
+                if 'flux_0' not in init_guesses.colnames:
+                    raise ValueError('aperture_radius is None and could not '
+                                     'be determined by psf_model. Please, '
+                                     'either provided a value for '
+                                     'aperture_radius or define fwhm/sigma '
+                                     'at psf_model.')
 
             if self.finder is not None:
                 warnings.warn('Both init_guesses and finder are different '
@@ -286,48 +256,29 @@ class BasicPSFPhotometry:
                               'going to be ignored.', AstropyUserWarning)
 
             if 'flux_0' not in init_guesses.colnames:
-                positions = np.transpose((init_guesses['x_0'],
-                                          init_guesses['y_0']))
-                apertures = CircularAperture(positions,
+                apertures = CircularAperture((init_guesses['x_0'],
+                                              init_guesses['y_0']),
                                              r=self.aperture_radius)
 
                 init_guesses['flux_0'] = aperture_photometry(
                     image, apertures)['aperture_sum']
-
-            # if extra_output_cols have been given, check whether init_guesses
-            # was supplied with extra_output_cols pre-attached and populate
-            # columns not given with NaNs
-            if self._extra_output_cols is not None:
-                for col_name in self._extra_output_cols:
-                    if col_name not in init_guesses.colnames:
-                        init_guesses[col_name] = np.full(len(init_guesses),
-                                                         np.nan)
         else:
             if self.finder is None:
                 raise ValueError('Finder cannot be None if init_guesses are '
                                  'not given.')
             sources = self.finder(image)
             if len(sources) > 0:
-                positions = np.transpose((sources['xcentroid'],
-                                          sources['ycentroid']))
-                apertures = CircularAperture(positions,
+                apertures = CircularAperture((sources['xcentroid'],
+                                              sources['ycentroid']),
                                              r=self.aperture_radius)
 
                 sources['aperture_flux'] = aperture_photometry(
                     image, apertures)['aperture_sum']
 
-                # init_guesses should be the initial 3 required parameters --
-                # x, y, flux -- and then concatentated with any additional
-                # sources, if there are any
                 init_guesses = Table(names=['x_0', 'y_0', 'flux_0'],
                                      data=[sources['xcentroid'],
                                            sources['ycentroid'],
                                            sources['aperture_flux']])
-
-                # Currently only needed for the finder, as group_maker and
-                # nstar return the original Table with new columns, unlike
-                # finder
-                self._get_additional_columns(sources, init_guesses)
 
         self._define_fit_param_names()
         for p0, param in self._pars_to_set.items():
@@ -422,18 +373,6 @@ class BasicPSFPhotometry:
 
         return result_tab, image
 
-    def _get_additional_columns(self, in_table, out_table):
-        """
-        Function to parse additional columns from ``in_table`` and add them to
-        ``out_table``.
-
-        """
-
-        if self._extra_output_cols is not None:
-            for col_name in self._extra_output_cols:
-                if col_name in in_table.colnames:
-                    out_table[col_name] = in_table[col_name]
-
     def _define_fit_param_names(self):
         """
         Convenience function to define mappings between the names of the
@@ -489,7 +428,7 @@ class BasicPSFPhotometry:
                 n_fit_params = len(unc_tab.colnames)
                 for i in range(star_group_size):
                     unc_tab[i] = np.sqrt(np.diag(
-                                         self.fitter.fit_info['param_cov'])
+                                          self.fitter.fit_info['param_cov'])
                                          )[k: k + n_fit_params]
                     k = k + n_fit_params
         return unc_tab
@@ -528,8 +467,7 @@ class BasicPSFPhotometry:
                                                            '_' + str(i)).value
         else:
             for param_tab_name, param_name in self._pars_to_output.items():
-                param_tab[param_tab_name] = getattr(fit_model,
-                                                    param_name).value
+                param_tab[param_tab_name] = getattr(fit_model, param_name).value
 
         return param_tab
 
@@ -555,7 +493,7 @@ class IterativelySubtractedPSFPhotometry(BasicPSFPhotometry):
         ``y_0``, and ``group_id``. The column ``group_id`` should cotain
         integers starting from ``1`` that indicate which group a given
         source belongs to. See, e.g., `~photutils.psf.DAOGroup`.
-    bkg_estimator : callable, instance of any `~photutils.background.BackgroundBase` subclass, or None
+    bkg_estimator : callable, instance of any `~photutils.BackgroundBase` subclass, or None
         ``bkg_estimator`` should be able to compute either a scalar
         background or a 2D background of a given 2D image. See, e.g.,
         `~photutils.background.MedianBackground`.  If None, no
@@ -602,10 +540,6 @@ class IterativelySubtractedPSFPhotometry(BasicPSFPhotometry):
         stars remain.  Note that in this case it is *possible* that the
         loop will never end if the PSF has structure that causes
         subtraction to create new sources infinitely.
-    extra_output_cols : list of str, optional
-        List of additional columns for parameters derived by any of the
-        intermediate fitting steps (e.g., ``finder``), such as roundness or
-        sharpness.
 
     Notes
     -----
@@ -624,10 +558,10 @@ class IterativelySubtractedPSFPhotometry(BasicPSFPhotometry):
 
     def __init__(self, group_maker, bkg_estimator, psf_model, fitshape,
                  finder, fitter=LevMarLSQFitter(), niters=3,
-                 aperture_radius=None, extra_output_cols=None):
+                 aperture_radius=None):
 
         super().__init__(group_maker, bkg_estimator, psf_model, fitshape,
-                         finder, fitter, aperture_radius, extra_output_cols)
+                         finder, fitter, aperture_radius)
         self.niters = niters
 
     @property
@@ -690,10 +624,7 @@ class IterativelySubtractedPSFPhotometry(BasicPSFPhotometry):
             used to estimate initial values for the fluxes. Additional
             columns of the form '<parametername>_0' will be used to set
             the initial guess for any parameters of the ``psf_model``
-            model that are not fixed. If ``init_guesses`` supplied with
-            ``extra_output_cols`` the initial values are used; if the columns
-            specified in ``extra_output_cols`` are not given in
-            ``init_guesses`` then NaNs will be returned.
+            model that are not fixed.
 
         Returns
         -------
@@ -720,8 +651,6 @@ class IterativelySubtractedPSFPhotometry(BasicPSFPhotometry):
         else:
             if self.bkg_estimator is not None:
                 self._residual_image = image - self.bkg_estimator(image)
-            else:
-                self._residual_image = image
 
             if self.aperture_radius is None:
                 if hasattr(self.psf_model, 'fwhm'):
@@ -740,7 +669,7 @@ class IterativelySubtractedPSFPhotometry(BasicPSFPhotometry):
 
         Parameters
         ----------
-        param_names : list
+        param_names :  list
             Names of the columns which represent the initial guesses.
             For example, ['x_0', 'y_0', 'flux_0'], for intial guesses on
             the center positions and the flux.
@@ -767,11 +696,10 @@ class IterativelySubtractedPSFPhotometry(BasicPSFPhotometry):
         sources = self.finder(self._residual_image)
 
         n = n_start
-        while(sources is not None and
+        while(len(sources) > 0 and
               (self.niters is None or n <= self.niters)):
-            positions = np.transpose((sources['xcentroid'],
-                                      sources['ycentroid']))
-            apertures = CircularAperture(positions,
+            apertures = CircularAperture((sources['xcentroid'],
+                                          sources['ycentroid']),
                                          r=self.aperture_radius)
             sources['aperture_flux'] = aperture_photometry(
                 self._residual_image, apertures)['aperture_sum']
@@ -780,7 +708,6 @@ class IterativelySubtractedPSFPhotometry(BasicPSFPhotometry):
                                    data=[sources['id'], sources['xcentroid'],
                                          sources['ycentroid'],
                                          sources['aperture_flux']])
-            self._get_additional_columns(sources, init_guess_tab)
 
             for param_tab_name, param_name in self._pars_to_set.items():
                 if param_tab_name not in (['x_0', 'y_0', 'flux_0']):
@@ -804,7 +731,7 @@ class IterativelySubtractedPSFPhotometry(BasicPSFPhotometry):
 
             # do not warn if no sources are found beyond the first iteration
             with warnings.catch_warnings():
-                warnings.simplefilter('ignore', NoDetectionsWarning)
+                warnings.simplefilter('ignore', AstropyUserWarning)
                 sources = self.finder(self._residual_image)
 
             n += 1
@@ -902,10 +829,6 @@ class DAOPhotPSFPhotometry(IterativelySubtractedPSFPhotometry):
         The radius (in units of pixels) used to compute initial
         estimates for the fluxes of sources. If ``None``, one FWHM will
         be used if it can be determined from the ```psf_model``.
-    extra_output_cols : list of str, optional
-        List of additional columns for parameters derived by any of the
-        intermediate fitting steps (e.g., ``finder``), such as roundness or
-        sharpness.
 
     Notes
     -----
@@ -926,7 +849,7 @@ class DAOPhotPSFPhotometry(IterativelySubtractedPSFPhotometry):
                  sigma=3., ratio=1.0, theta=0.0, sigma_radius=1.5,
                  sharplo=0.2, sharphi=1.0, roundlo=-1.0, roundhi=1.0,
                  fitter=LevMarLSQFitter(),
-                 niters=3, aperture_radius=None, extra_output_cols=None):
+                 niters=3, aperture_radius=None):
 
         self.crit_separation = crit_separation
         self.threshold = threshold
@@ -951,5 +874,4 @@ class DAOPhotPSFPhotometry(IterativelySubtractedPSFPhotometry):
         super().__init__(group_maker=group_maker, bkg_estimator=bkg_estimator,
                          psf_model=psf_model, fitshape=fitshape,
                          finder=finder, fitter=fitter, niters=niters,
-                         aperture_radius=aperture_radius,
-                         extra_output_cols=extra_output_cols)
+                         aperture_radius=aperture_radius)

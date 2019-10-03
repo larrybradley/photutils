@@ -1,24 +1,26 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 """
-This module provides tools to extract cutouts of stars and data
-structures to hold the cutouts for fitting and building ePSFs.
+Tools to extract cutouts of stars and data structures to hold the
+cutouts for fitting and building ePSFs.
 """
 
 import warnings
 
-from astropy.nddata import NDData
-from astropy.nddata.utils import (overlap_slices, NoOverlapError,
-                                  PartialOverlapError)
-from astropy.table import Table
-from astropy.utils import lazyproperty
-from astropy.utils.exceptions import AstropyUserWarning
-from astropy.wcs import WCS
-from astropy.wcs.utils import skycoord_to_pixel
 import numpy as np
+from astropy.nddata import NDData
+from astropy.nddata.utils import (overlap_slices, PartialOverlapError,
+                                  NoOverlapError)
+from astropy.table import Table
+from astropy.utils import lazyproperty, deprecated
+from astropy.utils.exceptions import (AstropyUserWarning,
+                                      AstropyDeprecationWarning)
+from astropy.wcs.utils import skycoord_to_pixel
 
 from ..aperture import BoundingBox
 
-__all__ = ['EPSFStar', 'EPSFStars', 'LinkedEPSFStar', 'extract_stars']
+
+__all__ = ['EPSFStar', 'EPSFStars', 'LinkedEPSFStar', 'extract_stars',
+           'Star', 'Stars', 'LinkedStar']
 
 
 class EPSFStar:
@@ -47,22 +49,38 @@ class EPSFStar:
         image.  ``origin`` and ``wcs_large`` must both be input for a
         linked star (a single star extracted from different images).
 
-    wcs_large : `None` or WCS object, optional
+    wcs_large : `~astropy.wcs.WCS` or None, optional
         A WCS object associated with the large image from which the
         cutout array was extracted.  It should not be the WCS object of
-        the input cutout ``data`` array.  The WCS object must support
-        the `astropy shared interface for WCS
-        <https://docs.astropy.org/en/stable/wcs/wcsapi.html>`_ (e.g.
-        `astropy.wcs.WCS`, `gwcs.wcs.WCS`).  ``origin`` and
-        ``wcs_large`` must both be input for a linked star (a single
-        star extracted from different images).
+        the input cutout ``data`` array.  ``origin`` and ``wcs_large``
+        must both be input for a linked star (a single star extracted
+        from different images).
 
     id_label : int, str, or `None`, optional
         An optional identification number or label for the star.
+
+    pixel_scale : float or tuple of two floats, optional
+        .. warning::
+
+            The ``pixel_scale`` keyword is now deprecated (since v0.6)
+            and will likely be removed in v0.7.  Use the
+            ``oversampling`` keyword instead.
+
+        The pixel scale (in arbitrary units) of the input ``data``.  The
+        ``pixel_scale`` can either be a single float or tuple of two
+        floats of the form ``(x_pixscale, y_pixscale)``.  If
+        ``pixel_scale`` is a scalar then the pixel scale will be the
+        same for both the x and y axes.  The star ``pixel_scale`` is
+        used in conjunction with the ePSF pixel scale or oversampling
+        factor when building and fitting the ePSF.  The ratio of the
+        star-to-ePSF pixel scales represents the ePSF oversampling
+        factor.  ``pixel_scale`` allows for building (and fitting) an
+        ePSF using images of stars with different pixel scales (e.g.
+        velocity aberrations).
     """
 
     def __init__(self, data, weights=None, cutout_center=None, origin=(0, 0),
-                 wcs_large=None, id_label=None):
+                 wcs_large=None, id_label=None, pixel_scale=1.):
 
         self._data = np.asanyarray(data)
         self.shape = self._data.shape
@@ -87,6 +105,16 @@ class EPSFStar:
         self.origin = np.asarray(origin)
         self.wcs_large = wcs_large
         self.id_label = id_label
+
+        if pixel_scale != 1:
+            warnings.warn('The pixel_scale keyword is deprecated and will '
+                          'likely be removed in v0.7.  Use the oversampling '
+                          'keyword instead.', AstropyDeprecationWarning)
+
+        pixel_scale = np.atleast_1d(pixel_scale)
+        if len(pixel_scale) == 1:
+            pixel_scale = np.repeat(pixel_scale, 2)
+        self.pixel_scale = pixel_scale  # ndarray
 
         self.flux = self.estimate_flux()
 
@@ -134,7 +162,7 @@ class EPSFStar:
         center in the original (large) image (not the cutout image).
         """
 
-        return self.cutout_center + self.origin
+        return (self.cutout_center + self.origin)
 
     @lazyproperty
     def slices(self):
@@ -195,11 +223,15 @@ class EPSFStar:
             A 2D array of the registered/scaled ePSF.
         """
 
-        yy, xx = np.indices(self.shape, dtype=np.float)
-        xx = xx - self.cutout_center[0]
-        yy = yy - self.cutout_center[1]
+        x_oversamp = self.pixel_scale[0] / epsf.pixel_scale[0]
+        y_oversamp = self.pixel_scale[1] / epsf.pixel_scale[1]
 
-        return self.flux * epsf.evaluate(xx, yy, flux=1.0, x_0=0.0, y_0=0.0)
+        yy, xx = np.indices(self.shape, dtype=np.float)
+        xx = x_oversamp * (xx - self.cutout_center[0])
+        yy = y_oversamp * (yy - self.cutout_center[1])
+
+        return (self.flux * x_oversamp * y_oversamp *
+                epsf.evaluate(xx, yy, flux=1.0, x_0=0.0, y_0=0.0))
 
     def compute_residual_image(self, epsf):
         """
@@ -300,7 +332,8 @@ class EPSFStars:
     """
 
     def __init__(self, stars_list):
-        if isinstance(stars_list, (EPSFStar, LinkedEPSFStar)):
+        if (isinstance(stars_list, EPSFStar) or
+                isinstance(stars_list, LinkedEPSFStar)):
             self._data = [stars_list]
         elif isinstance(stars_list, list):
             self._data = stars_list
@@ -322,7 +355,7 @@ class EPSFStars:
             yield i
 
     def __getattr__(self, attr):
-        if attr in ['cutout_center', 'center', 'flux',
+        if attr in ['cutout_center', 'center', 'pixel_scale', 'flux',
                     '_excluded_from_fit']:
             return np.array([getattr(star, attr) for star in self._data])
         else:
@@ -429,7 +462,18 @@ class EPSFStars:
         count.
         """
 
+        # return np.count_nonzero(~self._excluded_from_fit.ravel())
         return len(self.all_good_stars)
+
+    @lazyproperty
+    def _min_pixel_scale(self):
+        """
+        The minimum x and y pixel scale of all the `EPSFStar` objects
+        (including linked stars).
+        """
+
+        return np.min([star.pixel_scale for star in self.all_stars],
+                      axis=0)
 
     @lazyproperty
     def _max_shape(self):
@@ -481,11 +525,11 @@ class LinkedEPSFStar(EPSFStars):
         coordinates of the linked stars.
         """
 
-        if len(self._data) < 2:  # no linked stars
+        if len(self._data) < 2:   # no linked stars
             return
 
         idx = np.logical_not(self._excluded_from_fit).nonzero()[0]
-        if idx.size == 0:
+        if len(idx) == 0:
             warnings.warn('Cannot constrain centers of linked stars because '
                           'all the stars have been excluded during the ePSF '
                           'build process.', AstropyUserWarning)
@@ -495,18 +539,8 @@ class LinkedEPSFStar(EPSFStars):
 
         coords = []
         for star in good_stars:
-            wcs = star.wcs_large
-            xposition = star.center[0]
-            yposition = star.center[1]
-            try:
-                coords.append(wcs.pixel_to_world_values(xposition, yposition))
-            except AttributeError:
-                if isinstance(wcs, WCS):
-                    # for Astropy < 3.1 WCS support
-                    coords.append(wcs.all_pix2world(xposition, yposition, 0))
-                else:
-                    raise ValueError('Input wcs does not support the shared '
-                                     'WCS interface.')
+            coords.append(star.wcs_large.all_pix2world(star.center[0],
+                                                       star.center[1], 0))
 
         # compute mean cartesian coordinates
         lon, lat = np.transpose(coords)
@@ -518,22 +552,16 @@ class LinkedEPSFStar(EPSFStars):
 
         # convert mean cartesian coordinates back to spherical
         hypot = np.hypot(x_mean, y_mean)
-        mean_lon = np.arctan2(y_mean, x_mean)
-        mean_lat = np.arctan2(z_mean, hypot)
-        mean_lon *= 180. / np.pi
-        mean_lat *= 180. / np.pi
+        lon = np.arctan2(y_mean, x_mean)
+        lat = np.arctan2(z_mean, hypot)
+        lon *= 180. / np.pi
+        lat *= 180. / np.pi
 
         # convert mean sky coordinates back to center pixel coordinates
         # for each star
         for star in good_stars:
-            try:
-                center = star.wcs_large.world_to_pixel_values(mean_lon,
-                                                              mean_lat)
-            except AttributeError:
-                # for Astropy < 3.1 WCS support
-                center = star.wcs_large.all_world2pix(mean_lon, mean_lat, 0)
-
-            star.cutout_center = np.array(center) - star.origin
+            center = np.array(star.wcs_large.all_world2pix(lon, lat, 0))
+            star.cutout_center = center - star.origin
 
 
 def extract_stars(data, catalogs, size=(11, 11)):
@@ -590,8 +618,6 @@ def extract_stars(data, catalogs, size=(11, 11)):
         scalar then a square box of size ``size`` will be used.  If
         ``size`` has two elements, they should be in ``(ny, nx)`` order.
         The size must be greater than or equal to 3 pixel for both axes.
-        Size must be odd in both axes; if either is even, it is padded
-        by one to force oddness.
 
     Returns
     -------
@@ -648,18 +674,14 @@ def extract_stars(data, catalogs, size=(11, 11)):
     if len(size) == 1:
         size = np.repeat(size, 2)
 
-    # Force size to odd numbers such that there is always a central pixel with
-    # even spacing either side of the pixel.
-    size = tuple(_size+1 if _size % 2 == 0 else _size for _size in size)
-
     min_size = 3
     if size[0] < min_size or size[1] < min_size:
         raise ValueError('size must be >= {} for x and y'.format(min_size))
 
-    if len(catalogs) == 1:  # may included linked stars
+    if len(catalogs) == 1:    # may included linked stars
         use_xy = True
         if len(data) > 1:
-            use_xy = False  # linked stars require skycoord positions
+            use_xy = False    # linked stars require skycoord positions
 
         stars = []
         # stars is a list of lists, one list of stars in each image
@@ -678,15 +700,15 @@ def extract_stars(data, catalogs, size=(11, 11)):
         for star in stars:
             good_stars = [i for i in star if i is not None]
             n_extracted += len(good_stars)
-            if not good_stars:
-                continue  # no overlap in any image
+            if len(good_stars) == 0:
+                continue    # no overlap in any image
             elif len(good_stars) == 1:
                 good_stars = good_stars[0]  # only one star, cannot be linked
             else:
                 good_stars = LinkedEPSFStar(good_stars)
 
             stars_out.append(good_stars)
-    else:  # no linked stars
+    else:    # no linked stars
         stars_out = []
         for img, cat in zip(data, catalogs):
             stars_out.extend(_extract_stars(img, cat, size=size, use_xy=True))
@@ -732,8 +754,6 @@ def _extract_stars(data, catalog, size=(11, 11), use_xy=True):
         scalar then a square box of size ``size`` will be used.  If
         ``size`` has two elements, they should be in ``(ny, nx)`` order.
         The size must be greater than or equal to 3 pixel for both axes.
-        Size must be odd in both axes; if either is even, it is padded
-        by one to force oddness.
 
     use_xy : bool, optional
         Whether to use the ``x`` and ``y`` pixel positions when both
@@ -748,22 +768,10 @@ def _extract_stars(data, catalog, size=(11, 11), use_xy=True):
         A list of `EPSFStar` instances containing the extracted stars.
     """
 
-    # Force size to odd numbers such that there is always a central pixel with
-    # even spacing either side of the pixel.
-    if np.isscalar(size):
-        size = size+1 if size % 2 == 0 else size
-    else:
-        size = tuple(_size+1 if _size % 2 == 0 else _size for _size in size)
-
     colnames = catalog.colnames
     if ('x' not in colnames or 'y' not in colnames) or not use_xy:
-        try:
-            xcenters, ycenters = data.wcs.world_to_pixel(catalog['skycoord'])
-        except AttributeError:
-            # for Astropy < 3.1 WCS support
-            xcenters, ycenters = skycoord_to_pixel(catalog['skycoord'],
-                                                   data.wcs, origin=0,
-                                                   mode='all')
+        xcenters, ycenters = skycoord_to_pixel(catalog['skycoord'], data.wcs,
+                                               origin=0, mode='all')
     else:
         xcenters = catalog['x'].data.astype(np.float)
         ycenters = catalog['y'].data.astype(np.float)
@@ -791,8 +799,9 @@ def _extract_stars(data, catalog, size=(11, 11), use_xy=True):
     stars = []
     for xcenter, ycenter, obj_id in zip(xcenters, ycenters, ids):
         try:
-            large_slc, _ = overlap_slices(data.data.shape, size,
-                                          (ycenter, xcenter), mode='strict')
+            large_slc, small_slc = overlap_slices(data.data.shape, size,
+                                                  (ycenter, xcenter),
+                                                  mode='strict')
             data_cutout = data.data[large_slc]
             weights_cutout = weights[large_slc]
         except (PartialOverlapError, NoOverlapError):
@@ -808,3 +817,18 @@ def _extract_stars(data, catalog, size=(11, 11), use_xy=True):
         stars.append(star)
 
     return stars
+
+
+@deprecated('0.6', alternative='EPSFStar')
+class Star(EPSFStar):
+    pass
+
+
+@deprecated('0.6', alternative='EPSFStars')
+class Stars(EPSFStars):
+    pass
+
+
+@deprecated('0.6', alternative='LinkedEPSFStar')
+class LinkedStar(LinkedEPSFStar):
+    pass
