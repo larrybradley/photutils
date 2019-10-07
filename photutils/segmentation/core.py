@@ -1676,6 +1676,47 @@ class SegmentationImage:
 
         return Regions(flat_regions)
 
+    def find_mapping(self, other):
+        """
+        Return the mapping of labels between this `SegmentationImage`
+        and another.
+
+        The zero label is reserved for the background and thus must map
+        to zero in the other `SegmentationImage`.
+
+        Parameters
+        ----------
+        other : `SegmentationImage`
+            The other segmentation image to which the labels are mapped.
+            The other segmentation image must have the same shape as
+            this one.
+
+        Returns
+        -------
+        mapping : `list`
+            A `list` with length equal to the number of labels in this
+            `SegmentationImage`.  The list value at index of ``label - 1``
+            contains the labels in the comparison `SegmentationImage`.
+
+        Examples
+        --------
+
+        """
+
+        if not isinstance(other, SegmentationImage):
+            raise TypeError('The other segmentation image must be a '
+                            'SegmentationImage instance.')
+
+        if other.shape != self.shape:
+            raise ValueError('The other Segmentation must have the same '
+                             'shape as this one.')
+
+        segm_map = []
+        for label in self.labels:
+            segm_map.append(list(np.unique(other.data[self.data == label])))
+
+        return segm_map
+
     def imshow(self, ax=None, figsize=None, dpi=None, cmap=None, alpha=None):
         """
         Display the segmentation image in a matplotlib
