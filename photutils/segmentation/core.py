@@ -1676,7 +1676,7 @@ class SegmentationImage:
 
         return Regions(flat_regions)
 
-    def find_mapping(self, other):
+    def find_mappings(self, other, labels=None):
         """
         Return the mapping of labels between this `SegmentationImage`
         and another.
@@ -1690,6 +1690,8 @@ class SegmentationImage:
             The other segmentation image to which the labels are mapped.
             The other segmentation image must have the same shape as
             this one.
+
+        labels :
 
         Returns
         -------
@@ -1714,6 +1716,10 @@ class SegmentationImage:
         segm_map = []
         for label in self.labels:
             segm_map.append(list(np.unique(other.data[self.data == label])))
+
+        if labels is not None:
+            idx = self.get_indices(labels)
+            return [segm_map[i] for i in idx]
 
         return segm_map
 
