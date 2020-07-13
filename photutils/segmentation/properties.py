@@ -40,7 +40,19 @@ DEFAULT_COLUMNS = ['id', 'xcentroid', 'ycentroid', 'sky_centroid',
                    'cyy', 'gini']
 
 
-class SourceProperties:
+class SourceCatalog:
+#    def source_properties(data, segment_img, error=None, mask=None,
+#                      background=None, filter_kernel=None, wcs=None,
+#                      labels=None):
+
+    def __init__(self, data, segment_img, error=None, mask=None,
+                 background=None, wcs=None, kernel=None):
+
+
+
+zzzz
+
+class _SourceProperties:
     """
     Class to calculate photometry and morphological properties of a
     single labeled source.
@@ -1582,7 +1594,7 @@ def source_properties(data, segment_img, error=None, mask=None,
     return SourceCatalog(sources_props, wcs=wcs)
 
 
-class SourceCatalog:
+class _SourceCatalog:
     """
     Class to hold source catalogs.
     """
