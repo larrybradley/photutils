@@ -199,6 +199,22 @@ class SourceProperties:
         return self._segment_img.labels
 
     @lazyproperty
+    def moments(self):
+        """Spatial moments up to 3rd order of the source."""
+        return [_moments(arr, order=3)
+                for arr in self._convolved_data_zeroed]
+
+    @lazyproperty
+    def moments_central(self):
+        """
+        Central moments (translation invariant) of the source up to 3rd
+        order.
+        """
+        return [_moments_central(arr, center=(self.xcentroid,
+                                              self.ycentroid), order=3)
+                for arr in self._convolved_data_zeroed]
+
+    @lazyproperty
     def _cutout_yxcentroid(self):
         """
         The ``(y, x)`` coordinate, relative to the `data_cutout`, of
