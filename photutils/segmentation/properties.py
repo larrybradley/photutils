@@ -180,13 +180,6 @@ class SourceProperties:
             yield self.__getitem__(item)
 
     @lazyproperty
-    def _convolved_data(self):
-        if self._kernel is None:
-            return self._data
-        return _filter_data(self._data, self._kernel, mode='constant',
-                            fill_value=0.0, check_normalization=True)
-
-    @lazyproperty
     def _null_objects(self):
         """
         Return an array of None values.
@@ -207,47 +200,37 @@ class SourceProperties:
         return values
 
     @lazyproperty
-    def _cutout_segment_mask(self):
-        """
-        Boolean cutout of the segmentation image.
-
-        All pixels with the value of source label are `False`. All others
-        are `True`.
-        """
-        return [self._segment_img.data[slc] != label
-                for label, slc in zip(self.labels, self.slices)]
+    def _convolved_data(self):
+        if self._kernel is None:
+            return self._data
+        return _filter_data(self._data, self._kernel, mode='constant',
+                            fill_value=0.0, check_normalization=True)
 
     @lazyproperty
-    def _cutout_nonfinite_mask(self):
-        """
-        Boolean cutout for non-finite (NaN and +/- inf) ``data`` values.
-        """
-        return [~np.isfinite(cutout) for cutout in self.data_cutout]
+    def _data_mask(self):
+        mask = ~np.isfinite(self._data)
+        if self._mask is not None:
+            mask |= self._mask
+        return mask
 
     @lazyproperty
-    def _cutout_input_mask(self):
-        """
-        Boolean cutout of the input ``mask``.
-        """
-        if self._mask is None:
-            return self._null_objects
-        return [self._mask[slc] for slc in self.slices]
-
-    @lazyproperty
-    def _cutout_total_mask(self):
+    def _cutout_total_masks(self):
         """
         Boolean mask representing the combination of
         ``_cutout_segment_mask``, ``_cutout_nonfinite_mask``, and
         ``_cutout_input_mask``.
 
+        All pixels with the value of source label are `False`. All others
+        are `True`.
+
         This mask is applied to ``data``, ``error``, and ``background``
         inputs when calculating properties.
         """
-        mask = [m1 | m2 for m1, m2 in
-                zip(self._cutout_segment_mask, self._cutout_nonfinite_mask)]
-        if self._mask is not None:
-            mask = [m1 | m2 for m1, m2 in zip(mask, self._cutout_input_mask)]
-        return mask
+        masks = []
+        for label, slc in zip(self.labels, self.slices):
+            masks.append((self._segment_img.data[slc] != label) |
+                         self._data_mask[slc])
+        return masks
 
     @lazyproperty
     def _cutout_all_masked(self):
@@ -255,7 +238,7 @@ class SourceProperties:
         Boolean indicating if all pixels within the source cutout are
         masked.
         """
-        return [np.all(mask) for mask in self._cutout_total_mask]
+        return [np.all(mask) for mask in self._cutout_total_masks]
 
     def _make_cutouts(self, array, units=True, masked=False):
         cutouts = [array[slc] for slc in self.slices]
@@ -267,25 +250,32 @@ class SourceProperties:
         return cutouts
 
     @lazyproperty
-    def _cutout_convolved_data(self):
+    def _cutout_moment_data(self):
         """
-        A 2D `~numpy.ndarray` cutout from the input ``convolved_data``.
-        The following pixels are set to zero in this cutout array:
+        A list of 2D `~numpy.ndarray` cutouts from the input
+        ``convolved_data``. The following pixels are set to zero in
+        these arrays:
 
-            * any masked pixels (from ``_total_mask``)
+            * any masked pixels
             * invalid values (NaN and +/- inf)
             * negative data values - negative pixels (especially at
               large radii) can give image moments that have negative
               variances.
 
-        This array is used to derive moment-based properties.
+        These arrays are used to derive moment-based properties.
         """
-        for convdata in self.convdata_cutout:
-            zero_mask = (self._cutout_total_mask & (convolved_data < 0)
-                         & ~np.isfinite(self._data))
-            return np.where(zero_mask, 0., self.convdata_cutoutlved_data).astype(float)  # copy
+        mask = ~np.isfinite(self._convolved_data) | (self._convolved_data < 0)
+        if self._mask is not None:
+            mask |= self._mask
 
-    #-----public------
+        cutouts = []
+        for label, slc, convdata in zip(self.labels, self.slices,
+                                        self.convdata_cutout):
+            mask2 = (self._segment_img.data[slc] != label) | mask[slc]
+            cutout = convdata.copy()
+            cutout[mask2] = 0.
+            cutouts.append(cutout)
+        return cutouts
 
     @lazyproperty
     def nlabels(self):
