@@ -277,6 +277,9 @@ class SourceProperties:
             cutouts.append(cutout)
         return cutouts
 
+    def to_table(self, columns=None, exclude_columns=None):
+        return _properties_table(self, columns=columns,
+                                 exclude_columns=exclude_columns)
     @lazyproperty
     def nlabels(self):
         return self._segment_img.nlabels
@@ -491,46 +494,33 @@ class SourceProperties:
         """
         return np.array([slc[0].stop - 1 for slc in self.slices])
 
-    def _calc_sky_bbox_corner(self, bbox, corner):
-        """
-        Calculate the sky coordinates at the corner of a minimal
-        bounding box.
+    @lazyproperty
+    def _bbox_corner_ll(self):
+        xypos = []
+        for bbox in self.bbox:
+            xypos.append((bbox.ixmin - 0.5, bbox.iymin - 0.5))
+        return xypos
 
-        The bounding box encloses all of the source segment pixels in
-        their entirety, thus the vertices are at the pixel *corners*.
+    @lazyproperty
+    def _bbox_corner_ul(self):
+        xypos = []
+        for bbox in self.bbox:
+            xypos.append((bbox.ixmin - 0.5, bbox.iymax + 0.5))
+        return xypos
 
-        Parameters
-        ----------
-        bbox : `~photutils.aperture.BoundingBox`
-            The source bounding box.
+    @lazyproperty
+    def _bbox_corner_lr(self):
+        xypos = []
+        for bbox in self.bbox:
+            xypos.append((bbox.ixmax + 0.5, bbox.iymin - 0.5))
+        return xypos
 
-        corner : {'ll', 'ul', 'lr', 'ur'}
-            The desired bounding box corner:
-                * 'll':  lower left
-                * 'ul':  upper left
-                * 'lr':  lower right
-                * 'ur':  upper right
-
-        Returns
-        -------
-        skycoord : `~astropy.coordinates.SkyCoord`
-            The sky coordinate at the bounding box corner.
-        """
-        if corner == 'll':
-            xpos = bbox.ixmin - 0.5
-            ypos = bbox.iymin - 0.5
-        elif corner == 'ul':
-            xpos = bbox.ixmin - 0.5
-            ypos = bbox.iymax + 0.5
-        elif corner == 'lr':
-            xpos = bbox.ixmax + 0.5
-            ypos = bbox.iymin - 0.5
-        elif corner == 'ur':
-            xpos = bbox.ixmax + 0.5
-            ypos = bbox.iymax + 0.5
-        else:
-            raise ValueError('Invalid corner name.')
-        return self._wcs.pixel_to_world(xpos, ypos)
+    @lazyproperty
+    def _bbox_corner_ur(self):
+        xypos = []
+        for bbox in self.bbox:
+            xypos.append((bbox.ixmax + 0.5, bbox.iymax + 0.5))
+        return xypos
 
     @lazyproperty
     def sky_bbox_ll(self):
@@ -544,7 +534,7 @@ class SourceProperties:
         """
         if self._wcs is None:
             return self._null_values
-        return [self._calc_sky_bbox_corner(bbox, 'll') for bbox in self.bbox]
+        return self._wcs.pixel_to_world(*np.transpose(self._bbox_corner_ll))
 
     @lazyproperty
     def sky_bbox_ul(self):
@@ -558,7 +548,7 @@ class SourceProperties:
         """
         if self._wcs is None:
             return self._null_values
-        return self._calc_sky_bbox_corner(self.bbox, 'ul')
+        return self._wcs.pixel_to_world(*np.transpose(self._bbox_corner_ul))
 
     @lazyproperty
     def sky_bbox_lr(self):
@@ -572,7 +562,7 @@ class SourceProperties:
         """
         if self._wcs is None:
             return self._null_values
-        return self._calc_sky_bbox_corner(self.bbox, 'lr')
+        return self._wcs.pixel_to_world(*np.transpose(self._bbox_corner_lr))
 
     @lazyproperty
     def sky_bbox_ur(self):
@@ -586,7 +576,7 @@ class SourceProperties:
         """
         if self._wcs is None:
             return self._null_values
-        return self._calc_sky_bbox_corner(self.bbox, 'ur')
+        return self._wcs.pixel_to_world(*np.transpose(self._bbox_corner_ur))
 
 
 #HERE
