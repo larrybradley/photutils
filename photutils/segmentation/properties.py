@@ -201,8 +201,8 @@ class SourceProperties:
     @lazyproperty
     def moments(self):
         """Spatial moments up to 3rd order of the source."""
-        return [_moments(arr, order=3)
-                for arr in self._convolved_data_zeroed]
+        return np.array([_moments(arr, order=3)
+                for arr in self._convolved_data_zeroed])
 
     @lazyproperty
     def moments_central(self):
@@ -210,9 +210,13 @@ class SourceProperties:
         Central moments (translation invariant) of the source up to 3rd
         order.
         """
-        return [_moments_central(arr, center=(self.xcentroid,
-                                              self.ycentroid), order=3)
-                for arr in self._convolved_data_zeroed]
+        #return [_moments_central(arr, center=(self.xcentroid,
+        #                                      self.ycentroid), order=3)
+        #        for arr in self._convolved_data_zeroed]
+
+        return np.array([_moments_central(arr, center=(xcen, ycen), order=3)
+                for arr, xcen, ycen in zip(self._convolved_data_zeroed,
+                                        self.xcentroid.value, self.ycentroid.value)])
 
     @lazyproperty
     def _cutout_yxcentroid(self):
