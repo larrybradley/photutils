@@ -366,7 +366,7 @@ class SourceProperties:
     def moments(self):
         """Spatial moments up to 3rd order of the source."""
         return np.array([_moments(arr, order=3)
-                         for arr in self._convolved_data_zeroed])
+                         for arr in self._cutout_moment_data])
 
     @lazyproperty
     def moments_central(self):
@@ -374,13 +374,10 @@ class SourceProperties:
         Central moments (translation invariant) of the source up to 3rd
         order.
         """
-        #return [_moments_central(arr, center=(self.xcentroid,
-        #                                      self.ycentroid), order=3)
-        #        for arr in self._convolved_data_zeroed]
-
         return np.array([_moments_central(arr, center=(xcen, ycen), order=3)
-                for arr, xcen, ycen in zip(self._convolved_data_zeroed,
-                                        self.xcentroid.value, self.ycentroid.value)])
+                         for arr, xcen, ycen
+                         in zip(self._cutout_moment_data,
+                                self.xcentroid.value, self.ycentroid.value)])
 
     @lazyproperty
     def _cutout_yxcentroid(self):
@@ -388,16 +385,15 @@ class SourceProperties:
         The ``(y, x)`` coordinate, relative to the `data_cutout`, of
         the centroid within the source segment.
         """
-        moments = self.moments
-        mu_00 = moments[:, 0, 0]
+        mu_00 = self.moments[:, 0, 0]
         badmask = (mu_00 == 0)
-        ycentroid = np.where(badmask, np.nan, moments[:, 1, 0] / mu_00)
-        xcentroid = np.where(badmask, np.nan, moments[:, 0, 1] / mu_00)
+        ycentroid = np.where(badmask, np.nan, self.moments[:, 1, 0] / mu_00)
+        xcentroid = np.where(badmask, np.nan, self.moments[:, 0, 1] / mu_00)
         return ycentroid, xcentroid
 
     @lazyproperty
     def cutout_centroid(self):
-        return np.transpose(self._cutout_yxcentroid) << u.pix
+        return np.transpose(self._cutout_yxcentroid)
 
     @lazyproperty
     def _yxcentroid(self):
@@ -410,21 +406,21 @@ class SourceProperties:
         The ``(y, x)`` coordinate of the centroid within the source
         segment.
         """
-        return np.transpose(self._yxcentroid) << u.pix
+        return np.transpose(self._yxcentroid)
 
     @lazyproperty
     def xcentroid(self):
         """
         The ``x`` coordinate of the centroid within the source segment.
         """
-        return self._yxcentroid[1] << u.pix
+        return self._yxcentroid[1]
 
     @lazyproperty
     def ycentroid(self):
         """
         The ``y`` coordinate of the centroid within the source segment.
         """
-        return self._yxcentroid[0] << u.pix
+        return self._yxcentroid[0]
 
     @lazyproperty
     def sky_centroid(self):
@@ -436,8 +432,7 @@ class SourceProperties:
         """
         if self._wcs is None:
             return self._null_values
-        return _pixel_to_world(self._yxcentroid[1], self._yxcentroid[0],
-                               self.wcs)
+        return self._wcs.pixel_to_world(self.xcentroid, self.ycentroid)
 
     @lazyproperty
     def sky_centroid_icrs(self):
@@ -496,7 +491,7 @@ class SourceProperties:
         """
         return np.array([slc[0].stop - 1 for slc in self.slices])
 
-    def _calc_sky_bbox_corner(bbox, corner):
+    def _calc_sky_bbox_corner(self, bbox, corner):
         """
         Calculate the sky coordinates at the corner of a minimal
         bounding box.
@@ -535,7 +530,7 @@ class SourceProperties:
             ypos = bbox.iymax + 0.5
         else:
             raise ValueError('Invalid corner name.')
-        return _pixel_to_world(xpos, ypos, self.wcs)
+        return self._wcs.pixel_to_world(xpos, ypos)
 
     @lazyproperty
     def sky_bbox_ll(self):
@@ -549,7 +544,7 @@ class SourceProperties:
         """
         if self._wcs is None:
             return self._null_values
-        return self._calc_sky_bbox_corner(self.bbox, 'll')
+        return [self._calc_sky_bbox_corner(bbox, 'll') for bbox in self.bbox]
 
     @lazyproperty
     def sky_bbox_ul(self):
