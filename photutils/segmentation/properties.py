@@ -246,7 +246,7 @@ class SourceProperties:
             cutouts = [(cutout << self._data_unit) for cutout in cutouts]
         if masked:
             return [np.ma.masked_array(data, mask=mask)
-                    for data, mask in zip(cutouts, self._cutout_total_mask)]
+                    for data, mask in zip(cutouts, self._cutout_total_masks)]
         return cutouts
 
     @lazyproperty
@@ -366,6 +366,45 @@ class SourceProperties:
                                   masked=True)
 
     @lazyproperty
+    def _data_values(self):
+        """
+        A 1D `~numpy.ndarray` of the unmasked ``data`` values within the
+        source segment.
+
+        Non-finite pixel values (NaN and +/- inf) are excluded
+        (automatically masked) via the ``_data_mask``.
+
+        If all pixels are masked, an empty array will be returned.
+
+        This array is used for ``source_sum``, ``area``, ``min_value``,
+        ``max_value``, etc.
+        """
+        return [array.compressed() for array in self.data_cutout_ma]
+
+    @lazyproperty
+    def _error_values(self):
+        """
+        A 1D `~numpy.ndarray` of the unmasked ``error`` values within
+        the source segment.
+
+        This array is used for ``source_sum_err``.
+        """
+        #if self._error is None:
+        #    return self._null_values
+        return [array.compressed() for array in self.error_cutout_ma]
+
+    @lazyproperty
+    def _background_values(self):
+        """
+        A 1D `~numpy.ndarray` of the unmasked ``background`` values
+        within the source segment.
+
+        This array is used for ``background_sum`` and
+        ``background_mean``.
+        """
+        return [array.compressed() for array in self.background_cutout_ma]
+
+    @lazyproperty
     def moments(self):
         """Spatial moments up to 3rd order of the source."""
         return np.array([_moments(arr, order=3)
@@ -434,7 +473,7 @@ class SourceProperties:
         The output coordinate frame is the same as the input WCS.
         """
         if self._wcs is None:
-            return self._null_values
+            return self._null_objects
         return self._wcs.pixel_to_world(self.xcentroid, self.ycentroid)
 
     @lazyproperty
@@ -445,7 +484,7 @@ class SourceProperties:
         returned as a `~astropy.coordinates.SkyCoord` object.
         """
         if self._wcs is None:
-            return self._null_values
+            return self._null_objects
         return self.sky_centroid.icrs
 
     @lazyproperty
@@ -533,7 +572,7 @@ class SourceProperties:
         their entirety, thus the vertices are at the pixel *corners*.
         """
         if self._wcs is None:
-            return self._null_values
+            return self._null_objects
         return self._wcs.pixel_to_world(*np.transpose(self._bbox_corner_ll))
 
     @lazyproperty
@@ -547,7 +586,7 @@ class SourceProperties:
         their entirety, thus the vertices are at the pixel *corners*.
         """
         if self._wcs is None:
-            return self._null_values
+            return self._null_objects
         return self._wcs.pixel_to_world(*np.transpose(self._bbox_corner_ul))
 
     @lazyproperty
@@ -561,7 +600,7 @@ class SourceProperties:
         their entirety, thus the vertices are at the pixel *corners*.
         """
         if self._wcs is None:
-            return self._null_values
+            return self._null_objects
         return self._wcs.pixel_to_world(*np.transpose(self._bbox_corner_lr))
 
     @lazyproperty
@@ -575,8 +614,9 @@ class SourceProperties:
         their entirety, thus the vertices are at the pixel *corners*.
         """
         if self._wcs is None:
-            return self._null_values
+            return self._null_objects
         return self._wcs.pixel_to_world(*np.transpose(self._bbox_corner_ur))
+
 
 
 #HERE
@@ -588,6 +628,8 @@ class SourceProperties:
         The minimum pixel value of the ``data`` within the source
         segment.
         """
+
+
 
         value = np.where(self._is_completely_masked, np.nan,
                          [np.min(data) for data in self._data_values])
