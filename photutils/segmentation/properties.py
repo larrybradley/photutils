@@ -5,6 +5,7 @@ defined by a segmentation image.
 """
 
 from copy import copy
+import inspect
 import warnings
 
 from astropy.coordinates import SkyCoord
@@ -48,7 +49,7 @@ DEFAULT_COLUMNS = ['id', 'xcentroid', 'ycentroid', 'sky_centroid',
 
 class SourceProperties:
     def __init__(self, data, segment_img, error=None, mask=None,
-                 background=None, wcs=None, kernel=None):
+                 kernel=None, background=None, wcs=None):
 
         self._cache = {}
         self._data_unit = None
@@ -57,12 +58,21 @@ class SourceProperties:
         self._data = data
         self._segment_img = self._validate_segment_img(segment_img)
         self._error = self._validate_array(error, 'error')
-        self._mask = self._validate_array(mask, 'mask', check_units=False)
+        self._mask = self._validate_array(mask, 'mask')
+        self._kernel = kernel
         self._background = self._validate_array(background, 'background')
         self._wcs = wcs
-        self._kernel = kernel
 
     def _process_quantities(self, data, error, background):
+        """
+        Check units of input arrays.
+
+        If any of the input arrays have units then they all must have
+        units and the units must be the same.
+
+        Return unitless ndarrays with the array unit set in
+        self._data_unit.
+        """
         inputs = (data, error, background)
         has_unit = [hasattr(x, 'unit') for x in inputs if x is not None]
         use_units = all(has_unit)
@@ -73,14 +83,19 @@ class SourceProperties:
             self._data_unit = data.unit
             data = data.value
             if error is not None:
+                if error.unit != self._data_unit:
+                    raise ValueError('error must have the same units as data')
                 error = error.value
             if background is not None:
+                if background.unit != self._data_unit:
+                    raise ValueError('background must have the same units as '
+                                     'data')
                 background = background.value
         return data, error, background
 
     def _validate_segment_img(self, segment_img):
         if not isinstance(segment_img, SegmentationImage):
-            segment_img = SegmentationImage(segment_img)
+            raise ValueError('segment_img must be a SegmentationImage')
         if segment_img.shape != self._data.shape:
             raise ValueError('segment_img and data must have the same shape.')
         return segment_img
@@ -89,56 +104,52 @@ class SourceProperties:
         if name == 'mask' and array is np.ma.nomask:
             array = None
         if array is not None:
+            array = np.asanyarray(array)
             if array.shape != self._data.shape:
                 raise ValueError(f'error and {name} must have the same shape.')
-            if check_units and self._use_units:
-                if array is not None and array.unit != self._data.unit:
-                    raise ValueError(f'data and {name} must have the same '
-                                     'units.')
-            array = np.asanyarray(array)
         return array
 
-    @lazyproperty
-    def _properties(self):
-        properties = []
-        for label in self._segment_img.labels:
-            properties.append(_SourceProperties(
-                self._data, self._convolved_data, self._segment_img, label,
-                error=self._error, mask=self._mask,
-                background=self._background, data_unit=self._data_unit))
-        return properties
+    #@lazyproperty
+    # def _properties(self):
+    #     properties = []
+    #     for label in self._segment_img.labels:
+    #         properties.append(_SourceProperties(
+    #             self._data, self._convolved_data, self._segment_img, label,
+    #             error=self._error, mask=self._mask,
+    #             background=self._background, data_unit=self._data_unit))
+    #     return properties
 
-    def __getattr__(self, attr):
-        # called only if attr explicitly defined in this cls
-        if attr not in self._cache:
-            values = [getattr(source, attr) for source in self._properties]
+    # def __getattr__(self, attr):
+    #     # called only if attr explicitly defined in this cls
+    #     if attr not in self._cache:
+    #         values = [getattr(source, attr) for source in self._properties]
 
-            if isinstance(values[0], u.Quantity) and np.isscalar(values[0]):
-                # turn list of Quantities into a Quantity array
-                values = u.Quantity(values)
-            #if isinstance(values[0], SkyCoord):  # pragma: no cover
-            #    # failsafe: turn list of SkyCoord into a SkyCoord array
-            #    values = SkyCoord(values)
+    #         if isinstance(values[0], u.Quantity) and np.isscalar(values[0]):
+    #             # turn list of Quantities into a Quantity array
+    #             values = u.Quantity(values)
+    #         #if isinstance(values[0], SkyCoord):  # pragma: no cover
+    #         #    # failsafe: turn list of SkyCoord into a SkyCoord array
+    #         #    values = SkyCoord(values)
 
-            # TODO: add other properties as arrays
-            if attr in ('moments', 'moments_central'):
-                values = np.array(values)
+    #         # TODO: add other properties as arrays
+    #         if attr in ('moments', 'moments_central'):
+    #             values = np.array(values)
 
-            self._cache[attr] = values
+    #         self._cache[attr] = values
 
-        return self._cache[attr]
+    #     return self._cache[attr]
 
-    def _get_lazy_properties(self):
+    def _get_lazyproperties(self):
         """
-        Find all lazyproperties, even in superclasses.
+        Return all lazyproperties (even in superclasses).
         """
-
         def islazyproperty(object):
             return isinstance(object, lazyproperty)
 
         return [i[0] for i in inspect.getmembers(self.__class__,
                                                  predicate=islazyproperty)]
 
+#zzzzz
     def __getitem__(self, index):
         segm = copy(self._segment_img)  # TODO (copy method?)
         # TODO fix for non-consecutive labels
@@ -169,26 +180,120 @@ class SourceProperties:
             yield self.__getitem__(item)
 
     @lazyproperty
+    def _convolved_data(self):
+        if self._kernel is None:
+            return self._data
+        return _filter_data(self._data, self._kernel, mode='constant',
+                            fill_value=0.0, check_normalization=True)
+
+    @lazyproperty
+    def _null_objects(self):
+        """
+        Return an array of None values.
+
+        Used for SkyCoord properties if ``wcs`` is `None`.
+        """
+        return np.array([None] * len(self))
+
+    @lazyproperty
     def _null_values(self):
         """
         Return an array of np.nan values.
 
-        Used by SkyCoord properties if ``wcs`` is `None`.
+        Used for background properties if ``background`` is `None`.
         """
         values = np.empty(len(self))
         values.fill(np.nan)
         return values
 
     @lazyproperty
+    def _cutout_segment_mask(self):
+        """
+        Boolean cutout of the segmentation image.
+
+        All pixels with the value of source label are `False`. All others
+        are `True`.
+        """
+        return [self._segment_img.data[slc] != label
+                for label, slc in zip(self.labels, self.slices)]
+
+    @lazyproperty
+    def _cutout_nonfinite_mask(self):
+        """
+        Boolean cutout for non-finite (NaN and +/- inf) ``data`` values.
+        """
+        return [~np.isfinite(cutout) for cutout in self.data_cutout]
+
+    @lazyproperty
+    def _cutout_input_mask(self):
+        """
+        Boolean cutout of the input ``mask``.
+        """
+        if self._mask is None:
+            return self._null_objects
+        return [self._mask[slc] for slc in self.slices]
+
+    @lazyproperty
+    def _cutout_total_mask(self):
+        """
+        Boolean mask representing the combination of
+        ``_cutout_segment_mask``, ``_cutout_nonfinite_mask``, and
+        ``_cutout_input_mask``.
+
+        This mask is applied to ``data``, ``error``, and ``background``
+        inputs when calculating properties.
+        """
+        mask = [m1 | m2 for m1, m2 in
+                zip(self._cutout_segment_mask, self._cutout_nonfinite_mask)]
+        if self._mask is not None:
+            mask = [m1 | m2 for m1, m2 in zip(mask, self._cutout_input_mask)]
+        return mask
+
+    @lazyproperty
+    def _cutout_all_masked(self):
+        """
+        Boolean indicating if all pixels within the source cutout are
+        masked.
+        """
+        return [np.all(mask) for mask in self._cutout_total_mask]
+
+    def _make_cutouts(self, array, units=True, masked=False):
+        cutouts = [array[slc] for slc in self.slices]
+        if units and self._data_unit is not None:
+            cutouts = [(cutout << self._data_unit) for cutout in cutouts]
+        if masked:
+            return [np.ma.masked_array(data, mask=mask)
+                    for data, mask in zip(cutouts, self._cutout_total_mask)]
+        return cutouts
+
+    @lazyproperty
+    def _cutout_convolved_data(self):
+        """
+        A 2D `~numpy.ndarray` cutout from the input ``convolved_data``.
+        The following pixels are set to zero in this cutout array:
+
+            * any masked pixels (from ``_total_mask``)
+            * invalid values (NaN and +/- inf)
+            * negative data values - negative pixels (especially at
+              large radii) can give image moments that have negative
+              variances.
+
+        This array is used to derive moment-based properties.
+        """
+        for convdata in self.convdata_cutout:
+            zero_mask = (self._cutout_total_mask & (convolved_data < 0)
+                         & ~np.isfinite(self._data))
+            return np.where(zero_mask, 0., self.convdata_cutoutlved_data).astype(float)  # copy
+
+    #-----public------
+
+    @lazyproperty
     def nlabels(self):
         return self._segment_img.nlabels
 
     @lazyproperty
-    def _convolved_data(self):
-        if self._kernel is None:
-            return self._data
-        return _filter_data(data, self._kernel, mode='constant',
-                            fill_value=0.0, check_normalization=True)
+    def labels(self):
+        return self._segment_img.labels
 
     @lazyproperty
     def id(self):
@@ -196,13 +301,82 @@ class SourceProperties:
         The source identification number corresponding to the object
         label in the segmentation image.
         """
-        return self._segment_img.labels
+        return self.labels
+
+    @lazyproperty
+    def slices(self):
+        return self._segment_img.slices
+
+    @lazyproperty
+    def segm_cutout(self):
+        return [segm.data for segm in self._segment_img.segments]
+
+    @lazyproperty
+    def segm_cutout_ma(self):
+        return [segm.data_ma for segm in self._segment_img.segments]
+
+    @lazyproperty
+    def data_cutout(self):
+        """
+        A 2D `~numpy.ndarray` cutout from the data using the minimal
+        bounding box of the source segment.
+        """
+        return self._make_cutouts(self._data, units=True, masked=False)
+
+    @lazyproperty
+    def data_cutout_ma(self):
+        """
+        A 2D `~numpy.ma.MaskedArray` cutout from the ``data``.
+
+        The mask is `True` for pixels outside of the source segment
+        (labeled region of interest), masked pixels from the ``mask``
+        input, or any non-finite ``data`` values (NaN and +/- inf).
+        """
+        return self._make_cutouts(self._data, units=False, masked=True)
+
+    @lazyproperty
+    def convdata_cutout(self):
+        return self._make_cutouts(self._convolved_data, units=True,
+                                  masked=False)
+
+    @lazyproperty
+    def convdata_cutout_ma(self):
+        return self._make_cutouts(self._convolved_data, units=False,
+                                  masked=True)
+
+    @lazyproperty
+    def error_cutout(self):
+        if self._error is None:
+            return self._null_objects
+        return self._make_cutouts(self._error, units=True,
+                                  masked=False)
+
+    @lazyproperty
+    def error_cutout_ma(self):
+        if self._error is None:
+            return self._null_objects
+        return self._make_cutouts(self._error, units=False,
+                                  masked=True)
+
+    @lazyproperty
+    def background_cutout(self):
+        if self._background is None:
+            return self._null_objects
+        return self._make_cutouts(self._background, units=True,
+                                  masked=False)
+
+    @lazyproperty
+    def background_cutout_ma(self):
+        if self._error is None:
+            return self._null_objects
+        return self._make_cutouts(self._background, units=False,
+                                  masked=True)
 
     @lazyproperty
     def moments(self):
         """Spatial moments up to 3rd order of the source."""
         return np.array([_moments(arr, order=3)
-                for arr in self._convolved_data_zeroed])
+                         for arr in self._convolved_data_zeroed])
 
     @lazyproperty
     def moments_central(self):
@@ -584,6 +758,7 @@ class SourceProperties:
 
 #zzzzzzzz
 
+#class _SourceCutouts:
 class _SourceProperties:
     """
     Class to calculate photometry and morphological properties of a
