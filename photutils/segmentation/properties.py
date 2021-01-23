@@ -379,7 +379,8 @@ class SourceProperties:
         This array is used for ``source_sum``, ``area``, ``min_value``,
         ``max_value``, etc.
         """
-        return [array.compressed() for array in self.data_cutout_ma]
+        return [array.compressed() if len(array.compressed()) > 0 else np.nan
+                for array in self.data_cutout_ma]
 
     @lazyproperty
     def _error_values(self):
@@ -391,7 +392,8 @@ class SourceProperties:
         """
         #if self._error is None:
         #    return self._null_values
-        return [array.compressed() for array in self.error_cutout_ma]
+        return [array.compressed() if len(array.compressed()) > 0 else np.nan
+                for array in self.error_cutout_ma]
 
     @lazyproperty
     def _background_values(self):
@@ -402,7 +404,8 @@ class SourceProperties:
         This array is used for ``background_sum`` and
         ``background_mean``.
         """
-        return [array.compressed() for array in self.background_cutout_ma]
+        return [array.compressed() if len(array.compressed()) > 0 else np.nan
+                for array in self.background_cutout_ma]
 
     @lazyproperty
     def moments(self):
@@ -617,25 +620,16 @@ class SourceProperties:
             return self._null_objects
         return self._wcs.pixel_to_world(*np.transpose(self._bbox_corner_ur))
 
-
-
-#HERE
-#zzzzzzzzzzzzzzzzzzzzzz
-
     @lazyproperty
     def min_value(self):
         """
         The minimum pixel value of the ``data`` within the source
         segment.
         """
-
-
-
-        value = np.where(self._is_completely_masked, np.nan,
-                         [np.min(data) for data in self._data_values])
+        values = np.array([np.min(array) for array in self._data_values])
         if self._data_unit is not None:
-            value <<= self._data_unit
-        return value
+            values <<= self._data_unit
+        return values
 
     @lazyproperty
     def max_value(self):
@@ -643,14 +637,16 @@ class SourceProperties:
         The maximum pixel value of the ``data`` within the source
         segment.
         """
+        values = np.array([np.max(array) for array in self._data_values])
+        if self._data_unit is not None:
+            values <<= self._data_unit
+        return values
 
-        if self._is_completely_masked:
-            return np.nan * self._data_unit
-        else:
-            return np.max(self._data_values)
 
+
+###### HERE
     @lazyproperty
-    def minval_cutout_pos(self):
+    def minval_cutout_index(self):
         """
         The ``(y, x)`` coordinate, relative to the `data_cutout`, of the
         minimum pixel value of the ``data`` within the source segment.
@@ -658,18 +654,16 @@ class SourceProperties:
         If there are multiple occurrences of the minimum value, only the
         first occurence is returned.
         """
-
-        if self._is_completely_masked:
-            return (np.nan, np.nan) * u.pix
-        else:
-            arr = self.data_cutout_ma
-            # multiplying by unit converts int to float, but keep as
-            # float in case the array contains a NaN
-            return np.asarray(np.unravel_index(np.argmin(arr),
-                                               arr.shape)) * u.pix
+        idx = []
+        for arr in self.data_cutout_ma:
+            if np.all(arr.mask):
+                idx.append((np.nan, np.nan))
+            else:
+                idx.append(np.unravel_index(np.argmin(arr), arr.shape))
+        return np.array(idx)
 
     @lazyproperty
-    def maxval_cutout_pos(self):
+    def maxval_cutout_index(self):
         """
         The ``(y, x)`` coordinate, relative to the `data_cutout`, of the
         maximum pixel value of the ``data`` within the source segment.
@@ -677,18 +671,16 @@ class SourceProperties:
         If there are multiple occurrences of the maximum value, only the
         first occurence is returned.
         """
-
-        if self._is_completely_masked:
-            return (np.nan, np.nan) * u.pix
-        else:
-            arr = self.data_cutout_ma
-            # multiplying by unit converts int to float, but keep as
-            # float in case the array contains a NaN
-            return np.asarray(np.unravel_index(np.argmax(arr),
-                                               arr.shape)) * u.pix
+        idx = []
+        for arr in self.data_cutout_ma:
+            if np.all(arr.mask):
+                idx.append((np.nan, np.nan))
+            else:
+                idx.append(np.unravel_index(np.argmax(arr), arr.shape))
+        return np.array(idx)
 
     @lazyproperty
-    def minval_pos(self):
+    def minval_index(self):
         """
         The ``(y, x)`` coordinate of the minimum pixel value of the
         ``data`` within the source segment.
@@ -696,16 +688,13 @@ class SourceProperties:
         If there are multiple occurrences of the minimum value, only the
         first occurence is returned.
         """
-
-        if self._is_completely_masked:
-            return (np.nan, np.nan) * u.pix
-        else:
-            yposition, xposition = self.minval_cutout_pos.value
-            return (yposition + self.slices[0].start,
-                    xposition + self.slices[1].start) * u.pix
+        out = []
+        for idx, slc in zip(self.minval_cutout_index, self.slices):
+            out.append((idx[0] + slc[0].start, idx[1] + slc[1].start))
+        return np.array(out)
 
     @lazyproperty
-    def maxval_pos(self):
+    def maxval_index(self):
         """
         The ``(y, x)`` coordinate of the maximum pixel value of the
         ``data`` within the source segment.
@@ -713,16 +702,13 @@ class SourceProperties:
         If there are multiple occurrences of the maximum value, only the
         first occurence is returned.
         """
-
-        if self._is_completely_masked:
-            return (np.nan, np.nan) * u.pix
-        else:
-            yposition, xposition = self.maxval_cutout_pos.value
-            return (yposition + self.slices[0].start,
-                    xposition + self.slices[1].start) * u.pix
+        out = []
+        for idx, slc in zip(self.maxval_cutout_index, self.slices):
+            out.append((idx[0] + slc[0].start, idx[1] + slc[1].start))
+        return np.array(out)
 
     @lazyproperty
-    def minval_xpos(self):
+    def minval_xindex(self):
         """
         The ``x`` coordinate of the minimum pixel value of the ``data``
         within the source segment.
@@ -730,11 +716,10 @@ class SourceProperties:
         If there are multiple occurrences of the minimum value, only the
         first occurence is returned.
         """
-
-        return self.minval_pos[1]
+        return np.transpose(self.minval_index)[1]
 
     @lazyproperty
-    def minval_ypos(self):
+    def minval_yindex(self):
         """
         The ``y`` coordinate of the minimum pixel value of the ``data``
         within the source segment.
@@ -742,11 +727,10 @@ class SourceProperties:
         If there are multiple occurrences of the minimum value, only the
         first occurence is returned.
         """
-
-        return self.minval_pos[0]
+        return np.transpose(self.minval_index)[0]
 
     @lazyproperty
-    def maxval_xpos(self):
+    def maxval_xindex(self):
         """
         The ``x`` coordinate of the maximum pixel value of the ``data``
         within the source segment.
@@ -754,11 +738,10 @@ class SourceProperties:
         If there are multiple occurrences of the maximum value, only the
         first occurence is returned.
         """
-
-        return self.maxval_pos[1]
+        return np.transpose(self.maxval_index)[1]
 
     @lazyproperty
-    def maxval_ypos(self):
+    def maxval_yindex(self):
         """
         The ``y`` coordinate of the maximum pixel value of the ``data``
         within the source segment.
@@ -766,8 +749,7 @@ class SourceProperties:
         If there are multiple occurrences of the maximum value, only the
         first occurence is returned.
         """
-
-        return self.maxval_pos[0]
+        return np.transpose(self.maxval_index)[0]
 
 
 
