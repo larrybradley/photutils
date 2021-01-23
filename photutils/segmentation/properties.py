@@ -199,6 +199,7 @@ class SourceProperties:
         values.fill(np.nan)
         return values
 
+    # getitem copy
     @lazyproperty
     def _convolved_data(self):
         if self._kernel is None:
@@ -206,12 +207,18 @@ class SourceProperties:
         return _filter_data(self._data, self._kernel, mode='constant',
                             fill_value=0.0, check_normalization=True)
 
+    # getitem copy
     @lazyproperty
     def _data_mask(self):
         mask = ~np.isfinite(self._data)
         if self._mask is not None:
             mask |= self._mask
         return mask
+
+    @lazyproperty
+    def _cutout_segment_masks(self):
+        return [self._segment_img.data[slc] != label
+                for label, slc in zip(self.labels, self.slices)]
 
     @lazyproperty
     def _cutout_total_masks(self):
@@ -227,18 +234,9 @@ class SourceProperties:
         inputs when calculating properties.
         """
         masks = []
-        for label, slc in zip(self.labels, self.slices):
-            masks.append((self._segment_img.data[slc] != label) |
-                         self._data_mask[slc])
+        for segm_mask, slc in zip(self._cutout_segment_masks, self.slices):
+            masks.append(segm_mask | self._data_mask[slc])
         return masks
-
-    @lazyproperty
-    def _cutout_all_masked(self):
-        """
-        Boolean indicating if all pixels within the source cutout are
-        masked.
-        """
-        return [np.all(mask) for mask in self._cutout_total_masks]
 
     def _make_cutouts(self, array, units=True, masked=False):
         cutouts = [array[slc] for slc in self.slices]
@@ -269,9 +267,11 @@ class SourceProperties:
             mask |= self._mask
 
         cutouts = []
+        #zzzzz
         for label, slc, convdata in zip(self.labels, self.slices,
                                         self.convdata_cutout):
             mask2 = (self._segment_img.data[slc] != label) | mask[slc]
+
             cutout = convdata.copy()
             cutout[mask2] = 0.
             cutouts.append(cutout)
@@ -642,9 +642,6 @@ class SourceProperties:
             values <<= self._data_unit
         return values
 
-
-
-###### HERE
     @lazyproperty
     def minval_cutout_index(self):
         """
