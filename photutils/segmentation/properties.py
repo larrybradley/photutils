@@ -159,12 +159,12 @@ class SourceProperties:
         newcls._segment_img = segm
 
         init_attr = ('_data', '_convolved_data', '_error', '_mask',
-                     '_background', '_wcs', '_use_units', '_data_unit')
+                     '_background', '_wcs', '_data_unit')
         for attr in init_attr:
             setattr(newcls, attr, getattr(self, attr))
 
         for key, value in self.__dict__.items():
-            if key in self._get_lazy_properties():
+            if key in self._get_lazyproperties():
                 # skip copy if value is not an array/list for each
                 # source
                 if not np.isscalar(value):
