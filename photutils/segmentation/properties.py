@@ -4,6 +4,8 @@ This module provides tools for calculating the properties of sources
 defined by a segmentation image.
 """
 
+import time
+
 from copy import copy
 import inspect
 import warnings
@@ -46,6 +48,49 @@ DEFAULT_COLUMNS = ['id', 'xcentroid', 'ycentroid', 'sky_centroid',
 #    def source_properties(data, segment_img, error=None, mask=None,
 #                      background=None, filter_kernel=None, wcs=None,
 #                      labels=None):
+
+
+import functools
+
+
+def unpacked(method):
+    @functools.wraps(method)
+    def _decorator(*args):
+        results = method(*args)
+        return results if len(results) != 1 else results[0]
+    return _decorator
+
+def as_scalar_if_possible(func):
+    def wrapper(arr):
+        print('as_scalar wrapper')
+
+        arr = func(arr)
+        #return arr if arr.shape else np.asscalar(arr)
+        try:
+            return arr if len(arr) != 1 else arr[0]
+        except TypeError:
+            return arr
+    return wrapper
+
+def as_scalar(method):
+    @functools.wraps(method)
+    def _decorator(*args):
+        result = method(*args)
+        # try:
+        #     return result if len(result) != 1 else result[0]
+        # except TypeError:
+        #     return result
+        return result if len(result) != 1 else result[0]
+    return _decorator
+
+
+def _unpack_tuple(x):
+    """ Unpacks one-element tuples for use as return values """
+    if len(x) == 1:
+        return x[0]
+    else:
+        return x
+
 
 class SourceProperties:
     def __init__(self, data, segment_img, error=None, mask=None,
@@ -151,23 +196,29 @@ class SourceProperties:
 
 #zzzzz
     def __getitem__(self, index):
+        newcls = object.__new__(self.__class__)
+
         segm = copy(self._segment_img)  # TODO (copy method?)
         # TODO fix for non-consecutive labels
         segm.keep_labels(segm.labels[index])
-
-        newcls = object.__new__(self.__class__)
         newcls._segment_img = segm
 
+        # reference these attributes
         init_attr = ('_data', '_convolved_data', '_error', '_mask',
                      '_background', '_wcs', '_data_unit')
         for attr in init_attr:
             setattr(newcls, attr, getattr(self, attr))
 
+        # slice any evaluated lazyproperty objects
+        print(self._get_lazyproperties())
         for key, value in self.__dict__.items():
+            print(key, key in self._get_lazyproperties())
             if key in self._get_lazyproperties():
                 # skip copy if value is not an array/list for each
                 # source
+                print('lazy but scalar', key)
                 if not np.isscalar(value):
+                    print(key, value)
                     newcls.__dict__[key] = copy(value[index])
 
         return newcls
@@ -286,15 +337,31 @@ class SourceProperties:
 
     @lazyproperty
     def labels(self):
+        print('calculating labels')
+        time.sleep(1)
         return self._segment_img.labels
 
     @lazyproperty
+    @as_scalar
     def id(self):
         """
         The source identification number corresponding to the object
         label in the segmentation image.
         """
-        return self.labels
+        print('calculating id')
+        time.sleep(1)
+        return self._segment_img.labels
+        #return self.labels
+
+    @lazyproperty
+    def id2(self):
+        """
+        The source identification number corresponding to the object
+        label in the segmentation image.
+        """
+        print('calculating id2')
+        time.sleep(1)
+        return self._segment_img.labels
 
     @lazyproperty
     def slices(self):
