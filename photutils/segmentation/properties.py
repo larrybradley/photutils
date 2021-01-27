@@ -76,11 +76,10 @@ def as_scalar(method):
     @functools.wraps(method)
     def _decorator(*args):
         result = method(*args)
-        # try:
-        #     return result if len(result) != 1 else result[0]
-        # except TypeError:
-        #     return result
-        return result if len(result) != 1 else result[0]
+        try:
+            return result if len(result) != 1 else result[0]
+        except TypeError:
+            return result
     return _decorator
 
 
@@ -96,7 +95,7 @@ class SourceProperties:
     def __init__(self, data, segment_img, error=None, mask=None,
                  kernel=None, background=None, wcs=None):
 
-        self._cache = {}
+        #self._cache = {}
         self._data_unit = None
         data, error, background = self._process_quantities(data, error,
                                                            background)
@@ -203,23 +202,31 @@ class SourceProperties:
         segm.keep_labels(segm.labels[index])
         newcls._segment_img = segm
 
-        # reference these attributes
-        init_attr = ('_data', '_convolved_data', '_error', '_mask',
-                     '_background', '_wcs', '_data_unit')
+        # attributes defined in __init__ (_segment_img set above)
+        init_attr = ('_data', '_error', '_mask', '_kernel', '_background',
+                     '_wcs', '_data_unit')
         for attr in init_attr:
             setattr(newcls, attr, getattr(self, attr))
 
+        ref_attr = ('_convolved_data', '_data_mask')
+
         # slice any evaluated lazyproperty objects
-        print(self._get_lazyproperties())
+        #print(self._get_lazyproperties())
         for key, value in self.__dict__.items():
             print(key, key in self._get_lazyproperties())
             if key in self._get_lazyproperties():
-                # skip copy if value is not an array/list for each
-                # source
-                print('lazy but scalar', key)
-                if not np.isscalar(value):
-                    print(key, value)
-                    newcls.__dict__[key] = copy(value[index])
+                print(value)
+                if key in ref_attr:  # do not slice
+                    newcls.__dict__[key] = value
+                else:
+                    # skip copy if value is not an array/list for each
+                    # source (e.g., nlabels)
+                    if not np.isscalar(value):
+                        # TODO: this doesn't work for list objects
+                        # with fancy indexing, e.g. index = [3, 1, 2]
+                        # FIXME
+                        #newcls.__dict__[key] = copy(value[index])
+                        newcls.__dict__[key] = value[index]
 
         return newcls
 
@@ -230,7 +237,10 @@ class SourceProperties:
         for item in range(len(self)):
             yield self.__getitem__(item)
 
+    #labels, slices
+
     @lazyproperty
+    @as_scalar
     def _null_objects(self):
         """
         Return an array of None values.
@@ -240,6 +250,7 @@ class SourceProperties:
         return np.array([None] * len(self))
 
     @lazyproperty
+    @as_scalar
     def _null_values(self):
         """
         Return an array of np.nan values.
@@ -250,7 +261,6 @@ class SourceProperties:
         values.fill(np.nan)
         return values
 
-    # getitem copy
     @lazyproperty
     def _convolved_data(self):
         if self._kernel is None:
@@ -258,7 +268,6 @@ class SourceProperties:
         return _filter_data(self._data, self._kernel, mode='constant',
                             fill_value=0.0, check_normalization=True)
 
-    # getitem copy
     @lazyproperty
     def _data_mask(self):
         mask = ~np.isfinite(self._data)
@@ -267,11 +276,13 @@ class SourceProperties:
         return mask
 
     @lazyproperty
+    @as_scalar
     def _cutout_segment_masks(self):
         return [self._segment_img.data[slc] != label
                 for label, slc in zip(self.labels, self.slices)]
 
     @lazyproperty
+    @as_scalar
     def _cutout_total_masks(self):
         """
         Boolean mask representing the combination of
@@ -290,15 +301,26 @@ class SourceProperties:
         return masks
 
     def _make_cutouts(self, array, units=True, masked=False):
-        cutouts = [array[slc] for slc in self.slices]
+        if self.nlabels == 1:
+            slices = (self.slices,)
+        else:
+            slices = self.slices
+
+        cutouts = [array[slc] for slc in slices]
         if units and self._data_unit is not None:
             cutouts = [(cutout << self._data_unit) for cutout in cutouts]
         if masked:
-            return [np.ma.masked_array(data, mask=mask)
-                    for data, mask in zip(cutouts, self._cutout_total_masks)]
+            result = [np.ma.masked_array(data, mask=mask)
+                      for data, mask in zip(cutouts, self._cutout_total_masks)]
+            if len(result) == 1:
+                return result[0]
+            return result
+        if len(cutouts) == 1:
+            return cutouts[0]
         return cutouts
 
     @lazyproperty
+    @as_scalar
     def _cutout_moment_data(self):
         """
         A list of 2D `~numpy.ndarray` cutouts from the input
@@ -336,9 +358,8 @@ class SourceProperties:
         return self._segment_img.nlabels
 
     @lazyproperty
+    @as_scalar
     def labels(self):
-        print('calculating labels')
-        time.sleep(1)
         return self._segment_img.labels
 
     @lazyproperty
@@ -348,34 +369,25 @@ class SourceProperties:
         The source identification number corresponding to the object
         label in the segmentation image.
         """
-        print('calculating id')
-        time.sleep(1)
-        return self._segment_img.labels
-        #return self.labels
+        return self.labels
 
     @lazyproperty
-    def id2(self):
-        """
-        The source identification number corresponding to the object
-        label in the segmentation image.
-        """
-        print('calculating id2')
-        time.sleep(1)
-        return self._segment_img.labels
-
-    @lazyproperty
+    @as_scalar
     def slices(self):
         return self._segment_img.slices
 
     @lazyproperty
+    @as_scalar
     def segm_cutout(self):
         return [segm.data for segm in self._segment_img.segments]
 
     @lazyproperty
+    @as_scalar
     def segm_cutout_ma(self):
         return [segm.data_ma for segm in self._segment_img.segments]
 
     @lazyproperty
+    @as_scalar
     def data_cutout(self):
         """
         A 2D `~numpy.ndarray` cutout from the data using the minimal
@@ -384,6 +396,7 @@ class SourceProperties:
         return self._make_cutouts(self._data, units=True, masked=False)
 
     @lazyproperty
+    @as_scalar
     def data_cutout_ma(self):
         """
         A 2D `~numpy.ma.MaskedArray` cutout from the ``data``.
@@ -395,16 +408,19 @@ class SourceProperties:
         return self._make_cutouts(self._data, units=False, masked=True)
 
     @lazyproperty
+    @as_scalar
     def convdata_cutout(self):
         return self._make_cutouts(self._convolved_data, units=True,
                                   masked=False)
 
     @lazyproperty
+    @as_scalar
     def convdata_cutout_ma(self):
         return self._make_cutouts(self._convolved_data, units=False,
                                   masked=True)
 
     @lazyproperty
+    @as_scalar
     def error_cutout(self):
         if self._error is None:
             return self._null_objects
@@ -412,6 +428,7 @@ class SourceProperties:
                                   masked=False)
 
     @lazyproperty
+    @as_scalar
     def error_cutout_ma(self):
         if self._error is None:
             return self._null_objects
@@ -419,6 +436,7 @@ class SourceProperties:
                                   masked=True)
 
     @lazyproperty
+    @as_scalar
     def background_cutout(self):
         if self._background is None:
             return self._null_objects
@@ -426,6 +444,7 @@ class SourceProperties:
                                   masked=False)
 
     @lazyproperty
+    @as_scalar
     def background_cutout_ma(self):
         if self._error is None:
             return self._null_objects
@@ -433,6 +452,7 @@ class SourceProperties:
                                   masked=True)
 
     @lazyproperty
+    @as_scalar
     def _data_values(self):
         """
         A 1D `~numpy.ndarray` of the unmasked ``data`` values within the
@@ -450,6 +470,7 @@ class SourceProperties:
                 for array in self.data_cutout_ma]
 
     @lazyproperty
+    @as_scalar
     def _error_values(self):
         """
         A 1D `~numpy.ndarray` of the unmasked ``error`` values within
@@ -463,6 +484,7 @@ class SourceProperties:
                 for array in self.error_cutout_ma]
 
     @lazyproperty
+    @as_scalar
     def _background_values(self):
         """
         A 1D `~numpy.ndarray` of the unmasked ``background`` values
@@ -475,12 +497,14 @@ class SourceProperties:
                 for array in self.background_cutout_ma]
 
     @lazyproperty
+    @as_scalar
     def moments(self):
         """Spatial moments up to 3rd order of the source."""
         return np.array([_moments(arr, order=3)
                          for arr in self._cutout_moment_data])
 
     @lazyproperty
+    @as_scalar
     def moments_central(self):
         """
         Central moments (translation invariant) of the source up to 3rd
@@ -492,6 +516,7 @@ class SourceProperties:
                                 self.xcentroid.value, self.ycentroid.value)])
 
     @lazyproperty
+    @as_scalar
     def _cutout_yxcentroid(self):
         """
         The ``(y, x)`` coordinate, relative to the `data_cutout`, of
@@ -504,15 +529,18 @@ class SourceProperties:
         return ycentroid, xcentroid
 
     @lazyproperty
+    @as_scalar
     def cutout_centroid(self):
         return np.transpose(self._cutout_yxcentroid)
 
     @lazyproperty
+    @as_scalar
     def _yxcentroid(self):
         return (self._cutout_yxcentroid[0] + self.bbox_ymin,
                 self._cutout_yxcentroid[1] + self.bbox_xmin)
 
     @lazyproperty
+    @as_scalar
     def centroid(self):
         """
         The ``(y, x)`` coordinate of the centroid within the source
@@ -521,6 +549,7 @@ class SourceProperties:
         return np.transpose(self._yxcentroid)
 
     @lazyproperty
+    @as_scalar
     def xcentroid(self):
         """
         The ``x`` coordinate of the centroid within the source segment.
@@ -528,6 +557,7 @@ class SourceProperties:
         return self._yxcentroid[1]
 
     @lazyproperty
+    @as_scalar
     def ycentroid(self):
         """
         The ``y`` coordinate of the centroid within the source segment.
