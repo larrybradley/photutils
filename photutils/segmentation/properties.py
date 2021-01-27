@@ -226,7 +226,11 @@ class SourceProperties:
                         # with fancy indexing, e.g. index = [3, 1, 2]
                         # FIXME
                         #newcls.__dict__[key] = copy(value[index])
-                        newcls.__dict__[key] = value[index]
+                        try:
+                            newcls.__dict__[key] = value[index]
+                        except TypeError:
+                            val = [value[i] for i in index]
+                            newcls.__dict__[key] = val
 
         return newcls
 
