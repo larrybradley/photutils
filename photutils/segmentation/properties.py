@@ -55,8 +55,8 @@ import functools
 
 def unpacked(method):
     @functools.wraps(method)
-    def _decorator(*args):
-        results = method(*args)
+    def _decorator(*args, **kwargs):
+        results = method(*args, **kwargs)
         return results if len(results) != 1 else results[0]
     return _decorator
 
@@ -74,8 +74,8 @@ def as_scalar_if_possible(func):
 
 def as_scalar(method):
     @functools.wraps(method)
-    def _decorator(*args):
-        result = method(*args)
+    def _decorator(*args, **kwargs):
+        result = method(*args, **kwargs)
         try:
             return result if len(result) != 1 else result[0]
         except TypeError:
@@ -183,7 +183,8 @@ class SourceProperties:
 
     #     return self._cache[attr]
 
-    def _get_lazyproperties(self):
+    @property
+    def _lazyproperties(self):
         """
         Return all lazyproperties (even in superclasses).
         """
@@ -213,8 +214,8 @@ class SourceProperties:
         # slice any evaluated lazyproperty objects
         #print(self._get_lazyproperties())
         for key, value in self.__dict__.items():
-            print(key, key in self._get_lazyproperties())
-            if key in self._get_lazyproperties():
+            print(key, key in self._lazyproperties)
+            if key in self._lazyproperties:
                 print(value)
                 if key in ref_attr:  # do not slice
                     newcls.__dict__[key] = value
@@ -237,6 +238,9 @@ class SourceProperties:
     def __len__(self):
         return self.nlabels
 
+    def isscalar(self):
+        return self.nlabels == 1
+
     def __iter__(self):
         for item in range(len(self)):
             yield self.__getitem__(item)
@@ -245,7 +249,7 @@ class SourceProperties:
 
     @lazyproperty
     @as_scalar
-    def _null_objects(self):
+    def _null_object(self):
         """
         Return an array of None values.
 
@@ -255,7 +259,7 @@ class SourceProperties:
 
     @lazyproperty
     @as_scalar
-    def _null_values(self):
+    def _null_value(self):
         """
         Return an array of np.nan values.
 
@@ -281,13 +285,18 @@ class SourceProperties:
 
     @lazyproperty
     @as_scalar
-    def _cutout_segment_masks(self):
-        return [self._segment_img.data[slc] != label
-                for label, slc in zip(self.labels, self.slices)]
+    def _cutout_segment_mask(self):
+        label = self.label
+        slices = self.slices
+        if self.isscalar:
+            label = (label,)
+            slices = (slices,)
+        return [self._segment_img.data[slice_] != label_
+                for label_, slice_ in zip(label, slices)]
 
     @lazyproperty
     @as_scalar
-    def _cutout_total_masks(self):
+    def _cutout_total_mask(self):
         """
         Boolean mask representing the combination of
         ``_cutout_segment_mask``, ``_cutout_nonfinite_mask``, and
@@ -299,28 +308,31 @@ class SourceProperties:
         This mask is applied to ``data``, ``error``, and ``background``
         inputs when calculating properties.
         """
+        slices = self.slices
+        mask = self._cutout_segment_mask
+        if self.isscalar:
+            slices = (slices,)
+            mask = (mask,)
         masks = []
-        for segm_mask, slc in zip(self._cutout_segment_masks, self.slices):
-            masks.append(segm_mask | self._data_mask[slc])
+        for segm_mask, slice_ in zip(mask, slices):
+            masks.append(segm_mask | self._data_mask[slice_])
         return masks
 
-    def _make_cutouts(self, array, units=True, masked=False):
-        if self.nlabels == 1:
-            slices = (self.slices,)
-        else:
-            slices = self.slices
-
-        cutouts = [array[slc] for slc in slices]
+    @as_scalar
+    def _make_cutout(self, array, units=True, masked=False):
+        slices = self.slices
+        if self.isscalar:
+            slices = (slices,)
+        cutouts = [array[slice_] for slice_ in slices]
         if units and self._data_unit is not None:
             cutouts = [(cutout << self._data_unit) for cutout in cutouts]
         if masked:
-            result = [np.ma.masked_array(data, mask=mask)
-                      for data, mask in zip(cutouts, self._cutout_total_masks)]
-            if len(result) == 1:
-                return result[0]
+            mask = self._cutout_total_mask
+            if self.isscalar:
+                mask = (mask,)
+            result = [np.ma.masked_array(cutout, mask=mask_)
+                      for cutout, mask_ in zip(cutouts, mask)]
             return result
-        if len(cutouts) == 1:
-            return cutouts[0]
         return cutouts
 
     @lazyproperty
@@ -343,12 +355,17 @@ class SourceProperties:
         if self._mask is not None:
             mask |= self._mask
 
-        cutouts = []
-        #zzzzz
-        for label, slc, convdata in zip(self.labels, self.slices,
-                                        self.convdata_cutout):
-            mask2 = (self._segment_img.data[slc] != label) | mask[slc]
+        label = self.label
+        slices = self.slices
+        cutout = self.convdata_cutout
+        if self.isscalar:
+            label = (label,)
+            slices = (slices,)
+            cutout = (cutout,)
 
+        cutouts = []
+        for label_, slice_, convdata in zip(label, slices, cutout):
+            mask2 = (self._segment_img.data[slice_] != label_) | mask[slice_]
             cutout = convdata.copy()
             cutout[mask2] = 0.
             cutouts.append(cutout)
@@ -363,7 +380,7 @@ class SourceProperties:
 
     @lazyproperty
     @as_scalar
-    def labels(self):
+    def label(self):
         return self._segment_img.labels
 
     @lazyproperty
@@ -373,7 +390,11 @@ class SourceProperties:
         The source identification number corresponding to the object
         label in the segmentation image.
         """
-        return self.labels
+        return self.label
+
+    @lazyproperty
+    def _slices(self):
+        return self._segment_img.slices
 
     @lazyproperty
     @as_scalar
@@ -397,7 +418,7 @@ class SourceProperties:
         A 2D `~numpy.ndarray` cutout from the data using the minimal
         bounding box of the source segment.
         """
-        return self._make_cutouts(self._data, units=True, masked=False)
+        return self._make_cutout(self._data, units=True, masked=False)
 
     @lazyproperty
     @as_scalar
@@ -409,18 +430,18 @@ class SourceProperties:
         (labeled region of interest), masked pixels from the ``mask``
         input, or any non-finite ``data`` values (NaN and +/- inf).
         """
-        return self._make_cutouts(self._data, units=False, masked=True)
+        return self._make_cutout(self._data, units=False, masked=True)
 
     @lazyproperty
     @as_scalar
     def convdata_cutout(self):
-        return self._make_cutouts(self._convolved_data, units=True,
+        return self._make_cutout(self._convolved_data, units=True,
                                   masked=False)
 
     @lazyproperty
     @as_scalar
     def convdata_cutout_ma(self):
-        return self._make_cutouts(self._convolved_data, units=False,
+        return self._make_cutout(self._convolved_data, units=False,
                                   masked=True)
 
     @lazyproperty
@@ -428,7 +449,7 @@ class SourceProperties:
     def error_cutout(self):
         if self._error is None:
             return self._null_objects
-        return self._make_cutouts(self._error, units=True,
+        return self._make_cutout(self._error, units=True,
                                   masked=False)
 
     @lazyproperty
@@ -436,7 +457,7 @@ class SourceProperties:
     def error_cutout_ma(self):
         if self._error is None:
             return self._null_objects
-        return self._make_cutouts(self._error, units=False,
+        return self._make_cutout(self._error, units=False,
                                   masked=True)
 
     @lazyproperty
@@ -444,7 +465,7 @@ class SourceProperties:
     def background_cutout(self):
         if self._background is None:
             return self._null_objects
-        return self._make_cutouts(self._background, units=True,
+        return self._make_cutout(self._background, units=True,
                                   masked=False)
 
     @lazyproperty
@@ -452,7 +473,7 @@ class SourceProperties:
     def background_cutout_ma(self):
         if self._error is None:
             return self._null_objects
-        return self._make_cutouts(self._background, units=False,
+        return self._make_cutout(self._background, units=False,
                                   masked=True)
 
     @lazyproperty
@@ -504,8 +525,10 @@ class SourceProperties:
     @as_scalar
     def moments(self):
         """Spatial moments up to 3rd order of the source."""
-        return np.array([_moments(arr, order=3)
-                         for arr in self._cutout_moment_data])
+        cutout = self._cutout_moment_data
+        if self.isscalar:
+            cutout = (cutout,)
+        return np.array([_moments(arr, order=3) for arr in cutout])
 
     @lazyproperty
     @as_scalar
@@ -514,10 +537,16 @@ class SourceProperties:
         Central moments (translation invariant) of the source up to 3rd
         order.
         """
-        return np.array([_moments_central(arr, center=(xcen, ycen), order=3)
-                         for arr, xcen, ycen
-                         in zip(self._cutout_moment_data,
-                                self.xcentroid.value, self.ycentroid.value)])
+        cutout = self._cutout_moment_data
+        xcen = self.xcentroid
+        ycen = self.ycentroid
+        if self.isscalar:
+            cutout = (cutout,)
+            xcen = (xcen,)
+            ycen = (ycen,)
+
+        return np.array([_moments_central(arr, center=(xcen_, ycen_), order=3)
+                         for arr, xcen_, ycen_ in zip(cutout, xcen, ycen)])
 
     @lazyproperty
     @as_scalar
@@ -526,10 +555,13 @@ class SourceProperties:
         The ``(y, x)`` coordinate, relative to the `data_cutout`, of
         the centroid within the source segment.
         """
-        mu_00 = self.moments[:, 0, 0]
+        moments = self.moments
+        if self.isscalar:
+            moments = np.expand_dims(moments, axis=0)
+        mu_00 = moments[:, 0, 0]
         badmask = (mu_00 == 0)
-        ycentroid = np.where(badmask, np.nan, self.moments[:, 1, 0] / mu_00)
-        xcentroid = np.where(badmask, np.nan, self.moments[:, 0, 1] / mu_00)
+        ycentroid = np.where(badmask, np.nan, moments[:, 1, 0] / mu_00)
+        xcentroid = np.where(badmask, np.nan, moments[:, 0, 1] / mu_00)
         return ycentroid, xcentroid
 
     @lazyproperty
@@ -592,6 +624,7 @@ class SourceProperties:
         return self.sky_centroid.icrs
 
     @lazyproperty
+    @as_scalar
     def bbox(self):
         """
         The `~photutils.aperture.BoundingBox` of the minimal rectangular
@@ -599,17 +632,19 @@ class SourceProperties:
         """
         return [BoundingBox(ixmin=slc[1].start, ixmax=slc[1].stop,
                             iymin=slc[0].start, iymax=slc[0].stop)
-                for slc in self.slices]
+                for slc in self._slices]
 
     @lazyproperty
+    @as_scalar
     def bbox_xmin(self):
         """
         The minimum ``x`` pixel location within the minimal bounding box
         containing the source segment.
         """
-        return np.array([slc[1].start for slc in self.slices])
+        return np.array([slc[1].start for slc in self._slices])
 
     @lazyproperty
+    @as_scalar
     def bbox_xmax(self):
         """
         The maximum ``x`` pixel location within the minimal bounding box
@@ -617,17 +652,19 @@ class SourceProperties:
 
         Note that this value is inclusive, unlike numpy slice indices.
         """
-        return np.array([slc[1].stop - 1 for slc in self.slices])
+        return np.array([slc[1].stop - 1 for slc in self._slices])
 
     @lazyproperty
+    @as_scalar
     def bbox_ymin(self):
         """
         The minimum ``y`` pixel location within the minimal bounding box
         containing the source segment.
         """
-        return np.array([slc[0].start for slc in self.slices])
+        return np.array([slc[0].start for slc in self._slices])
 
     @lazyproperty
+    @as_scalar
     def bbox_ymax(self):
         """
         The maximum ``y`` pixel location within the minimal bounding box
@@ -635,17 +672,23 @@ class SourceProperties:
 
         Note that this value is inclusive, unlike numpy slice indices.
         """
-        return np.array([slc[0].stop - 1 for slc in self.slices])
+        return np.array([slc[0].stop - 1 for slc in self._slices])
 
     @lazyproperty
     def _bbox_corner_ll(self):
+        bbox = self.bbox
+        if self.isscalar:
+            bbox = (bbox,)
         xypos = []
-        for bbox in self.bbox:
-            xypos.append((bbox.ixmin - 0.5, bbox.iymin - 0.5))
+        for bbox_ in bbox:
+            xypos.append((bbox_.ixmin - 0.5, bbox_.iymin - 0.5))
         return xypos
 
     @lazyproperty
     def _bbox_corner_ul(self):
+        bbox = self.bbox
+        if self.isscalar:
+            bbox = (bbox,)
         xypos = []
         for bbox in self.bbox:
             xypos.append((bbox.ixmin - 0.5, bbox.iymax + 0.5))
@@ -653,6 +696,9 @@ class SourceProperties:
 
     @lazyproperty
     def _bbox_corner_lr(self):
+        bbox = self.bbox
+        if self.isscalar:
+            bbox = (bbox,)
         xypos = []
         for bbox in self.bbox:
             xypos.append((bbox.ixmax + 0.5, bbox.iymin - 0.5))
@@ -660,6 +706,9 @@ class SourceProperties:
 
     @lazyproperty
     def _bbox_corner_ur(self):
+        bbox = self.bbox
+        if self.isscalar:
+            bbox = (bbox,)
         xypos = []
         for bbox in self.bbox:
             xypos.append((bbox.ixmax + 0.5, bbox.iymax + 0.5))
