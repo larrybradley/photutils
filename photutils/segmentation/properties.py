@@ -24,13 +24,9 @@ from ..utils._convolution import _filter_data
 from ..utils._moments import _moments, _moments_central
 from ..utils._wcs_helpers import _pixel_to_world
 
-#__all__ = ['SourceProperties', 'source_properties', 'SourceCatalog']
 __all__ = ['SourceProperties']
+#__doctest_requires__ = {('SourceProperties', 'SourceProperties.*'), ['scipy']}
 
-#__doctest_requires__ = {('SourceProperties', 'SourceProperties.*',
-#                         'SourceCatalog', 'SourceCatalog.*',
-#                         'source_properties', 'properties_table'):
-#                        ['scipy']}
 
 # default table columns for `to_table()` output
 DEFAULT_COLUMNS = ['id', 'xcentroid', 'ycentroid', 'sky_centroid',
@@ -46,21 +42,11 @@ DEFAULT_COLUMNS = ['id', 'xcentroid', 'ycentroid', 'sky_centroid',
                    'cyy', 'gini']
 
 
-#    def source_properties(data, segment_img, error=None, mask=None,
-#                      background=None, filter_kernel=None, wcs=None,
-#                      labels=None):
-
-
-
 def as_scalar(method):
     @functools.wraps(method)
     def _decorator(*args, **kwargs):
         result = method(*args, **kwargs)
         try:
-            #return result if len(result) != 1 else result[0]
-            #return result[0] if args[0].isscalar else result
-            #return (result if not args[0].isscalar and len(result) != 1
-            #        else result[0])
             return (result[0] if args[0].isscalar and len(result) == 1
                     else result)
         except TypeError:
@@ -68,19 +54,10 @@ def as_scalar(method):
     return _decorator
 
 
-def _unpack_tuple(x):
-    """ Unpacks one-element tuples for use as return values """
-    if len(x) == 1:
-        return x[0]
-    else:
-        return x
-
-
 class SourceProperties:
     def __init__(self, data, segment_img, error=None, mask=None,
                  kernel=None, background=None, wcs=None):
 
-        #self._cache = {}
         self._data_unit = None
         data, error, background = self._process_quantities(data, error,
                                                            background)
@@ -92,6 +69,7 @@ class SourceProperties:
         self._background = self._validate_array(background, 'background')
         self._wcs = wcs
         self._labels = self._segment_img.labels  # needed for isscalar
+        self.default_columns = DEFAULT_COLUMNS
 
     def _process_quantities(self, data, error, background):
         """
@@ -107,8 +85,8 @@ class SourceProperties:
         has_unit = [hasattr(x, 'unit') for x in inputs if x is not None]
         use_units = all(has_unit)
         if any(has_unit) and not use_units:
-            raise ValueError('If any of data, error, or background has units, '
-                             'then they all must all have units.')
+            raise ValueError('If any of data, error, or background has '
+                             'units, then they all must all have units.')
         if use_units:
             self._data_unit = data.unit
             data = data.value
@@ -139,36 +117,6 @@ class SourceProperties:
                 raise ValueError(f'error and {name} must have the same shape.')
         return array
 
-    #@lazyproperty
-    # def _properties(self):
-    #     properties = []
-    #     for label in self._segment_img.labels:
-    #         properties.append(_SourceProperties(
-    #             self._data, self._convolved_data, self._segment_img, label,
-    #             error=self._error, mask=self._mask,
-    #             background=self._background, data_unit=self._data_unit))
-    #     return properties
-
-    # def __getattr__(self, attr):
-    #     # called only if attr explicitly defined in this cls
-    #     if attr not in self._cache:
-    #         values = [getattr(source, attr) for source in self._properties]
-
-    #         if isinstance(values[0], u.Quantity) and np.isscalar(values[0]):
-    #             # turn list of Quantities into a Quantity array
-    #             values = u.Quantity(values)
-    #         #if isinstance(values[0], SkyCoord):  # pragma: no cover
-    #         #    # failsafe: turn list of SkyCoord into a SkyCoord array
-    #         #    values = SkyCoord(values)
-
-    #         # TODO: add other properties as arrays
-    #         if attr in ('moments', 'moments_central'):
-    #             values = np.array(values)
-
-    #         self._cache[attr] = values
-
-    #     return self._cache[attr]
-
     @property
     def _lazyproperties(self):
         """
@@ -183,24 +131,25 @@ class SourceProperties:
     def __getitem__(self, index):
         newcls = object.__new__(self.__class__)
 
-        segm = copy(self._segment_img)  # TODO (copy method?)
+        segm = copy(self._segment_img)  # TODO (add segm copy method?)
         # TODO fix for non-consecutive labels
         segm.keep_labels(segm.labels[index])
         newcls._segment_img = segm
 
-        # attributes defined in __init__ (_segment_img set above)
+        # attributes defined in __init__ (_segment_img was set above)
         init_attr = ('_data', '_error', '_mask', '_kernel', '_background',
-                     '_wcs', '_data_unit')
+                     '_wcs', '_data_unit', 'default_columns')
         for attr in init_attr:
             setattr(newcls, attr, getattr(self, attr))
 
+        # needed for isscalar
         attr = '_labels'
         setattr(newcls, attr, getattr(self, attr)[index])
 
+        # lazy properties to not slice
         ref_attr = ('_convolved_data', '_data_mask')
 
-        # slice any evaluated lazyproperty objects
-        #print(self._get_lazyproperties())
+        # evaluated lazyproperty objects
         keys = set(self.__dict__.keys()) & set(self._lazyproperties)
         for key in keys:
             value = self.__dict__[key]
@@ -216,20 +165,26 @@ class SourceProperties:
                 # TODO: is copy(value) needed?
                 try:
                     val = value[index]
-                    #if key.startswith('_'):
-                    #    print("***____********", key, "*********")
 
                     #if key.startswith('_') and np.isscalar(val):
-                    if key.startswith('_'):
+                    if newcls.isscalar and key.startswith('_'):
+                        # possibilities:
+                        # 3D array (stack of 2D arrays)
+                        # 1D array of scalars
+                        # list of array (ragged)
+                        # list of tuples (slices)
+                        # object array
+
                         #print("********", key, "*********")
                         #print(key, isinstance(value, np.ndarray))
                         # keep _attrs as length-1 iterables
                         # NOTE:  these attributes will not exactly
                         # match the values if evaluated for the first
                         # time in a scalar cls (e.g., _bbox_corner_ll)
+                        #print(key, val)
                         val = (val,)
+                        #print(key, val)
                 except TypeError:  # fancy idx (e.g., idx=[5, 1, 4])
-                    #print('\n', key, index, value)
                     val = [value[i] for i in index]
                 newcls.__dict__[key] = val
         return newcls
