@@ -4,6 +4,7 @@ This module provides tools for calculating the properties of sources
 defined by a segmentation image.
 """
 
+import functools
 import time
 
 from copy import copy
@@ -50,28 +51,6 @@ DEFAULT_COLUMNS = ['id', 'xcentroid', 'ycentroid', 'sky_centroid',
 #                      labels=None):
 
 
-import functools
-
-
-def unpacked(method):
-    @functools.wraps(method)
-    def _decorator(*args, **kwargs):
-        results = method(*args, **kwargs)
-        return results if len(results) != 1 else results[0]
-    return _decorator
-
-def as_scalar_if_possible(func):
-    def wrapper(arr):
-        print('as_scalar wrapper')
-
-        arr = func(arr)
-        #return arr if arr.shape else np.asscalar(arr)
-        try:
-            #return arr if len(arr) != 1 else arr[0]
-            return arr[0] if self.isscalar else arr[0]
-        except TypeError:
-            return arr
-    return wrapper
 
 def as_scalar(method):
     @functools.wraps(method)
@@ -79,7 +58,11 @@ def as_scalar(method):
         result = method(*args, **kwargs)
         try:
             #return result if len(result) != 1 else result[0]
-            return result[0] if args[0].isscalar else result
+            #return result[0] if args[0].isscalar else result
+            #return (result if not args[0].isscalar and len(result) != 1
+            #        else result[0])
+            return (result[0] if args[0].isscalar and len(result) == 1
+                    else result)
         except TypeError:
             return result
     return _decorator
@@ -224,19 +207,31 @@ class SourceProperties:
             if key in ref_attr:  # do not slice
                 newcls.__dict__[key] = value
             else:
-                # skip copy if value is not an array/list for each
-                # source (e.g., isscalar, nlabels)
-                if not np.isscalar(value):
-                    # TODO: is copy of value needed?
-                    try:
-                        val = value[index]
-                        if key.startswith('_') and np.isscalar(val):
-                            # keep _attrs as length-1 lists
-                            val = [val]
-                    except TypeError:  # fancy idx ([3, 2, 1])
-                        print('\n', key, index, value)
-                        val = [value[i] for i in index]
-                    newcls.__dict__[key] = val
+                # skip copy for values that are always scalar
+                # i.e., not an array/list
+                # for each source (e.g., isscalar, nlabels)
+                if np.isscalar(value):
+                    continue
+
+                # TODO: is copy(value) needed?
+                try:
+                    val = value[index]
+                    #if key.startswith('_'):
+                    #    print("***____********", key, "*********")
+
+                    #if key.startswith('_') and np.isscalar(val):
+                    if key.startswith('_'):
+                        #print("********", key, "*********")
+                        #print(key, isinstance(value, np.ndarray))
+                        # keep _attrs as length-1 iterables
+                        # NOTE:  these attributes will not exactly
+                        # match the values if evaluated for the first
+                        # time in a scalar cls (e.g., _bbox_corner_ll)
+                        val = (val,)
+                except TypeError:  # fancy idx (e.g., idx=[5, 1, 4])
+                    #print('\n', key, index, value)
+                    val = [value[i] for i in index]
+                newcls.__dict__[key] = val
         return newcls
 
     def __len__(self):
@@ -398,7 +393,7 @@ class SourceProperties:
         return [segm.data_ma for segm in self._segment_img.segments]
 
     @lazyproperty
-    @as_scalar
+    #@as_scalar
     def data_cutout(self):
         """
         A 2D `~numpy.ndarray` cutout from the data using the minimal
@@ -407,7 +402,7 @@ class SourceProperties:
         return self._make_cutout(self._data, units=True, masked=False)
 
     @lazyproperty
-    @as_scalar
+    #@as_scalar
     def data_cutout_ma(self):
         """
         A 2D `~numpy.ma.MaskedArray` cutout from the ``data``.
@@ -419,19 +414,19 @@ class SourceProperties:
         return self._make_cutout(self._data, units=False, masked=True)
 
     @lazyproperty
-    @as_scalar
+    #@as_scalar
     def convdata_cutout(self):
         return self._make_cutout(self._convolved_data, units=True,
                                   masked=False)
 
     @lazyproperty
-    @as_scalar
+    #@as_scalar
     def convdata_cutout_ma(self):
         return self._make_cutout(self._convolved_data, units=False,
                                   masked=True)
 
     @lazyproperty
-    @as_scalar
+    #@as_scalar
     def error_cutout(self):
         if self._error is None:
             return self._null_object
@@ -439,7 +434,7 @@ class SourceProperties:
                                   masked=False)
 
     @lazyproperty
-    @as_scalar
+    #@as_scalar
     def error_cutout_ma(self):
         if self._error is None:
             return self._null_object
@@ -447,7 +442,7 @@ class SourceProperties:
                                   masked=True)
 
     @lazyproperty
-    @as_scalar
+    #@as_scalar
     def background_cutout(self):
         if self._background is None:
             return self._null_object
@@ -455,7 +450,7 @@ class SourceProperties:
                                   masked=False)
 
     @lazyproperty
-    @as_scalar
+    #@as_scalar
     def background_cutout_ma(self):
         if self._error is None:
             return self._null_object
