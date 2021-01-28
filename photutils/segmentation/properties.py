@@ -78,7 +78,8 @@ def as_scalar(method):
     def _decorator(*args, **kwargs):
         result = method(*args, **kwargs)
         try:
-            return result if len(result) != 1 else result[0]
+            #return result if len(result) != 1 else result[0]
+            return result[0] if self.isscalar else result
         except TypeError:
             return result
     return _decorator
@@ -259,7 +260,7 @@ class SourceProperties:
 
         Used for SkyCoord properties if ``wcs`` is `None`.
         """
-        return np.array([None] * len(self))
+        return np.array([None] * self.nlabels)
 
     @lazyproperty
     def _null_value(self):
@@ -268,7 +269,7 @@ class SourceProperties:
 
         Used for background properties if ``background`` is `None`.
         """
-        values = np.empty(len(self))
+        values = np.empty(self.nlabels)
         values.fill(np.nan)
         return values
 
@@ -461,8 +462,13 @@ class SourceProperties:
         return self._make_cutout(self._background, units=False,
                                   masked=True)
 
+    def _get_values(self, array):
+        if self.isscalar:
+            array = (array,)
+        return [arr.compressed() if len(arr.compressed()) > 0 else np.nan
+                for arr in array]
+
     @lazyproperty
-    @as_scalar
     def _data_values(self):
         """
         A 1D `~numpy.ndarray` of the unmasked ``data`` values within the
@@ -476,11 +482,14 @@ class SourceProperties:
         This array is used for ``source_sum``, ``area``, ``min_value``,
         ``max_value``, etc.
         """
-        return [array.compressed() if len(array.compressed()) > 0 else np.nan
-                for array in self.data_cutout_ma]
+        #array = self.data_cutout_ma
+        #if self.isscalar:
+        #    array = (array,)
+        #return [arr.compressed() if len(arr.compressed()) > 0 else np.nan
+        #        for arr in array]
+        return self._get_values(self.data_cutout_ma)
 
     @lazyproperty
-    @as_scalar
     def _error_values(self):
         """
         A 1D `~numpy.ndarray` of the unmasked ``error`` values within
@@ -490,11 +499,9 @@ class SourceProperties:
         """
         if self._error is None:
             return self._null_value
-        return [array.compressed() if len(array.compressed()) > 0 else np.nan
-                for array in self.error_cutout_ma]
+        return self._get_values(self.error_cutout_ma)
 
     @lazyproperty
-    @as_scalar
     def _background_values(self):
         """
         A 1D `~numpy.ndarray` of the unmasked ``background`` values
@@ -505,8 +512,7 @@ class SourceProperties:
         """
         if self._background is None:
             return self._null_value
-        return [array.compressed() if len(array.compressed()) > 0 else np.nan
-                for array in self.background_cutout_ma]
+        return self._get_values(self.background_cutout_ma)
 
     @lazyproperty
     @as_scalar
@@ -577,7 +583,9 @@ class SourceProperties:
         The ``x`` coordinate of the centroid within the source segment.
         """
         #return self._yxcentroid[1]
-        return self.centroid[:, 1]
+        #return self.centroid[:, 1]
+        #return np.atleast_2d(self.centroid)[:, 1]
+        return np.transpose(self.centroid)[1]
 
     @lazyproperty
     @as_scalar
@@ -586,7 +594,9 @@ class SourceProperties:
         The ``y`` coordinate of the centroid within the source segment.
         """
         #return self._yxcentroid[0]
-        return self.centroid[:, 0]
+        #return self.centroid[:, 0]
+        #return np.atleast_2d(self.centroid)[:, 0]
+        return np.transpose(self.centroid)[0]
 
     @lazyproperty
     def sky_centroid(self):
@@ -678,8 +688,8 @@ class SourceProperties:
         if self.isscalar:
             bbox = (bbox,)
         xypos = []
-        for bbox in self.bbox:
-            xypos.append((bbox.ixmin - 0.5, bbox.iymax + 0.5))
+        for bbox_ in bbox:
+            xypos.append((bbox_.ixmin - 0.5, bbox_.iymax + 0.5))
         return np.array(xypos)
 
     @lazyproperty
@@ -688,8 +698,8 @@ class SourceProperties:
         if self.isscalar:
             bbox = (bbox,)
         xypos = []
-        for bbox in self.bbox:
-            xypos.append((bbox.ixmax + 0.5, bbox.iymin - 0.5))
+        for bbox_ in bbox:
+            xypos.append((bbox_.ixmax + 0.5, bbox_.iymin - 0.5))
         return np.array(xypos)
 
     @lazyproperty
@@ -698,11 +708,12 @@ class SourceProperties:
         if self.isscalar:
             bbox = (bbox,)
         xypos = []
-        for bbox in self.bbox:
-            xypos.append((bbox.ixmax + 0.5, bbox.iymax + 0.5))
+        for bbox_ in bbox:
+            xypos.append((bbox_.ixmax + 0.5, bbox_.iymax + 0.5))
         return np.array(xypos)
 
     @lazyproperty
+    @as_scalar
     def sky_bbox_ll(self):
         """
         The sky coordinates of the lower-left vertex of the minimal
@@ -717,6 +728,7 @@ class SourceProperties:
         return self._wcs.pixel_to_world(*np.transpose(self._bbox_corner_ll))
 
     @lazyproperty
+    @as_scalar
     def sky_bbox_ul(self):
         """
         The sky coordinates of the upper-left vertex of the minimal
@@ -731,6 +743,7 @@ class SourceProperties:
         return self._wcs.pixel_to_world(*np.transpose(self._bbox_corner_ul))
 
     @lazyproperty
+    @as_scalar
     def sky_bbox_lr(self):
         """
         The sky coordinates of the lower-right vertex of the minimal
@@ -745,6 +758,7 @@ class SourceProperties:
         return self._wcs.pixel_to_world(*np.transpose(self._bbox_corner_lr))
 
     @lazyproperty
+    @as_scalar
     def sky_bbox_ur(self):
         """
         The sky coordinates of the upper-right vertex of the minimal
@@ -759,6 +773,7 @@ class SourceProperties:
         return self._wcs.pixel_to_world(*np.transpose(self._bbox_corner_ur))
 
     @lazyproperty
+    @as_scalar
     def min_value(self):
         """
         The minimum pixel value of the ``data`` within the source
@@ -770,6 +785,7 @@ class SourceProperties:
         return values
 
     @lazyproperty
+    @as_scalar
     def max_value(self):
         """
         The maximum pixel value of the ``data`` within the source
@@ -781,6 +797,7 @@ class SourceProperties:
         return values
 
     @lazyproperty
+    @as_scalar
     def minval_cutout_index(self):
         """
         The ``(y, x)`` coordinate, relative to the `data_cutout`, of the
@@ -789,8 +806,11 @@ class SourceProperties:
         If there are multiple occurrences of the minimum value, only the
         first occurence is returned.
         """
+        data = self.data_cutout_ma
+        if self.isscalar:
+            data = (data,)
         idx = []
-        for arr in self.data_cutout_ma:
+        for arr in data:
             if np.all(arr.mask):
                 idx.append((np.nan, np.nan))
             else:
@@ -798,6 +818,7 @@ class SourceProperties:
         return np.array(idx)
 
     @lazyproperty
+    @as_scalar
     def maxval_cutout_index(self):
         """
         The ``(y, x)`` coordinate, relative to the `data_cutout`, of the
@@ -806,8 +827,11 @@ class SourceProperties:
         If there are multiple occurrences of the maximum value, only the
         first occurence is returned.
         """
+        data = self.data_cutout_ma
+        if self.isscalar:
+            data = (data,)
         idx = []
-        for arr in self.data_cutout_ma:
+        for arr in data:
             if np.all(arr.mask):
                 idx.append((np.nan, np.nan))
             else:
@@ -815,6 +839,7 @@ class SourceProperties:
         return np.array(idx)
 
     @lazyproperty
+    @as_scalar
     def minval_index(self):
         """
         The ``(y, x)`` coordinate of the minimum pixel value of the
@@ -823,12 +848,16 @@ class SourceProperties:
         If there are multiple occurrences of the minimum value, only the
         first occurence is returned.
         """
+        index = self.minval_cutout_index
+        if self.isscalar:
+            index = (index,)
         out = []
-        for idx, slc in zip(self.minval_cutout_index, self.slices):
+        for idx, slc in zip(index, self._slices):
             out.append((idx[0] + slc[0].start, idx[1] + slc[1].start))
         return np.array(out)
 
     @lazyproperty
+    @as_scalar
     def maxval_index(self):
         """
         The ``(y, x)`` coordinate of the maximum pixel value of the
@@ -837,12 +866,16 @@ class SourceProperties:
         If there are multiple occurrences of the maximum value, only the
         first occurence is returned.
         """
+        index = self.maxval_cutout_index
+        if self.isscalar:
+            index = (index,)
         out = []
-        for idx, slc in zip(self.maxval_cutout_index, self.slices):
+        for idx, slc in zip(index, self._slices):
             out.append((idx[0] + slc[0].start, idx[1] + slc[1].start))
         return np.array(out)
 
     @lazyproperty
+    @as_scalar
     def minval_xindex(self):
         """
         The ``x`` coordinate of the minimum pixel value of the ``data``
@@ -854,6 +887,7 @@ class SourceProperties:
         return np.transpose(self.minval_index)[1]
 
     @lazyproperty
+    @as_scalar
     def minval_yindex(self):
         """
         The ``y`` coordinate of the minimum pixel value of the ``data``
@@ -865,6 +899,7 @@ class SourceProperties:
         return np.transpose(self.minval_index)[0]
 
     @lazyproperty
+    @as_scalar
     def maxval_xindex(self):
         """
         The ``x`` coordinate of the maximum pixel value of the ``data``
@@ -876,6 +911,7 @@ class SourceProperties:
         return np.transpose(self.maxval_index)[1]
 
     @lazyproperty
+    @as_scalar
     def maxval_yindex(self):
         """
         The ``y`` coordinate of the maximum pixel value of the ``data``
