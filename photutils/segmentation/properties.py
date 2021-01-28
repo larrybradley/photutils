@@ -670,7 +670,7 @@ class SourceProperties:
         xypos = []
         for bbox_ in bbox:
             xypos.append((bbox_.ixmin - 0.5, bbox_.iymin - 0.5))
-        return xypos
+        return np.array(xypos)
 
     @lazyproperty
     def _bbox_corner_ul(self):
@@ -680,7 +680,7 @@ class SourceProperties:
         xypos = []
         for bbox in self.bbox:
             xypos.append((bbox.ixmin - 0.5, bbox.iymax + 0.5))
-        return xypos
+        return np.array(xypos)
 
     @lazyproperty
     def _bbox_corner_lr(self):
@@ -690,7 +690,7 @@ class SourceProperties:
         xypos = []
         for bbox in self.bbox:
             xypos.append((bbox.ixmax + 0.5, bbox.iymin - 0.5))
-        return xypos
+        return np.array(xypos)
 
     @lazyproperty
     def _bbox_corner_ur(self):
@@ -700,7 +700,7 @@ class SourceProperties:
         xypos = []
         for bbox in self.bbox:
             xypos.append((bbox.ixmax + 0.5, bbox.iymax + 0.5))
-        return xypos
+        return np.array(xypos)
 
     @lazyproperty
     def sky_bbox_ll(self):
