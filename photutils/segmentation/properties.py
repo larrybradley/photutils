@@ -67,7 +67,8 @@ def as_scalar_if_possible(func):
         arr = func(arr)
         #return arr if arr.shape else np.asscalar(arr)
         try:
-            return arr if len(arr) != 1 else arr[0]
+            #return arr if len(arr) != 1 else arr[0]
+            return arr[0] if self.isscalar else arr[0]
         except TypeError:
             return arr
     return wrapper
@@ -106,6 +107,7 @@ class SourceProperties:
         self._kernel = kernel
         self._background = self._validate_array(background, 'background')
         self._wcs = wcs
+        self._labels = self._segment_img.labels  # needed for isscalar
 
     def _process_quantities(self, data, error, background):
         """
@@ -194,7 +196,6 @@ class SourceProperties:
         return [i[0] for i in inspect.getmembers(self.__class__,
                                                  predicate=islazyproperty)]
 
-#zzzzz
     def __getitem__(self, index):
         newcls = object.__new__(self.__class__)
 
@@ -209,59 +210,61 @@ class SourceProperties:
         for attr in init_attr:
             setattr(newcls, attr, getattr(self, attr))
 
+        attr = '_labels'
+        setattr(newcls, attr, getattr(self, attr)[index])
+
         ref_attr = ('_convolved_data', '_data_mask')
 
         # slice any evaluated lazyproperty objects
         #print(self._get_lazyproperties())
-        for key, value in self.__dict__.items():
-            print(key, key in self._lazyproperties)
-            if key in self._lazyproperties:
-                print(value)
-                if key in ref_attr:  # do not slice
-                    newcls.__dict__[key] = value
-                else:
-                    # skip copy if value is not an array/list for each
-                    # source (e.g., nlabels)
-                    if not np.isscalar(value):
-                        # TODO: this doesn't work for list objects
-                        # with fancy indexing, e.g. index = [3, 1, 2]
-                        # FIXME
-                        #newcls.__dict__[key] = copy(value[index])
-                        try:
-                            newcls.__dict__[key] = value[index]
-                        except TypeError:
-                            val = [value[i] for i in index]
-                            newcls.__dict__[key] = val
-
+        keys = set(self.__dict__.keys()) & set(self._lazyproperties)
+        for key in keys:
+            value = self.__dict__[key]
+            if key in ref_attr:  # do not slice
+                newcls.__dict__[key] = value
+            else:
+                # skip copy if value is not an array/list for each
+                # source (e.g., isscalar, nlabels)
+                if not np.isscalar(value):
+                    # TODO: is copy of value needed?
+                    try:
+                        val = value[index]
+                        if key.startswith('_') and np.isscalar(val):
+                            # keep _attrs as length-1 lists
+                            val = [val]
+                    except TypeError:  # fancy idx ([3, 2, 1])
+                        print('\n', key, index, value)
+                        val = [value[i] for i in index]
+                    newcls.__dict__[key] = val
         return newcls
 
     def __len__(self):
+        if self.isscalar:
+            raise TypeError(f'Scalar {self.__class__.__name__!r} object has '
+                            'no len()')
         return self.nlabels
 
+    @lazyproperty
     def isscalar(self):
-        return self.nlabels == 1
+        return self._labels.shape == ()
 
     def __iter__(self):
         for item in range(len(self)):
             yield self.__getitem__(item)
 
-    #labels, slices
-
     @lazyproperty
-    @as_scalar
     def _null_object(self):
         """
-        Return an array of None values.
+        Return None values.
 
         Used for SkyCoord properties if ``wcs`` is `None`.
         """
         return np.array([None] * len(self))
 
     @lazyproperty
-    @as_scalar
     def _null_value(self):
         """
-        Return an array of np.nan values.
+        Return np.nan values.
 
         Used for background properties if ``background`` is `None`.
         """
@@ -284,59 +287,35 @@ class SourceProperties:
         return mask
 
     @lazyproperty
-    @as_scalar
     def _cutout_segment_mask(self):
-        label = self.label
-        slices = self.slices
-        if self.isscalar:
-            label = (label,)
-            slices = (slices,)
-        return [self._segment_img.data[slice_] != label_
-                for label_, slice_ in zip(label, slices)]
+        return [self._segment_img.data[slc] != label
+                for label, slc in zip(self._label, self._slices)]
 
     @lazyproperty
-    @as_scalar
     def _cutout_total_mask(self):
         """
-        Boolean mask representing the combination of
-        ``_cutout_segment_mask``, ``_cutout_nonfinite_mask``, and
-        ``_cutout_input_mask``.
-
-        All pixels with the value of source label are `False`. All others
-        are `True`.
+        Boolean mask representing the combination of ``_data_mask`` and
+        ``_cutout_segment_mask``.
 
         This mask is applied to ``data``, ``error``, and ``background``
         inputs when calculating properties.
         """
-        slices = self.slices
-        mask = self._cutout_segment_mask
-        if self.isscalar:
-            slices = (slices,)
-            mask = (mask,)
         masks = []
-        for segm_mask, slice_ in zip(mask, slices):
-            masks.append(segm_mask | self._data_mask[slice_])
+        for segm_mask, slc in zip(self._cutout_segment_mask, self._slices):
+            masks.append(segm_mask | self._data_mask[slc])
         return masks
 
     @as_scalar
     def _make_cutout(self, array, units=True, masked=False):
-        slices = self.slices
-        if self.isscalar:
-            slices = (slices,)
-        cutouts = [array[slice_] for slice_ in slices]
+        cutouts = [array[slc] for slc in self._slices]
         if units and self._data_unit is not None:
             cutouts = [(cutout << self._data_unit) for cutout in cutouts]
         if masked:
-            mask = self._cutout_total_mask
-            if self.isscalar:
-                mask = (mask,)
-            result = [np.ma.masked_array(cutout, mask=mask_)
-                      for cutout, mask_ in zip(cutouts, mask)]
-            return result
+            return [np.ma.masked_array(cutout, mask=mask)
+                    for cutout, mask in zip(cutouts, self._cutout_total_mask)]
         return cutouts
 
     @lazyproperty
-    @as_scalar
     def _cutout_moment_data(self):
         """
         A list of 2D `~numpy.ndarray` cutouts from the input
@@ -355,18 +334,14 @@ class SourceProperties:
         if self._mask is not None:
             mask |= self._mask
 
-        label = self.label
-        slices = self.slices
         cutout = self.convdata_cutout
         if self.isscalar:
-            label = (label,)
-            slices = (slices,)
             cutout = (cutout,)
 
         cutouts = []
-        for label_, slice_, convdata in zip(label, slices, cutout):
-            mask2 = (self._segment_img.data[slice_] != label_) | mask[slice_]
-            cutout = convdata.copy()
+        for label, slc, convdata in zip(self._label, self._slices, cutout):
+            mask2 = (self._segment_img.data[slc] != label) | mask[slc]
+            cutout = convdata.value.copy()
             cutout[mask2] = 0.
             cutouts.append(cutout)
         return cutouts
@@ -374,13 +349,17 @@ class SourceProperties:
     def to_table(self, columns=None, exclude_columns=None):
         return _properties_table(self, columns=columns,
                                  exclude_columns=exclude_columns)
-    @lazyproperty
-    def nlabels(self):
-        return self._segment_img.nlabels
 
     @lazyproperty
-    @as_scalar
-    def label(self):
+    def nlabels(self):
+        return len(self._label)
+
+    @lazyproperty
+    def _label(self):
+        """
+        The source label number(s) in the segmentation image, always as
+        an array.
+        """
         return self._segment_img.labels
 
     @lazyproperty
@@ -390,16 +369,22 @@ class SourceProperties:
         The source identification number corresponding to the object
         label in the segmentation image.
         """
-        return self.label
+        return self._labels
 
     @lazyproperty
     def _slices(self):
+        """
+        Slice tuples, always as a list.
+        """
         return self._segment_img.slices
 
     @lazyproperty
     @as_scalar
     def slices(self):
-        return self._segment_img.slices
+        """
+        Slice tuples.
+        """
+        return self._slices
 
     @lazyproperty
     @as_scalar
@@ -448,7 +433,7 @@ class SourceProperties:
     @as_scalar
     def error_cutout(self):
         if self._error is None:
-            return self._null_objects
+            return self._null_object
         return self._make_cutout(self._error, units=True,
                                   masked=False)
 
@@ -456,7 +441,7 @@ class SourceProperties:
     @as_scalar
     def error_cutout_ma(self):
         if self._error is None:
-            return self._null_objects
+            return self._null_object
         return self._make_cutout(self._error, units=False,
                                   masked=True)
 
@@ -464,7 +449,7 @@ class SourceProperties:
     @as_scalar
     def background_cutout(self):
         if self._background is None:
-            return self._null_objects
+            return self._null_object
         return self._make_cutout(self._background, units=True,
                                   masked=False)
 
@@ -472,7 +457,7 @@ class SourceProperties:
     @as_scalar
     def background_cutout_ma(self):
         if self._error is None:
-            return self._null_objects
+            return self._null_object
         return self._make_cutout(self._background, units=False,
                                   masked=True)
 
@@ -503,8 +488,8 @@ class SourceProperties:
 
         This array is used for ``source_sum_err``.
         """
-        #if self._error is None:
-        #    return self._null_values
+        if self._error is None:
+            return self._null_value
         return [array.compressed() if len(array.compressed()) > 0 else np.nan
                 for array in self.error_cutout_ma]
 
@@ -518,6 +503,8 @@ class SourceProperties:
         This array is used for ``background_sum`` and
         ``background_mean``.
         """
+        if self._background is None:
+            return self._null_value
         return [array.compressed() if len(array.compressed()) > 0 else np.nan
                 for array in self.background_cutout_ma]
 
@@ -525,10 +512,8 @@ class SourceProperties:
     @as_scalar
     def moments(self):
         """Spatial moments up to 3rd order of the source."""
-        cutout = self._cutout_moment_data
-        if self.isscalar:
-            cutout = (cutout,)
-        return np.array([_moments(arr, order=3) for arr in cutout])
+        return np.array([_moments(arr, order=3) for arr in
+                         self._cutout_moment_data])
 
     @lazyproperty
     @as_scalar
@@ -537,43 +522,43 @@ class SourceProperties:
         Central moments (translation invariant) of the source up to 3rd
         order.
         """
-        cutout = self._cutout_moment_data
         xcen = self.xcentroid
         ycen = self.ycentroid
         if self.isscalar:
-            cutout = (cutout,)
             xcen = (xcen,)
             ycen = (ycen,)
-
         return np.array([_moments_central(arr, center=(xcen_, ycen_), order=3)
-                         for arr, xcen_, ycen_ in zip(cutout, xcen, ycen)])
+                         for arr, xcen_, ycen_ in
+                         zip(self._cutout_moment_data, xcen, ycen)])
 
+    #def _cutout_yxcentroid(self):
     @lazyproperty
     @as_scalar
-    def _cutout_yxcentroid(self):
+    def cutout_centroid(self):
         """
         The ``(y, x)`` coordinate, relative to the `data_cutout`, of
         the centroid within the source segment.
         """
         moments = self.moments
         if self.isscalar:
-            moments = np.expand_dims(moments, axis=0)
+            #moments = np.expand_dims(moments, axis=0)
+            moments = moments[np.newaxis, :]
         mu_00 = moments[:, 0, 0]
         badmask = (mu_00 == 0)
         ycentroid = np.where(badmask, np.nan, moments[:, 1, 0] / mu_00)
         xcentroid = np.where(badmask, np.nan, moments[:, 0, 1] / mu_00)
-        return ycentroid, xcentroid
+        return np.transpose((ycentroid, xcentroid))
 
-    @lazyproperty
-    @as_scalar
-    def cutout_centroid(self):
-        return np.transpose(self._cutout_yxcentroid)
+    #@lazyproperty
+    #@as_scalar
+    #def cutout_centroid(self):
+    #    return np.transpose(self._cutout_yxcentroid)
 
-    @lazyproperty
-    @as_scalar
-    def _yxcentroid(self):
-        return (self._cutout_yxcentroid[0] + self.bbox_ymin,
-                self._cutout_yxcentroid[1] + self.bbox_xmin)
+    #@lazyproperty
+    #@as_scalar
+    #def _yxcentroid(self):
+    #    return (self._cutout_yxcentroid[0] + self.bbox_ymin,
+    #            self._cutout_yxcentroid[1] + self.bbox_xmin)
 
     @lazyproperty
     @as_scalar
@@ -582,7 +567,8 @@ class SourceProperties:
         The ``(y, x)`` coordinate of the centroid within the source
         segment.
         """
-        return np.transpose(self._yxcentroid)
+        origin = np.transpose((self.bbox_ymin, self.bbox_xmin))
+        return self.cutout_centroid + origin
 
     @lazyproperty
     @as_scalar
@@ -590,7 +576,8 @@ class SourceProperties:
         """
         The ``x`` coordinate of the centroid within the source segment.
         """
-        return self._yxcentroid[1]
+        #return self._yxcentroid[1]
+        return self.centroid[:, 1]
 
     @lazyproperty
     @as_scalar
@@ -598,7 +585,8 @@ class SourceProperties:
         """
         The ``y`` coordinate of the centroid within the source segment.
         """
-        return self._yxcentroid[0]
+        #return self._yxcentroid[0]
+        return self.centroid[:, 0]
 
     @lazyproperty
     def sky_centroid(self):
@@ -609,7 +597,7 @@ class SourceProperties:
         The output coordinate frame is the same as the input WCS.
         """
         if self._wcs is None:
-            return self._null_objects
+            return self._null_object
         return self._wcs.pixel_to_world(self.xcentroid, self.ycentroid)
 
     @lazyproperty
@@ -620,7 +608,7 @@ class SourceProperties:
         returned as a `~astropy.coordinates.SkyCoord` object.
         """
         if self._wcs is None:
-            return self._null_objects
+            return self._null_object
         return self.sky_centroid.icrs
 
     @lazyproperty
@@ -725,7 +713,7 @@ class SourceProperties:
         their entirety, thus the vertices are at the pixel *corners*.
         """
         if self._wcs is None:
-            return self._null_objects
+            return self._null_object
         return self._wcs.pixel_to_world(*np.transpose(self._bbox_corner_ll))
 
     @lazyproperty
@@ -739,7 +727,7 @@ class SourceProperties:
         their entirety, thus the vertices are at the pixel *corners*.
         """
         if self._wcs is None:
-            return self._null_objects
+            return self._null_object
         return self._wcs.pixel_to_world(*np.transpose(self._bbox_corner_ul))
 
     @lazyproperty
@@ -753,7 +741,7 @@ class SourceProperties:
         their entirety, thus the vertices are at the pixel *corners*.
         """
         if self._wcs is None:
-            return self._null_objects
+            return self._null_object
         return self._wcs.pixel_to_world(*np.transpose(self._bbox_corner_lr))
 
     @lazyproperty
@@ -767,7 +755,7 @@ class SourceProperties:
         their entirety, thus the vertices are at the pixel *corners*.
         """
         if self._wcs is None:
-            return self._null_objects
+            return self._null_object
         return self._wcs.pixel_to_world(*np.transpose(self._bbox_corner_ur))
 
     @lazyproperty
