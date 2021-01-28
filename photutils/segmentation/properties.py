@@ -292,7 +292,10 @@ class SourceProperties:
         cutouts = []
         for label, slc, convdata in zip(self._label, self._slices, cutout):
             mask2 = (self._segment_img.data[slc] != label) | mask[slc]
-            cutout = convdata.value.copy()
+            try:
+                cutout = convdata.value.copy()  # Quantity array
+            except AttributeError:
+                cutout = convdata.copy()
             cutout[mask2] = 0.
             cutouts.append(cutout)
         return cutouts
