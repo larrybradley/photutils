@@ -79,7 +79,7 @@ def as_scalar(method):
         result = method(*args, **kwargs)
         try:
             #return result if len(result) != 1 else result[0]
-            return result[0] if self.isscalar else result
+            return result[0] if args[0].isscalar else result
         except TypeError:
             return result
     return _decorator
