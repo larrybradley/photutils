@@ -23,9 +23,9 @@ from ..utils._convolution import _filter_data
 from ..utils._moments import _moments, _moments_central
 from ..utils._wcs_helpers import _pixel_to_world
 
-__all__ = ['SourceProperties', 'source_properties', 'SourceCatalog']
+__all__ = ['LegacySourceProperties', 'source_properties', 'SourceCatalog']
 
-__doctest_requires__ = {('SourceProperties', 'SourceProperties.*',
+__doctest_requires__ = {('LegacySourceProperties', 'LegacySourceProperties.*',
                          'SourceCatalog', 'SourceCatalog.*',
                          'source_properties', 'properties_table'):
                         ['scipy']}
@@ -44,7 +44,7 @@ DEFAULT_COLUMNS = ['id', 'xcentroid', 'ycentroid', 'sky_centroid',
                    'cyy', 'gini']
 
 
-class SourceProperties:
+class LegacySourceProperties:
     """
     Class to calculate photometry and morphological properties of a
     single labeled source.
@@ -181,29 +181,29 @@ class SourceProperties:
     values could occur, for example, if the segmentation
     image was defined from a different image (e.g., different
     bandpass) or if the background was oversubtracted. Note that
-    `~photutils.segmentation.SourceProperties.source_sum` always
+    `~photutils.segmentation.LegacySourceProperties.source_sum` always
     includes the contribution of negative ``data`` values.
 
-    The input ``error`` array is assumed to include *all* sources of
-    error, including the Poisson error of the sources.
-    `~photutils.segmentation.SourceProperties.source_sum_err` is simply
-    the quadrature sum of the pixel-wise total errors over the
+    The input ``error`` array is assumed to include *all* sources
+    of error, including the Poisson error of the sources.
+    `~photutils.segmentation.LegacySourceProperties.source_sum_err` is
+    simply the quadrature sum of the pixel-wise total errors over the
     non-masked pixels within the source segment:
 
     .. math:: \\Delta F = \\sqrt{\\sum_{i \\in S}
               \\sigma_{\\mathrm{tot}, i}^2}
 
     where :math:`\\Delta F` is
-    `~photutils.segmentation.SourceProperties.source_sum_err`, :math:`S`
-    are the non-masked pixels in the source segment, and
+    `~photutils.segmentation.LegacySourceProperties.source_sum_err`,
+    :math:`S` are the non-masked pixels in the source segment, and
     :math:`\\sigma_{\\mathrm{tot}, i}` is the input ``error`` array.
 
     Custom errors for source segments can be calculated using the
-    `~photutils.segmentation.SourceProperties.error_cutout_ma` and
-    `~photutils.segmentation.SourceProperties.background_cutout_ma`
-    properties, which are 2D `~numpy.ma.MaskedArray` cutout versions of
-    the input ``error`` and ``background``.  The mask is `True` for
-    pixels outside of the source segment, masked pixels from the
+    `~photutils.segmentation.LegacySourceProperties.error_cutout_ma` and
+    `~photutils.segmentation.LegacySourceProperties.background_cutout_ma`
+    properties, which are 2D `~numpy.ma.MaskedArray` cutout versions
+    of the input ``error`` and ``background``. The mask is `True`
+    for pixels outside of the source segment, masked pixels from the
     ``mask`` input, or any non-finite ``data`` values (NaN and +/- inf).
 
     .. _SourceExtractor: https://sextractor.readthedocs.io/en/latest/
@@ -440,7 +440,7 @@ class SourceProperties:
         data : array-like (2D)
             The data array from which to create the masked cutout array.
             ``data`` must have the same shape as the segmentation image
-            input into `SourceProperties`.
+            input into `LegacySourceProperties`.
 
         masked_array : bool, optional
             If `True` then a `~numpy.ma.MaskedArray` will be returned,
@@ -459,7 +459,8 @@ class SourceProperties:
         data = np.asanyarray(data)
         if data.shape != self._segment_img.shape:
             raise ValueError('data must have the same shape as the '
-                             'segmentation image input to SourceProperties')
+                             'segmentation image input to '
+                             'LegacySourceProperties')
 
         if masked_array:
             return np.ma.masked_array(data[self.slices],
@@ -480,7 +481,7 @@ class SourceProperties:
         columns : str or list of str, optional
             Names of columns, in order, to include in the output
             `~astropy.table.QTable`.  The allowed column names are any
-            of the attributes of `SourceProperties`.
+            of the attributes of `LegacySourceProperties`.
 
         exclude_columns : str or list of str, optional
             Names of columns to exclude from the default columns in the
@@ -985,7 +986,7 @@ class SourceProperties:
     def source_sum_err(self):
         """
         The uncertainty of
-        `~photutils.segmentation.SourceProperties.source_sum`,
+        `~photutils.segmentation.LegacySourceProperties.source_sum`,
         propagated from the input ``error`` array.
 
         ``source_sum_err`` is the quadrature sum of the total errors
@@ -1080,10 +1081,10 @@ class SourceProperties:
         The total unmasked area of the source segment in units of
         pixels**2.
 
-        Note that the source area may be smaller than its segment area
-        if a mask is input to `SourceProperties` or `source_properties`,
-        or if the ``data`` within the segment contains invalid values
-        (NaN and +/- inf).
+        Note that the source area may be smaller than its segment
+        area if a mask is input to `LegacySourceProperties` or
+        `source_properties`, or if the ``data`` within the segment
+        contains invalid values (NaN and +/- inf).
         """
 
         if self._is_completely_masked:
@@ -1818,34 +1819,34 @@ def source_properties(data, segment_img, error=None, mask=None,
     ``data`` will be used for the source centroid and morphological
     parameters.
 
-    Negative data values (``filtered_data`` or ``data``) within the
-    source segment are set to zero when calculating morphological
-    properties based on image moments.  Negative values could occur, for
-    example, if the segmentation image was defined from a different
-    image (e.g., different bandpass) or if the background was
-    oversubtracted. Note that
-    `~photutils.segmentation.SourceProperties.source_sum` always
+    Negative data values (``filtered_data`` or ``data``)
+    within the source segment are set to zero when calculating
+    morphological properties based on image moments. Negative
+    values could occur, for example, if the segmentation
+    image was defined from a different image (e.g., different
+    bandpass) or if the background was oversubtracted. Note that
+    `~photutils.segmentation.LegacySourceProperties.source_sum` always
     includes the contribution of negative ``data`` values.
 
-    The input ``error`` is assumed to include *all* sources of error,
-    including the Poisson error of the sources.
-    `~photutils.segmentation.SourceProperties.source_sum_err` is simply
-    the quadrature sum of the pixel-wise total errors over the
+    The input ``error`` is assumed to include *all* sources
+    of error, including the Poisson error of the sources.
+    `~photutils.segmentation.LegacySourceProperties.source_sum_err` is
+    simply the quadrature sum of the pixel-wise total errors over the
     non-masked pixels within the source segment:
 
     .. math:: \\Delta F = \\sqrt{\\sum_{i \\in S}
               \\sigma_{\\mathrm{tot}, i}^2}
 
     where :math:`\\Delta F` is
-    `~photutils.segmentation.SourceProperties.source_sum_err`, :math:`S`
-    are the non-masked pixels in the source segment, and
+    `~photutils.segmentation.LegacySourceProperties.source_sum_err`,
+    :math:`S` are the non-masked pixels in the source segment, and
     :math:`\\sigma_{\\mathrm{tot}, i}` is the input ``error`` array.
 
     .. _SourceExtractor: https://sextractor.readthedocs.io/en/latest/
 
     See Also
     --------
-    SegmentationImage, SourceProperties, detect_sources
+    SegmentationImage, LegacySourceProperties, detect_sources
 
     Examples
     --------
@@ -1914,7 +1915,7 @@ def source_properties(data, segment_img, error=None, mask=None,
                           .format(label), AstropyUserWarning)
             continue  # skip invalid labels
 
-        sources_props.append(SourceProperties(
+        sources_props.append(LegacySourceProperties(
             data, segment_img, label, filtered_data=filtered_data,
             error=error, mask=mask, background=background, wcs=wcs,
             localbkg_width=localbkg_width, kron_params=kron_params))
@@ -1931,7 +1932,7 @@ class SourceCatalog:
     """
 
     def __init__(self, properties_list, wcs=None):
-        if isinstance(properties_list, SourceProperties):
+        if isinstance(properties_list, LegacySourceProperties):
             self._data = [properties_list]
         elif isinstance(properties_list, list):
             if not properties_list:
@@ -2018,7 +2019,7 @@ class SourceCatalog:
             # faster to recalculate the world coordinates than to create a
             # SkyCoord array from a loop-generated SkyCoord list.  The
             # assumption here is that the wcs is the same for each
-            # SourceProperties instance.
+            # LegacySourceProperties instance.
             return _pixel_to_world(self.xcentroid.value, self.ycentroid.value,
                                    self.wcs)
 
@@ -2067,8 +2068,8 @@ class SourceCatalog:
         scalar-valued properties.
 
         Multi-dimensional properties, e.g.,
-        `~photutils.segmentation.SourceProperties.data_cutout`, can
-        be included in the ``columns`` input, but they will not be
+        `~photutils.segmentation.LegacySourceProperties.data_cutout`,
+        can be included in the ``columns`` input, but they will not be
         preserved when writing the table to a file. This is a limitation
         of multi-dimensional columns in astropy tables.
 
@@ -2076,8 +2077,8 @@ class SourceCatalog:
         ----------
         columns : str or list of str, optional
             Names of columns, in order, to include in the output
-            `~astropy.table.QTable`.  The allowed column names are any
-            of the attributes of `SourceProperties`.
+            `~astropy.table.QTable`. The allowed column names are any of
+            the attributes of `LegacySourceProperties`.
 
         exclude_columns : str or list of str, optional
             Names of columns to exclude from the default columns in the
@@ -2093,7 +2094,7 @@ class SourceCatalog:
 
         See Also
         --------
-        SegmentationImage, SourceProperties, source_properties, detect_sources
+        SegmentationImage, LegacySourceProperties, source_properties, detect_sources
 
         Examples
         --------
@@ -2129,17 +2130,17 @@ class SourceCatalog:
 def _properties_table(obj, columns=None, exclude_columns=None):
     """
     Construct a `~astropy.table.QTable` of source properties from a
-    `SourceProperties` or `SourceCatalog` object.
+    `LegacySourceProperties` or `SourceCatalog` object.
 
     Parameters
     ----------
-    obj : `SourceProperties` or `SourceCatalog` instance
+    obj : `LegacySourceProperties` or `SourceCatalog` instance
         The object containing the source properties.
 
     columns : str or list of str, optional
         Names of columns, in order, to include in the output
         `~astropy.table.QTable`.  The allowed column names are any
-        of the attributes of `SourceProperties`.
+        of the attributes of `LegacySourceProperties`.
 
     exclude_columns : str or list of str, optional
         Names of columns to exclude from the default columns in the
@@ -2168,7 +2169,7 @@ def _properties_table(obj, columns=None, exclude_columns=None):
     for column in table_columns:
         values = getattr(obj, column)
 
-        if isinstance(obj, SourceProperties):
+        if isinstance(obj, LegacySourceProperties):
             # turn scalar values into length-1 arrays because QTable
             # column assignment requires an object with a length
             values = np.atleast_1d(values)

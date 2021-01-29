@@ -35,13 +35,13 @@ def data_properties(data, mask=None, background=None):
 
     Returns
     -------
-    result : `~photutils.segmentation.SourceProperties` instance
-        A `~photutils.segmentation.SourceProperties` object.
+    result : `~photutils.segmentation.LegacySourceProperties` instance
+        A `~photutils.segmentation.LegacySourceProperties` object.
     """
 
-    from ..segmentation import SourceProperties  # prevent circular imports
+    from ..segmentation import LegacySourceProperties  # prevent circular imports
 
     segment_image = np.ones(data.shape, dtype=int)
 
-    return SourceProperties(data, segment_image, label=1, mask=mask,
+    return LegacySourceProperties(data, segment_image, label=1, mask=mask,
                             background=background)
