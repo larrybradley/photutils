@@ -9,3 +9,4 @@ from .core import *  # noqa
 from .deblend import *  # noqa
 from .detect import *  # noqa
 from .legacy_properties import *  # noqa
+from .properties import *  # noqa
