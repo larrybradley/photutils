@@ -18,7 +18,8 @@ import pytest
 
 from ..core import SegmentationImage
 from ..detect import detect_sources
-from ..properties import SourceCatalog, SourceProperties, source_properties
+from ..legacy_properties import (SourceCatalog, LegacySourceProperties,
+                                 source_properties)
 from ...datasets import make_gwcs, make_wcs
 
 try:
@@ -57,56 +58,57 @@ class TestSourceProperties:
     def test_invalid_shapes(self):
         wrong_shape = np.ones((3, 3))
         with pytest.raises(ValueError):
-            SourceProperties(IMAGE, np.eye(3, dtype=int), label=1)
+            LegacySourceProperties(IMAGE, np.eye(3, dtype=int), label=1)
 
         with pytest.raises(ValueError):
-            SourceProperties(IMAGE, self.segm, label=1,
-                             filtered_data=wrong_shape)
+            LegacySourceProperties(IMAGE, self.segm, label=1,
+                                   filtered_data=wrong_shape)
 
         with pytest.raises(ValueError):
-            SourceProperties(IMAGE, self.segm, label=1, error=wrong_shape)
+            LegacySourceProperties(IMAGE, self.segm, label=1,
+                                   error=wrong_shape)
 
         with pytest.raises(ValueError):
-            SourceProperties(IMAGE, self.segm, label=1,
-                             background=wrong_shape)
+            LegacySourceProperties(IMAGE, self.segm, label=1,
+                                   background=wrong_shape)
 
     def test_invalid_units(self):
         unit = u.uJy
         wrong_unit = u.km
 
         with pytest.raises(ValueError):
-            SourceProperties(IMAGE*unit, self.segm, label=1,
-                             filtered_data=IMAGE*wrong_unit)
+            LegacySourceProperties(IMAGE*unit, self.segm, label=1,
+                                   filtered_data=IMAGE*wrong_unit)
 
         with pytest.raises(ValueError):
-            SourceProperties(IMAGE*unit, self.segm, label=1,
-                             error=IMAGE*wrong_unit)
+            LegacySourceProperties(IMAGE*unit, self.segm, label=1,
+                                   error=IMAGE*wrong_unit)
 
         with pytest.raises(ValueError):
-            SourceProperties(IMAGE*unit, self.segm, label=1,
-                             background=IMAGE*wrong_unit)
+            LegacySourceProperties(IMAGE*unit, self.segm, label=1,
+                                   background=IMAGE*wrong_unit)
 
         # all array inputs must have the same unit
         with pytest.raises(ValueError):
-            SourceProperties(IMAGE*unit, self.segm, label=1,
-                             filtered_data=IMAGE)
+            LegacySourceProperties(IMAGE*unit, self.segm, label=1,
+                                   filtered_data=IMAGE)
 
     @pytest.mark.parametrize('label', (0, -1))
     def test_label_invalid(self, label):
         with pytest.raises(ValueError):
-            SourceProperties(IMAGE, self.segm, label=label)
+            LegacySourceProperties(IMAGE, self.segm, label=label)
 
     @pytest.mark.parametrize('label', (0, -1))
     def test_label_missing(self, label):
         segm = self.segm.copy()
         segm.remove_label(2)
         with pytest.raises(ValueError):
-            SourceProperties(IMAGE, segm, label=2)
-            SourceProperties(IMAGE, segm, label=label)
+            LegacySourceProperties(IMAGE, segm, label=2)
+            LegacySourceProperties(IMAGE, segm, label=label)
 
     def test_wcs(self):
         mywcs = make_wcs(IMAGE.shape)
-        props = SourceProperties(IMAGE, self.segm, wcs=mywcs, label=1)
+        props = LegacySourceProperties(IMAGE, self.segm, wcs=mywcs, label=1)
         assert props.sky_centroid is not None
         assert props.sky_centroid_icrs is not None
         assert props.sky_bbox_ll is not None
@@ -120,7 +122,7 @@ class TestSourceProperties:
     @pytest.mark.skipif('not HAS_GWCS')
     def test_gwcs(self):
         mywcs = make_gwcs(IMAGE.shape)
-        props = SourceProperties(IMAGE, self.segm, wcs=mywcs, label=1)
+        props = LegacySourceProperties(IMAGE, self.segm, wcs=mywcs, label=1)
         assert props.sky_centroid is not None
         assert props.sky_centroid_icrs is not None
         assert props.sky_bbox_ll is not None
@@ -132,7 +134,7 @@ class TestSourceProperties:
         assert len(tbl) == 1
 
     def test_nowcs(self):
-        props = SourceProperties(IMAGE, self.segm, wcs=None, label=1)
+        props = LegacySourceProperties(IMAGE, self.segm, wcs=None, label=1)
         assert props.sky_centroid_icrs is None
         assert props.sky_bbox_ll is None
         assert props.sky_bbox_ul is None
@@ -140,7 +142,7 @@ class TestSourceProperties:
         assert props.sky_bbox_ur is None
 
     def test_to_table(self):
-        props = SourceProperties(IMAGE, self.segm, label=2)
+        props = LegacySourceProperties(IMAGE, self.segm, label=2)
         t1 = props.to_table()
         assert isinstance(t1, QTable)
         assert len(t1) == 1
@@ -164,8 +166,8 @@ class TestSourceProperties:
         data[60, 60:65] = np.inf
         data[65, 65:70] = -np.inf
 
-        props = SourceProperties(data, self.segm, label=2, error=error,
-                                 background=background, mask=mask)
+        props = LegacySourceProperties(data, self.segm, label=2, error=error,
+                                       background=background, mask=mask)
 
         # ensure mask is identical for data, error, and background
         assert props.data_cutout_ma.compressed().size == 677
@@ -231,7 +233,7 @@ class TestSourceProperties:
         assert np.isnan(obj.gini)
 
     def test_repr_str(self):
-        props = SourceProperties(IMAGE, self.segm, label=1)
+        props = LegacySourceProperties(IMAGE, self.segm, label=1)
         assert repr(props) == str(props)
 
         attrs = ['label', 'centroid', 'sky_centroid']
