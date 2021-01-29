@@ -68,7 +68,9 @@ class SourceProperties:
         self._kernel = kernel
         self._background = self._validate_array(background, 'background')
         self._wcs = wcs
+
         self._labels = self._segment_img.labels  # needed for isscalar
+        self._slices = self._segment_img.slices
         self.default_columns = DEFAULT_COLUMNS
 
     def _process_quantities(self, data, error, background):
@@ -142,9 +144,14 @@ class SourceProperties:
         for attr in init_attr:
             setattr(newcls, attr, getattr(self, attr))
 
-        # needed for isscalar
-        attr = '_labels'
+        # needed to determine ordering and  isscalar
+        attr = '_labels'  # ndarray
         setattr(newcls, attr, getattr(self, attr)[index])
+        attr = '_slices'
+        try:
+            setattr(newcls, attr, getattr(self, attr)[index])
+        except TypeError:  # fancy idx (e.g., idx=[5, 1, 4])
+            setattr(newcls, attr, [getattr(self, attr)[i] for i in index])
 
         # lazy properties to not slice
         ref_attr = ('_convolved_data', '_data_mask')
@@ -240,7 +247,7 @@ class SourceProperties:
     @lazyproperty
     def _cutout_segment_mask(self):
         return [self._segment_img.data[slc] != label
-                for label, slc in zip(self._label, self._slices)]
+                for label, slc in zip(self._labels, self._slices)]
 
     @lazyproperty
     def _cutout_total_mask(self):
@@ -290,7 +297,7 @@ class SourceProperties:
             cutout = (cutout,)
 
         cutouts = []
-        for label, slc, convdata in zip(self._label, self._slices, cutout):
+        for label, slc, convdata in zip(self._labels, self._slices, cutout):
             mask2 = (self._segment_img.data[slc] != label) | mask[slc]
             try:
                 cutout = convdata.value.copy()  # Quantity array
@@ -306,15 +313,16 @@ class SourceProperties:
 
     @lazyproperty
     def nlabels(self):
-        return len(self._label)
+        return len(self._labels)
 
     @lazyproperty
-    def _label(self):
+    @as_scalar
+    def label(self):
         """
         The source label number(s) in the segmentation image, always as
         an array.
         """
-        return self._segment_img.labels
+        return self._labels
 
     @lazyproperty
     @as_scalar
@@ -323,14 +331,7 @@ class SourceProperties:
         The source identification number corresponding to the object
         label in the segmentation image.
         """
-        return self._labels
-
-    @lazyproperty
-    def _slices(self):
-        """
-        Slice tuples, always as a list.
-        """
-        return self._segment_img.slices
+        return self.label
 
     @lazyproperty
     @as_scalar
