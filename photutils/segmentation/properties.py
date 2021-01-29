@@ -247,8 +247,11 @@ class SourceProperties:
 
     @lazyproperty
     def _cutout_segment_mask(self):
-        return [self._segment_img.data[slc] != label
-                for label, slc in zip(self._label_iter, self._slices_iter)]
+        label = self.label
+        if self.isscalar:
+            label = (label,)
+        return [self._segment_img.data[slc] != label_
+                for label_, slc in zip(label, self._slices_iter)]
 
     @lazyproperty
     def _cutout_total_mask(self):
@@ -294,19 +297,17 @@ class SourceProperties:
             mask |= self._mask
 
         cutout = self.convdata_cutout
-        segm_mask = self._cutout_segment_mask
         if self.isscalar:
             cutout = (cutout,)
-            segm_mask = (segm_mask,)
 
         cutouts = []
-        for mask_, slc, cutout_ in zip(segm_mask, self._slices_iter, cutout):
-            mask2 = mask[slc] | mask_
+        for slc, cutout_, mask_ in zip(self._slices_iter, cutout,
+                                       self._cutout_segment_mask):
             try:
                 cutout = cutout_.value.copy()  # Quantity array
             except AttributeError:
                 cutout = cutout_.copy()
-            cutout[mask2] = 0.
+            cutout[(mask[slc] | mask_)] = 0.
             cutouts.append(cutout)
         return cutouts
 
@@ -344,13 +345,6 @@ class SourceProperties:
         Slice tuples.
         """
         return self._slices
-
-    @lazyproperty
-    def _label_iter(self):
-        _label = self.label
-        if self.isscalar:
-            _label = (_label,)
-        return _label
 
     @lazyproperty
     def _slices_iter(self):
