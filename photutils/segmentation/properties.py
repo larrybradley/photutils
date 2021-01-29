@@ -69,7 +69,8 @@ class SourceProperties:
         self._background = self._validate_array(background, 'background')
         self._wcs = wcs
 
-        self._labels = self._segment_img.labels  # needed for isscalar
+        # needed for ordering and isscalar
+        self._labels = self._segment_img.labels
         self._slices = self._segment_img.slices
         self.default_columns = DEFAULT_COLUMNS
 
@@ -247,7 +248,7 @@ class SourceProperties:
     @lazyproperty
     def _cutout_segment_mask(self):
         return [self._segment_img.data[slc] != label
-                for label, slc in zip(self._labels, self._slices)]
+                for label, slc in zip(self._label_iter, self._slices_iter)]
 
     @lazyproperty
     def _cutout_total_mask(self):
@@ -259,13 +260,13 @@ class SourceProperties:
         inputs when calculating properties.
         """
         masks = []
-        for segm_mask, slc in zip(self._cutout_segment_mask, self._slices):
-            masks.append(segm_mask | self._data_mask[slc])
+        for mask, slc in zip(self._cutout_segment_mask, self._slices_iter):
+            masks.append(mask | self._data_mask[slc])
         return masks
 
     @as_scalar
     def _make_cutout(self, array, units=True, masked=False):
-        cutouts = [array[slc] for slc in self._slices]
+        cutouts = [array[slc] for slc in self._slices_iter]
         if units and self._data_unit is not None:
             cutouts = [(cutout << self._data_unit) for cutout in cutouts]
         if masked:
@@ -293,16 +294,18 @@ class SourceProperties:
             mask |= self._mask
 
         cutout = self.convdata_cutout
+        segm_mask = self._cutout_segment_mask
         if self.isscalar:
             cutout = (cutout,)
+            segm_mask = (segm_mask,)
 
         cutouts = []
-        for label, slc, convdata in zip(self._labels, self._slices, cutout):
-            mask2 = (self._segment_img.data[slc] != label) | mask[slc]
+        for mask_, slc, cutout_ in zip(segm_mask, self._slices_iter, cutout):
+            mask2 = mask[slc] | mask_
             try:
-                cutout = convdata.value.copy()  # Quantity array
+                cutout = cutout_.value.copy()  # Quantity array
             except AttributeError:
-                cutout = convdata.copy()
+                cutout = cutout_.copy()
             cutout[mask2] = 0.
             cutouts.append(cutout)
         return cutouts
@@ -313,14 +316,15 @@ class SourceProperties:
 
     @lazyproperty
     def nlabels(self):
+        if self.isscalar:
+            return 1
         return len(self._labels)
 
     @lazyproperty
     @as_scalar
     def label(self):
         """
-        The source label number(s) in the segmentation image, always as
-        an array.
+        The source label number(s) in the segmentation image
         """
         return self._labels
 
@@ -340,6 +344,20 @@ class SourceProperties:
         Slice tuples.
         """
         return self._slices
+
+    @lazyproperty
+    def _label_iter(self):
+        _label = self.label
+        if self.isscalar:
+            _label = (_label,)
+        return _label
+
+    @lazyproperty
+    def _slices_iter(self):
+        _slices = self.slices
+        if self.isscalar:
+            _slices = (_slices,)
+        return _slices
 
     @lazyproperty
     @as_scalar
@@ -586,7 +604,7 @@ class SourceProperties:
         """
         return [BoundingBox(ixmin=slc[1].start, ixmax=slc[1].stop,
                             iymin=slc[0].start, iymax=slc[0].stop)
-                for slc in self._slices]
+                for slc in self._slices_iter]
 
     @lazyproperty
     @as_scalar
@@ -595,7 +613,7 @@ class SourceProperties:
         The minimum ``x`` pixel location within the minimal bounding box
         containing the source segment.
         """
-        return np.array([slc[1].start for slc in self._slices])
+        return np.array([slc[1].start for slc in self._slices_iter])
 
     @lazyproperty
     @as_scalar
@@ -606,7 +624,7 @@ class SourceProperties:
 
         Note that this value is inclusive, unlike numpy slice indices.
         """
-        return np.array([slc[1].stop - 1 for slc in self._slices])
+        return np.array([slc[1].stop - 1 for slc in self._slices_iter])
 
     @lazyproperty
     @as_scalar
@@ -615,7 +633,7 @@ class SourceProperties:
         The minimum ``y`` pixel location within the minimal bounding box
         containing the source segment.
         """
-        return np.array([slc[0].start for slc in self._slices])
+        return np.array([slc[0].start for slc in self._slices_iter])
 
     @lazyproperty
     @as_scalar
@@ -626,7 +644,7 @@ class SourceProperties:
 
         Note that this value is inclusive, unlike numpy slice indices.
         """
-        return np.array([slc[0].stop - 1 for slc in self._slices])
+        return np.array([slc[0].stop - 1 for slc in self._slices_iter])
 
     @lazyproperty
     def _bbox_corner_ll(self):
@@ -808,7 +826,7 @@ class SourceProperties:
         if self.isscalar:
             index = (index,)
         out = []
-        for idx, slc in zip(index, self._slices):
+        for idx, slc in zip(index, self._slices_iter):
             out.append((idx[0] + slc[0].start, idx[1] + slc[1].start))
         return np.array(out)
 
@@ -826,7 +844,7 @@ class SourceProperties:
         if self.isscalar:
             index = (index,)
         out = []
-        for idx, slc in zip(index, self._slices):
+        for idx, slc in zip(index, self._slices_iter):
             out.append((idx[0] + slc[0].start, idx[1] + slc[1].start))
         return np.array(out)
 
