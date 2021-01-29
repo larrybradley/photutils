@@ -132,6 +132,10 @@ class SourceProperties:
                                                  predicate=islazyproperty)]
 
     def __getitem__(self, index):
+        if self.isscalar:
+            raise TypeError(f'A scalar {self.__class__.__name__!r} object '
+                            'cannot be indexed')
+
         newcls = object.__new__(self.__class__)
 
         segm = copy(self._segment_img)  # TODO (add segm copy method?)
@@ -145,14 +149,20 @@ class SourceProperties:
         for attr in init_attr:
             setattr(newcls, attr, getattr(self, attr))
 
-        # needed to determine ordering and  isscalar
-        attr = '_labels'  # ndarray
+        # needed to determine ordering and isscalar
+        attr = '_labels'
         setattr(newcls, attr, getattr(self, attr)[index])
+
         attr = '_slices'
-        try:
-            setattr(newcls, attr, getattr(self, attr)[index])
-        except TypeError:  # fancy idx (e.g., idx=[5, 1, 4])
-            setattr(newcls, attr, [getattr(self, attr)[i] for i in index])
+        # use a numpy object array to allow for fancy and bool indices
+        # NOTE: None is appended to the list (and then removed) to keep
+        # the array only on the outer level (i.e., prevents recursion).
+        # Otherwise, the tuple of (y, x) slices are not preserved.
+        value = np.array(getattr(self, attr) + [None],
+                         dtype=object)[:-1][index]
+        if not newcls.isscalar:
+            value = value.tolist()
+        setattr(newcls, attr, value)
 
         # lazy properties to not slice
         ref_attr = ('_convolved_data', '_data_mask')
@@ -193,7 +203,10 @@ class SourceProperties:
                         val = (val,)
                         #print(key, val)
                 except TypeError:  # fancy idx (e.g., idx=[5, 1, 4])
-                    val = [value[i] for i in index]
+                    #val = [value[i] for i in index]
+                    val = (np.array(value + [None],
+                                    dtype=object)[:-1][index]).tolist()
+
                 newcls.__dict__[key] = val
         return newcls
 
@@ -321,7 +334,7 @@ class SourceProperties:
             return 1
         return len(self._labels)
 
-    @lazyproperty
+    @property
     @as_scalar
     def label(self):
         """
@@ -329,7 +342,7 @@ class SourceProperties:
         """
         return self._labels
 
-    @lazyproperty
+    @property
     @as_scalar
     def id(self):
         """
@@ -338,7 +351,7 @@ class SourceProperties:
         """
         return self.label
 
-    @lazyproperty
+    @property
     @as_scalar
     def slices(self):
         """
