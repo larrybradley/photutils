@@ -344,12 +344,14 @@ class SourceProperties:
     @lazyproperty
     @as_scalar
     def segm_cutout(self):
-        return [segm.data for segm in self._segment_img.segments]
+        return self._make_cutout(self._segment_img.data, units=True,
+                                 masked=False)
 
     @lazyproperty
     @as_scalar
     def segm_cutout_ma(self):
-        return [segm.data_ma for segm in self._segment_img.segments]
+        return self._make_cutout(self._segment_img.data, units=False,
+                                 masked=True)
 
     @lazyproperty
     #@as_scalar
