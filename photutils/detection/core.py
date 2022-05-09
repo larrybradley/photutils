@@ -916,6 +916,7 @@ class _StarFinderKernel:
                          / denom) * self.mask
         else:
             self.data = gaussian_kernel
+            self.data /= self.data.sum()
 
         self.shape = self.data.shape
 
