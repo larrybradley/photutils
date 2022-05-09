@@ -260,6 +260,7 @@ class _StarFinderKernel:
                          / denom) * self.mask
         else:  # pragma: no cover
             self.data = self.gaussian_kernel
+            self.data /= self.data.sum()
 
         self.shape = self.data.shape
 

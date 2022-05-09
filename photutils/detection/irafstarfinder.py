@@ -176,7 +176,8 @@ class IRAFStarFinder(StarFinderBase):
         self.xycoords = xycoords
 
         self.kernel = _StarFinderKernel(self.fwhm, ratio=1.0, theta=0.0,
-                                        sigma_radius=self.sigma_radius)
+                                        sigma_radius=self.sigma_radius,
+                                        normalize_zerosum=False)
 
         if min_separation is not None:
             if min_separation < 0:
