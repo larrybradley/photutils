@@ -1713,13 +1713,42 @@ class SegmentationImage:
             raise ValueError('The other Segmentation must have the same '
                              'shape as this one.')
 
-        segm_map = []
-        for label in self.labels:
-            segm_map.append(list(np.unique(other.data[self.data == label])))
+        if labels is None:
+            labels = self.labels
 
-        if labels is not None:
-            idx = self.get_indices(labels)
-            return [segm_map[i] for i in idx]
+        map_all = True
+
+        # TODO: both of these methods are way too SLOW (~0.5 sec per
+        # label!)
+        # but fast for smaller images sizes?  --> break up into chunks
+        # for speed?
+        segm_map = {}
+        for label in labels:
+            print(label)
+            idx = np.where(self.data == label)
+            segm_map[label] = np.unique(other.data[idx])
+
+        # if map_all:
+        #     segm_map = {label: list(np.unique(other.data[self.data == label]))
+        #                 for labels in labels}
+        # else:
+        #     segm_map = {}
+        #     for label in labels:
+        #         print(label)
+        #         label_map = list(np.unique(other.data[self.data == label]))
+        #         if len(label_map) == 1 and label_map[0] == label:
+        #             continue
+        #         segm_map[label] = label_map
+
+
+        #segm_map = []
+        #for label in labels:
+        #    print(label)
+        #    segm_map.append(list(np.unique(other.data[self.data == label])))
+
+        #if labels is not None:
+        #    idx = self.get_indices(labels)
+        #    return [segm_map[i] for i in idx]
 
         return segm_map
 
