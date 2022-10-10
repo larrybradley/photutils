@@ -269,7 +269,7 @@ class SourceCatalog:
         will be a circle with this minimum radius. This keyword will be
         ignored if ``detection_catalog`` is input.
 
-    detection_catalog : `SourceCatalog`, optional
+    detection_catalog : `SourceCatalog` or `~astropy.table.Table`, optional
         A `SourceCatalog` object for the detection image. The
         segmentation image used to create the detection catalog must be
         the same one input to ``segmentation_image``. If input, then
@@ -282,8 +282,14 @@ class SourceCatalog:
         ``kron_params`` keywords will be ignored. This keyword affects
         `circular_photometry` (including returned apertures), all Kron
         parameters (Kron radius, flux, flux errors, apertures, and
-        custom `kron_photometry`), and `flux_radius` (which is based on
-        the Kron flux).
+        custom `kron_photometry`), and `flux_radius` (which is based
+        on the Kron flux).
+        If input as a `~astropy.table.Table`, it must contain
+        the following columns: ``'label'``, ``'x_centroid'``,
+        ``'y_centroid'``, ``'semimajor_axis'``, ``'semiminor_axis'``,
+        and ``'orientation'``. The ``'label'`` column values
+        must correspond to the label values in the input
+        ``segmentation_img``.
 
     progress_bar : bool, optional
         Whether to display a progress bar when calculating
