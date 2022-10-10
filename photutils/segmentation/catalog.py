@@ -270,12 +270,13 @@ class SourceCatalog:
         ignored if ``detection_catalog`` is input.
 
     detection_catalog : `SourceCatalog` or `~astropy.table.Table`, optional
-        A `SourceCatalog` object for the detection image. The
-        segmentation image used to create the detection catalog must be
-        the same one input to ``segmentation_image``. If input, then
-        the detection catalog source centroids and morphological/shape
-        properties will be returned instead of calculating them from
-        the input ``data``. The detection catalog centroids and shape
+        A `SourceCatalog` or `~astropy.table.Table` of measurements
+        from the detection image. The segmentation image used to
+        create the detection catalog must be the same one input
+        to ``segmentation_img``. If input, then the detection
+        catalog source centroids and morphological/shape properties
+        will be returned instead of calculating them from the
+        input ``data``. The detection catalog centroids and shape
         properties will also be used to perform aperture photometry
         (i.e., circular and Kron). If ``detection_catalog`` is
         input, then the input ``wcs``, ``aperture_mask_method``, and
@@ -283,12 +284,13 @@ class SourceCatalog:
         `circular_photometry` (including returned apertures), all Kron
         parameters (Kron radius, flux, flux errors, apertures, and
         custom `kron_photometry`), and `flux_radius` (which is based
-        on the Kron flux).
-        If input as a `~astropy.table.Table`, it must contain
-        the following columns: ``'label'``, ``'x_centroid'``,
-        ``'y_centroid'``, ``'semimajor_axis'``, ``'semiminor_axis'``,
-        and ``'orientation'``. The ``'label'`` column values
-        must correspond to the label values in the input
+        on the Kron flux). Also the ``local_background_apertures``
+        from the detection catalog will be used for local background
+        subtraction. If input as a `~astropy.table.Table`,
+        it must contain the following columns: ``'label'``,
+        ``'x_centroid'``, ``'y_centroid'``, ``'semimajor_axis'``,
+        ``'semiminor_axis'``, and ``'orientation'``. The ``'label'``
+        column values must correspond to the label values in the input
         ``segmentation_img``.
 
     progress_bar : bool, optional
@@ -426,12 +428,15 @@ class SourceCatalog:
             msg = 'segmentation_image must have at least one non-zero label'
             raise ValueError(msg)
 
-        self._detection_catalog = self._validate_detection_catalog(
-            detection_catalog)
-        attrs = ('wcs', 'aperture_mask_method', 'kron_params')
-        if self._detection_catalog is not None:
-            for attr in attrs:
-                setattr(self, attr, getattr(self._detection_catalog, attr))
+        #self._detection_catalog = self._validate_detection_cat(
+        #    detection_catalog)
+        #attrs = ('wcs', 'aperture_mask_method', 'kron_params')
+        #if self._detection_catalog is not None:
+        #    for attr in attrs:
+        #        setattr(self, attr, getattr(self._detection_catalog, attr))
+
+        # detection_cat validation needs self._labels
+        self._detcat_tbl = self._prepare_detcat_tbl(detection_cat)
 
         if convolved_data is None:
             self._convolved_data = self._data
@@ -532,6 +537,35 @@ class SourceCatalog:
                    'as the input segmentation_image')
             raise ValueError(msg)
         return detection_catalog
+
+    def _prepare_detcat_tbl(self, detection_cat):
+        if detection_cat is None:
+            return None
+
+        # required columns
+        columns = ['label', 'xcentroid', 'ycentroid', 'semimajor_sigma',
+                    'semiminor_sigma', 'orientation']
+
+        # make a table of properties from the detection catalog
+        if isinstance(detection_cat, SourceCatalog):
+            columns.append('local_background_aperture')
+            detcat_tbl = detection_cat.to_table(columns)
+            # TODO: tbl meta preserved?
+        elif isinstance(detection_cat, Table):
+            for column in columns:
+                if column not in detection_cat:
+                    raise ValueError(f'{column!r} column was not '
+                                        'found in the input detection_cat')
+            detcat_tbl = detection_cat
+        else:
+            raise TypeError('detection_cat must be a SourceCatalog '
+                            'or Table instance')
+
+        if not np.array_equal(detcat_tbl['labels'], self.labels):
+            raise ValueError('detection_cat must have same source labels '
+                                'as the input segment_img')
+
+        return detcat_tbl
 
     def _update_meta(self):
         meta_values = {}
@@ -651,8 +685,8 @@ class SourceCatalog:
         attr = '_labels'
         setattr(newcls, attr, getattr(self, attr)[index])
 
-        # Need to slice detection_catalog, if input
-        attr = '_detection_catalog'
+        # Need to slice detcat_tbl (if detection_catalog was input)
+        attr = '_detcat_tbl'
         if getattr(self, attr) is None:
             setattr(newcls, attr, None)
         else:
@@ -4108,10 +4142,12 @@ class SourceCatalog:
         The `~photutils.aperture.RectangularAnnulus` aperture used to
         estimate the local background.
         """
-        if self._detection_catalog is not None:
+        colname = 'local_background_aperture'
+        if (self._detcat_tbl is not None
+                and colname in self._detcat_tbl.colnames):
             # local background aperture defined using the detection
             # image bbox
-            return self._detection_cat.local_background_aperture
+            return self._detcat_tbl[colname]
 
         if self._local_bkg_width == 0:
             return self._null_objects
