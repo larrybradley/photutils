@@ -2966,7 +2966,7 @@ class SourceCatalog:
         isophotal shape of the sources.
 
         If a ``detection_cat`` was input to `SourceCatalog`, then its
-        source `centroid` and shape parameters will be used.
+        centroid and elliptical shape measurements will be used.
 
         If scale is zero (due to a minimum circular radius set in
         ``kron_params``) then a circular aperture will be returned with
