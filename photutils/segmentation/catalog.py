@@ -4102,7 +4102,12 @@ class SourceCatalog:
         The `~photutils.aperture.RectangularAnnulus` aperture used to
         estimate the local background.
         """
-        if self.local_bkg_width == 0:
+        if self._detection_catalog is not None:
+            # local background aperture defined using the detection
+            # image bbox
+            return self._detection_cat.local_background_aperture
+
+        if self._local_bkg_width == 0:
             return self._null_objects
 
         apertures = []
@@ -4111,9 +4116,9 @@ class SourceCatalog:
             ypos = 0.5 * (bbox_.iymin + bbox_.iymax - 1)
             scale = 1.5
             width_in = (bbox_.ixmax - bbox_.ixmin) * scale
-            width_out = width_in + 2 * self.local_bkg_width
+            width_out = width_in + 2 * self._local_bkg_width
             height_in = (bbox_.iymax - bbox_.iymin) * scale
-            height_out = height_in + 2 * self.local_bkg_width
+            height_out = height_in + 2 * self._local_bkg_width
             apertures.append(RectangularAnnulus((xpos, ypos), width_in,
                                                 width_out, height_out,
                                                 h_in=height_in, theta=0.0))
