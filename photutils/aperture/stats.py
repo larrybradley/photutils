@@ -327,6 +327,9 @@ class ApertureStats:
 
         return data, error, mask, wcs
 
+    #def __del__(self):
+    #    print(f'deleting {self}')
+
     @staticmethod
     def _validate_aperture(aperture):
         try:
@@ -1018,10 +1021,16 @@ class ApertureStats:
         cutout_centroid = self.cutout_centroid
         if self.isscalar:
             cutout_centroid = cutout_centroid[np.newaxis, :]
-        return np.array([_moments_central(arr, center=(xcen_, ycen_), order=3)
-                         for arr, xcen_, ycen_ in
-                         zip(self._moment_data_cutout, cutout_centroid[:, 0],
-                             cutout_centroid[:, 1], strict=True)])
+        moments = np.array([_moments_central(arr, center=(xcen_, ycen_),
+                                             order=3)
+                            for arr, xcen_, ycen_ in
+                            zip(self._moment_data_cutout,
+                                cutout_centroid[:, 0],
+                                cutout_centroid[:, 1], strict=True)])
+
+        self.__dict__.pop('moments', None)
+        self.__dict__.pop('_moment_data_cutout', None)
+        return moments
 
     @lazyproperty
     @as_scalar
