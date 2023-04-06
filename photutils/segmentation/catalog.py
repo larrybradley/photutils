@@ -233,12 +233,12 @@ class SourceCatalog:
         ``apermask_method``, and ``kron_params`` keywords will be
         ignored. This keyword affects `circular_photometry` (including
         returned apertures), all Kron parameters (Kron radius, flux,
-        flux errors, apertures, and custom `kron_photometry`), and
-        `fluxfrac_radius` (which is based on the Kron flux).
-        Also the ``local_background_apertures`` from the
-        detection catalog will be used for local background subtraction.
-        If input as a `~astropy.table.Table`, it must
-        contain the following columns: ``'label'``, ``'xcentroid'``,
+        flux errors, apertures, and custom `kron_photometry`),
+        and `fluxfrac_radius` (which is based on the Kron flux).
+        Also the ``local_background_apertures`` from the detection
+        catalog will be used for local background subtraction.
+        If input as a `~astropy.table.Table`, it must contain
+        the following columns: ``'label'``, ``'xcentroid'``,
         ``'ycentroid'``, ``'semimajor_sigma'``, ``'semiminor_sigma'``,
         and ``'orientation'``. The ``'label'`` column values must
         correspond to the label values in the input ``segment_img``.
@@ -451,7 +451,7 @@ class SourceCatalog:
 
         # required columns
         columns = ['label', 'xcentroid', 'ycentroid', 'semimajor_sigma',
-                    'semiminor_sigma', 'orientation']
+                   'semiminor_sigma', 'orientation']
 
         # make a table of properties from the detection catalog
         if isinstance(detection_cat, SourceCatalog):
@@ -461,16 +461,16 @@ class SourceCatalog:
         elif isinstance(detection_cat, Table):
             for column in columns:
                 if column not in detection_cat:
-                    raise ValueError(f'{column!r} column was not '
-                                        'found in the input detection_cat')
+                    raise ValueError(f'{column!r} column was not found in '
+                                     'the input detection_cat')
             detcat_tbl = detection_cat
         else:
-            raise TypeError('detection_cat must be a SourceCatalog '
-                            'or Table instance')
+            raise TypeError('detection_cat must be a SourceCatalog or Table '
+                            'instance')
 
         if not np.array_equal(detcat_tbl['labels'], self.labels):
-            raise ValueError('detection_cat must have same source labels '
-                                'as the input segment_img')
+            raise ValueError('detection_cat must have same source labels as '
+                             'the input segment_img')
 
         return detcat_tbl
 
@@ -2689,7 +2689,7 @@ class SourceCatalog:
             # image bbox
             return self._detcat_tbl[colname]
 
-        if self._localbkg_width == 0:
+        if self.localbkg_width == 0:
             return self._null_objects
 
         apertures = []
@@ -2698,9 +2698,9 @@ class SourceCatalog:
             ypos = 0.5 * (bbox_.iymin + bbox_.iymax - 1)
             scale = 1.5
             width_in = (bbox_.ixmax - bbox_.ixmin) * scale
-            width_out = width_in + 2 * self._localbkg_width
+            width_out = width_in + 2 * self.localbkg_width
             height_in = (bbox_.iymax - bbox_.iymin) * scale
-            height_out = height_in + 2 * self._localbkg_width
+            height_out = height_in + 2 * self.localbkg_width
             apertures.append(RectangularAnnulus((xpos, ypos), width_in,
                                                 width_out, height_out,
                                                 height_in, theta=0.0))
@@ -3007,7 +3007,7 @@ class SourceCatalog:
         isophotal shape of the sources.
 
         If a ``detection_cat`` was input to `SourceCatalog`, then its
-        centroid and elliptical shape measurements will be used.
+        source `centroid` and shape parameters will be used.
 
         If scale is zero (due to a minimum circular radius set in
         ``kron_params``) then a circular aperture will be returned with
