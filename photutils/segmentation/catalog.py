@@ -5302,7 +5302,7 @@ class SourceCatalog:
         return 1.0 - (flux / normflux)
 
     @cached_property
-    @use_detcat
+    # @use_detcat
     def _flux_radius_optimizer_args(self):
         # NOTE: this cached property snapshots the current
         # _aperture_mask_kwargs['flux_radius'] settings. Changing them
