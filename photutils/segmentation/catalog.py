@@ -5381,7 +5381,7 @@ class SourceCatalog:
         return radius
 
     @cached_property
-    @use_detcat
+    # @use_detcat
     def _flux_radius_optimizer_args(self):
         """
         The prepared per-source inputs of the flux-radius
