@@ -3559,7 +3559,7 @@ class SourceCatalog:
         return 1.0 - (flux[0] / normflux)
 
     @lazyproperty
-    @use_detcat
+    #@use_detcat
     def _fluxfrac_optimizer_args(self):
         kron_flux = self._kron_photometry[:, 0]  # unitless
         max_radius = self._max_circular_kron_radius
