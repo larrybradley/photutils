@@ -4,6 +4,7 @@ This module provides a class to sample data along an elliptical path.
 """
 
 import copy
+import warnings
 
 import numpy as np
 
@@ -296,7 +297,14 @@ class EllipseSample:
 
         # Update the mean value first, using extraction from main sample.
         s = self.extract()
-        self.mean = np.mean(s[2])
+
+        # suppress warnings about mean of empty slice
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', category=RuntimeWarning)
+            if len(s[2]) == 0:
+                print(self.geometry.sma)
+
+            self.mean = np.mean(s[2])
 
         # Get sample with same geometry but at a different distance from
         # center. Estimate gradient from there.
@@ -344,7 +352,12 @@ class EllipseSample:
             integrmode=self.integrmode)
 
         sg = gradient_sample.extract()
+
+        # suppress warnings about mean of empty slice
+        if len(sg[2]) == 0:
+            return np.nan, np.nan
         mean_g = np.mean(sg[2])
+
         gradient = (mean_g - self.mean) / self.geometry.sma / step
 
         s = self.extract()

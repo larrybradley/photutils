@@ -3,6 +3,8 @@
 This module provides classes to store the results of isophote fits.
 """
 
+import warnings
+
 import astropy.units as u
 import numpy as np
 from astropy.table import QTable
@@ -120,7 +122,12 @@ class Isophote:
 
         if sample.geometry.sma > 0:
             self.intens = sample.mean
-            self.rms = np.std(sample.values[2])
+
+            # suppress warnings about mean of empty slice
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', category=RuntimeWarning)
+                self.rms = np.std(sample.values[2])
+
             self.int_err = self.rms / np.sqrt(sample.actual_points)
             self.pix_stddev = self.rms * np.sqrt(sample.sector_area)
             self.grad = sample.gradient
