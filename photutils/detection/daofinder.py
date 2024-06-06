@@ -126,8 +126,15 @@ class DAOStarFinder(StarFinderBase):
         algorithm will skip the source-finding step.
 
     min_separation : float, optional
-        The minimum separation (in pixels) for detected objects. Note
-        that large values may result in long run times.
+        The minimum separation (in pixels) for detected objects.
+
+        TODO
+        If there are multiple pixels that have the same peak
+        value within the kernel footprint a distance less than
+        ``min_separation``, then the closest pixel to the center of the
+        object is chosen as the center.
+
+        Note that large values may result in long run times.
 
     See Also
     --------
