@@ -14,10 +14,23 @@ from astropy.units import Quantity
 from astropy.utils.decorators import deprecated
 from scipy.integrate import dblquad, trapezoid
 
+from photutils.psf.image_models import ImagePSF
+from photutils.psf.utils import discretize_psf
 from photutils.utils._deprecation import deprecated_positional_kwargs
 from photutils.utils.exceptions import PhotutilsDeprecationWarning
 
-__all__ = ['grid_from_epsfs', 'make_psf_model']
+__all__ = ['grid_from_epsfs', 'make_epsf_model', 'make_psf_model']
+
+
+def make_epsf_model(psf_model, xrange, yrange, *, eval_factor=10,
+                    oversampling=1, x_0=0, y_0=0, flux=1, fill_value=0,
+                    normalize=False):
+
+    data = discretize_psf(psf_model, xrange, yrange,
+                          eval_factor=eval_factor, oversampling=oversampling)
+    return ImagePSF(data, x_0=x_0, y_0=y_0, flux=flux,
+                    oversampling=oversampling, fill_value=fill_value,
+                    normalize=normalize)
 
 
 def make_psf_model(model, *, x_name=None, y_name=None, flux_name=None,
