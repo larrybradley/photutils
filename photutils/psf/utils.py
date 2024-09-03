@@ -8,6 +8,7 @@ from collections.abc import Iterator
 
 import numpy as np
 from astropy.modeling import Model
+from astropy.nddata import block_reduce
 from astropy.table import QTable
 from astropy.units import Quantity
 from astropy.utils.exceptions import AstropyUserWarning
@@ -21,6 +22,21 @@ from photutils.utils._flags import define_flag_docstring
 from photutils.utils._parameters import as_pair
 
 __all__ = ['fit_2dgaussian', 'fit_fwhm']
+
+
+def discretize_psf(model, xrange, yrange, *, eval_factor=10, oversampling=1):
+
+    # Evaluate model on oversampled grid
+    factor = eval_factor * oversampling
+    f = 0.5 * (1 - (1 / factor))
+    x = np.linspace(xrange[0] - f, xrange[1] - 1 + f,
+                    num=int((xrange[1] - xrange[0]) * factor))
+    y = np.linspace(yrange[0] - f, yrange[1] - 1 + f,
+                    num=int((yrange[1] - yrange[0]) * factor))
+
+    xx, yy = np.meshgrid(x, y)
+    return block_reduce(model(xx, yy), (eval_factor, eval_factor),
+                        func=np.mean)
 
 
 def _make_mask(image, mask):
