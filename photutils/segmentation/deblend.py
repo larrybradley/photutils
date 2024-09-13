@@ -406,16 +406,15 @@ class _SingleSourceDeblender:
 
             if new_markers:
                 # convert bool markers to integer labels
-                # ndi_label(markers, structure=self.footprint, output=markers)
                 segm_data, _ = ndi_label(markers, structure=self.footprint)
                 segments[i + 1] = segm_data
             else:
                 segments[i + 1] = segments[i]
 
-        if return_all:
-            return segments
+        if not return_all:
+            segments = segments[-1]
 
-        return segments[-1]
+        return segments
 
     def apply_watershed(self, markers):
         """
@@ -480,6 +479,7 @@ class _SingleSourceDeblender:
 
         # define the markers (possible sources) for the watershed algorithm
         markers = self.make_markers(segments)
+        del segments  # free memory
 
         # If there are too many markers (e.g., due to low threshold
         # and/or small npixels), the watershed step can be very slow
@@ -489,6 +489,7 @@ class _SingleSourceDeblender:
         # "linear" mode.
         nlabels = len(_get_labels(markers))
         if self.mode != 'linear' and nlabels > 200:
+            del markers  # free memory
             self.warnings['nmarkers'] = 'too many markers'
             self.mode = 'linear'
             segments = self.multithreshold()
@@ -496,6 +497,7 @@ class _SingleSourceDeblender:
             if len(segments) == 0:  # no deblending
                 return None
             markers = self.make_markers(segments)
+            del segments  # free memory
 
         # deblend using the watershed algorithm using the markers as seeds
         markers = self.apply_watershed(markers)
@@ -528,7 +530,6 @@ def _get_labels(array):
     labels : int `~numpy.ndarray`
         The unique labels in the array.
     """
-    # return np.unique(array[array != 0])
     labels = np.unique(array)
     return labels[labels != 0]
 
