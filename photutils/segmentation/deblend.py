@@ -201,7 +201,8 @@ def deblend_sources(data, segment_img, npixels, *, labels=None, nlevels=32,
                                                source_segment,
                                                label, npixels, footprint,
                                                nlevels, contrast, mode)
-            all_source_deblends.append(source_deblended)
+            # all_source_deblends.append(source_deblended)
+            all_source_deblends.append(source_deblended[0])
 
     else:
         nlabels = len(labels)
@@ -271,7 +272,7 @@ def _deblend_source(data, segment_data, label, npixels, footprint, nlevels,
     """
     deblender = _SingleSourceDeblender(data, segment_data, label, npixels,
                                        footprint, nlevels, contrast, mode)
-    return deblender.deblend_source()
+    return deblender.deblend_source(), deblender.warnings
 
 
 class _SingleSourceDeblender:
@@ -369,6 +370,11 @@ class _SingleSourceDeblender:
     def compute_thresholds(self):
         """
         Compute the multi-level detection thresholds for the source.
+
+        Returns
+        -------
+        thresholds : 1D `~numpy.ndarray`
+            The multi-level detection thresholds for the source.
         """
         if self.mode == 'exponential' and self.source_min <= 0:
             self.warnings['nonposmin'] = 'non-positive minimum'
@@ -405,7 +411,7 @@ class _SingleSourceDeblender:
 
         Returns
         -------
-        segments : list of `~photutils.segmentation.SegmentationImage`
+        segments : list of 2D `~numpy.ndarray`
             A list of segmentation images, one for each threshold. If
             ``deblend_mode=True`` then only segmentation images with more
             than one label will be returned.
@@ -413,29 +419,34 @@ class _SingleSourceDeblender:
         thresholds = self.compute_thresholds()
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', category=RuntimeWarning)
-            return _detect_sources(self.data, thresholds, self.npixels,
-                                   self.footprint, self.segment_mask,
-                                   deblend_mode=deblend_mode)
+            segms = _detect_sources(self.data, thresholds, self.npixels,
+                                    self.footprint, self.segment_mask,
+                                    deblend_mode=deblend_mode)
+            return [segm.data for segm in segms]
 
-    def make_markers(self, segments):
+    def make_markers(self, segments, return_all=False):
         """
         Make markers (possible sources) for the watershed algorithm.
 
         Parameters
         ----------
-        segments : list of `~photutils.segmentation.SegmentationImage`
+        segments : list of 2D `~numpy.ndarray`
             A list of segmentation images, one for each threshold.
+
+        return_all : bool, optional
+            If `True` then return all segmentation images. If `False`
+            then return only the last segmentation image.
 
         Returns
         -------
-        markers : list of `~photutils.segmentation.SegmentationImage`
-            A list of segmentation images that contain possible sources
-            as markers. The last list element contains the final source
-            markers.
+        markers : 2D `~numpy.ndarray` or list of 2D `~numpy.ndarray`
+            A segmentation image that contain markers for possible
+            sources. If ``return_all=True`` then a list of all
+            segmentation images is returned.
         """
         for i in range(len(segments) - 1):
-            segm_lower = segments[i].data
-            segm_upper = segments[i + 1].data
+            segm_lower = segments[i]
+            segm_upper = segments[i + 1]
             markers = segm_lower.astype(bool)
             new_markers = False
             # For a given label in the lower level, find the labels in
@@ -445,25 +456,25 @@ class _SingleSourceDeblender:
             # lower-level parent label is replaced by its children.
             # Parent labels that do not have multiple children in the
             # upper level are kept as is (maximizing the marker size).
-            for label in segments[i].labels:
+            labels = _get_labels(segments[i])
+            for label in labels:
                 mask = (segm_lower == label)
                 # find label mapping from the lower to upper level
-                upper_labels = segm_upper[mask]
-                upper_labels = np.unique(upper_labels[upper_labels != 0])
+                upper_labels = _get_labels(segm_upper[mask])
                 if upper_labels.size >= 2:  # new child markers found
                     new_markers = True
                     markers[mask] = segm_upper[mask].astype(bool)
 
             if new_markers:
                 # convert bool markers to integer labels
-                segm_data, nlabels = ndi_label(markers,
-                                               structure=self.footprint)
-                segm_new = object.__new__(SegmentationImage)
-                segm_new._data = segm_data
-                segm_new.__dict__['labels'] = np.arange(nlabels) + 1
-                segments[i + 1] = segm_new
+                # ndi_label(markers, structure=self.footprint, output=markers)
+                segm_data, _ = ndi_label(markers, structure=self.footprint)
+                segments[i + 1] = segm_data
             else:
                 segments[i + 1] = segments[i]
+
+        if return_all:
+            return segments
 
         return segments[-1]
 
@@ -482,12 +493,10 @@ class _SingleSourceDeblender:
         -------
         segment_data : 2D int `~numpy.ndarray`
             A 2D int array containing the deblended source labels. Note
-            that the source labels may not be consecutive.
+            that the source labels may not be consecutive if a label was
+            removed.
         """
         from skimage.segmentation import watershed
-
-        # all markers are at the top level
-        markers = markers.data
 
         # Deblend using watershed. If any source does not meet the contrast
         # criterion, then remove the faintest such source and repeat until
@@ -497,7 +506,7 @@ class _SingleSourceDeblender:
             markers = watershed(-self.data, markers, mask=self.segment_mask,
                                 connectivity=self.footprint)
 
-            labels = np.unique(markers[markers != 0])
+            labels = _get_labels(markers)
             if labels.size == 1:  # only 1 source left
                 remove_marker = False
             else:
@@ -516,6 +525,12 @@ class _SingleSourceDeblender:
     def deblend_source(self):
         """
         Deblend a single labeled source.
+
+        Returns
+        -------
+        segment_data : 2D int `~numpy.ndarray`
+            A 2D int array containing the deblended source labels. The
+            source labels are consecutive starting at 1.
         """
         if self.source_min == self.source_max:  # no deblending
             return None
@@ -533,7 +548,8 @@ class _SingleSourceDeblender:
         # This mostly affects the "exponential" mode, where there are
         # many levels at low thresholds, so here we try again with
         # "linear" mode.
-        if self.mode != 'linear' and markers.nlabels > 200:
+        nlabels = len(_get_labels(markers))
+        if self.mode != 'linear' and nlabels > 200:
             self.warnings['nmarkers'] = 'too many markers'
             self.mode = 'linear'
             segments = self.multithreshold()
@@ -551,16 +567,61 @@ class _SingleSourceDeblender:
                              'connectivity in detect_sources and '
                              'deblend_sources.')
 
-        labels = np.unique(markers[markers != 0])
-        if len(labels) == 1:  # no deblending
+        if len(_get_labels(markers)) == 1:  # no deblending
             return None
 
-        segm_new = object.__new__(SegmentationImage)
-        segm_new._data = markers
-        segm_new.__dict__['labels'] = labels
-        segm_new.relabel_consecutive(start_label=1)
+        # markers may not be consecutive if a label was removed due to
+        # the contrast criterion
+        return _relabel_array(markers, start_label=1)
 
-        if self.warnings:
-            segm_new.warnings = self.warnings
 
-        return segm_new
+def _get_labels(array):
+    """
+    Get the unique labels greater than zero in an array.
+
+    Parameters
+    ----------
+    array : `~numpy.ndarray`
+        The array to get the unique labels from.
+
+    Returns
+    -------
+    labels : int `~numpy.ndarray`
+        The unique labels in the array.
+    """
+    # return np.unique(array[array != 0])
+    labels = np.unique(array)
+    return labels[labels != 0]
+
+
+def _relabel_array(array, start_label=1):
+    """
+    Relabel an array such that the labels are consecutive integers
+    starting from 1.
+
+    Parameters
+    ----------
+    array : 2D `~numpy.ndarray`
+        The 2D array to relabel.
+
+    start_label : int, optional
+        The starting label number. Must be >= 1. The default is 1.
+
+    Returns
+    -------
+    relabeled_array : 2D `~numpy.ndarray`
+        The relabeled array.
+    """
+    labels = _get_labels(array)
+
+    # check if the labels are already consecutive starting from
+    # start_label
+    if (labels[0] == start_label
+            and (labels[-1] - start_label + 1) == len(labels)):
+        return array
+
+    # Create an array to map old labels to new labels
+    relabel_map = np.zeros(labels.max() + 1, dtype=array.dtype)
+    relabel_map[labels] = np.arange(len(labels)) + start_label
+
+    return relabel_map[array]
