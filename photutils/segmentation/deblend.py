@@ -16,6 +16,7 @@ from scipy.ndimage import sum_labels
 from photutils.segmentation.core import SegmentationImage
 from photutils.segmentation.detect import _detect_sources
 from photutils.segmentation.utils import _make_binary_structure
+from photutils.utils._progress_bars import add_progress_bar
 from photutils.utils._stats import nanmax, nanmin, nansum
 
 __all__ = ['deblend_sources']
@@ -167,8 +168,14 @@ def deblend_sources(data, segment_img, npixels, *, labels=None, nlevels=32,
     segm_deblended = segment_img.data.copy()
 
     indices = segment_img.get_indices(labels)
+    if progress_bar:
+        desc = 'Deblending'
+        indices = add_progress_bar(indices, desc=desc)  # pragma: no cover
+
     max_label = segment_img.max_label + 1
     for label, idx in zip(labels, indices, strict=True):
+        if progress_bar:
+            indices.set_postfix_str(f'ID: {label}')
         source_slice = segment_img.slices[idx]
         source_data = data[source_slice]
         source_segment = segment_img.data[source_slice]
@@ -188,12 +195,13 @@ def deblend_sources(data, segment_img, npixels, *, labels=None, nlevels=32,
     if relabel:
         segm_deblended = _relabel_array(segm_deblended, start_label=1)
 
-    segm_deblended = SegmentationImage(segm_deblended)
+    segm_img = object.__new__(SegmentationImage)
+    segm_img._data = segm_deblended
 
     # TODO:
     #   - warnings
 
-    return segm_deblended
+    return segm_img
 
 
 def _deblend_source(data, segment_data, label, npixels, footprint, nlevels,
