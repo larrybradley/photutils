@@ -5,19 +5,17 @@ a segmentation image.
 """
 
 import warnings
-from multiprocessing import cpu_count, get_context
+from multiprocessing import cpu_count
 
 import numpy as np
 from astropy.units import Quantity
 from astropy.utils import lazyproperty
-from astropy.utils.exceptions import AstropyUserWarning
 from scipy.ndimage import label as ndi_label
 from scipy.ndimage import sum_labels
 
 from photutils.segmentation.core import SegmentationImage
 from photutils.segmentation.detect import _detect_sources
 from photutils.segmentation.utils import _make_binary_structure
-from photutils.utils._progress_bars import add_progress_bar
 from photutils.utils._stats import nanmax, nanmin, nansum
 
 __all__ = ['deblend_sources']
@@ -157,7 +155,6 @@ def deblend_sources(data, segment_img, npixels, *, labels=None, nlevels=32,
     # include only sources that have at least (2 * npixels);
     # this is required for a source to be deblended into multiple
     # sources, each with a minimum of npixels
-
     mask = (segment_img.areas[segment_img.get_indices(labels)]
             >= (npixels * 2))
     labels = labels[mask]
@@ -167,100 +164,34 @@ def deblend_sources(data, segment_img, npixels, *, labels=None, nlevels=32,
     if nproc is None:
         nproc = cpu_count()  # pragma: no cover
 
-    segm_deblended = object.__new__(SegmentationImage)
-    segm_deblended._data = np.copy(segment_img.data)
-    last_label = segment_img.max_label
-    indices = segment_img.get_indices(labels)
+    segm_deblended = segment_img.data.copy()
 
-    all_source_data = []
-    all_source_segments = []
-    all_source_slices = []
+    indices = segment_img.get_indices(labels)
+    max_label = segment_img.max_label + 1
     for label, idx in zip(labels, indices, strict=True):
         source_slice = segment_img.slices[idx]
         source_data = data[source_slice]
-        source_segment = object.__new__(SegmentationImage)
-        source_segment._data = segment_img.data[source_slice]
-        source_segment.keep_labels(label)  # include only one label
-        all_source_data.append(source_data)
-        all_source_segments.append(source_segment.data)
-        all_source_slices.append(source_slice)
-
-    if nproc == 1:
-        if progress_bar:
-            desc = 'Deblending'
-            all_source_data = add_progress_bar(all_source_data,
-                                               desc=desc)  # pragma: no cover
-
-        all_source_deblends = []
-        for source_data, source_segment, label in zip(all_source_data,
-                                                      all_source_segments,
-                                                      labels, strict=True):
-            if progress_bar:
-                all_source_data.set_postfix_str(f'ID: {label}')
-            source_deblended = _deblend_source(source_data,
-                                               source_segment,
-                                               label, npixels, footprint,
-                                               nlevels, contrast, mode)
-            # all_source_deblends.append(source_deblended)
-            all_source_deblends.append(source_deblended[0])
-
-    else:
-        nlabels = len(labels)
-        args_all = zip(all_source_data, all_source_segments, labels,
-                       (npixels,) * nlabels, (footprint,) * nlabels,
-                       (nlevels,) * nlabels, (contrast,) * nlabels,
-                       (mode,) * nlabels, strict=True)
-
-        if progress_bar:
-            desc = 'Deblending'
-            args_all = add_progress_bar(args_all, total=nlabels,
-                                        desc=desc)  # pragma: no cover
-
-        with get_context('spawn').Pool(processes=nproc) as executor:
-            all_source_deblends = executor.starmap(_deblend_source, args_all)
-
-    nonposmin_labels = []
-    nmarkers_labels = []
-    for (label, source_deblended, source_slice) in zip(
-            labels, all_source_deblends, all_source_slices, strict=True):
+        source_segment = segment_img.data[source_slice]
+        source_deblended, warnings = _deblend_source(source_data,
+                                                     source_segment,
+                                                     label, npixels,
+                                                     footprint, nlevels,
+                                                     contrast, mode)
 
         if source_deblended is not None:
-            # replace the original source with the deblended source
-            segment_mask = (source_deblended.data > 0)
-            segm_deblended._data[source_slice][segment_mask] = (
-                source_deblended.data[segment_mask] + last_label)
-            last_label += source_deblended.nlabels
-
-            if hasattr(source_deblended, 'warnings'):
-                if source_deblended.warnings.get('nonposmin',
-                                                 None) is not None:
-                    nonposmin_labels.append(label)
-                if source_deblended.warnings.get('nmarkers',
-                                                 None) is not None:
-                    nmarkers_labels.append(label)
-
-    if nonposmin_labels or nmarkers_labels:
-        segm_deblended.info = {'warnings': {}}
-        warnings.warn('The deblending mode of one or more source labels from '
-                      'the input segmentation image was changed from '
-                      f'"{mode}" to "linear". See the "info" attribute '
-                      'for the list of affected input labels.',
-                      AstropyUserWarning)
-
-        if nonposmin_labels:
-            warn = {'message': f'Deblending mode changed from {mode} to '
-                    'linear due to non-positive minimum data values.',
-                    'input_labels': np.array(nonposmin_labels)}
-            segm_deblended.info['warnings']['nonposmin'] = warn
-
-        if nmarkers_labels:
-            warn = {'message': f'Deblending mode changed from {mode} to '
-                    'linear due to too many potential deblended sources.',
-                    'input_labels': np.array(nmarkers_labels)}
-        segm_deblended.info['warnings']['nmarkers'] = warn
+            source_mask = source_deblended > 0
+            segm_deblended[source_slice][source_mask] = (
+                source_deblended[source_mask] + max_label)
+            nlabels = len(_get_labels(source_deblended))
+            max_label += nlabels
 
     if relabel:
-        segm_deblended.relabel_consecutive()
+        segm_deblended = _relabel_array(segm_deblended, start_label=1)
+
+    segm_deblended = SegmentationImage(segm_deblended)
+
+    # TODO:
+    #   - warnings
 
     return segm_deblended
 
