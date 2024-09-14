@@ -4,6 +4,7 @@ This module provides tools for deblending overlapping sources labeled in
 a segmentation image.
 """
 
+import concurrent.futures
 import warnings
 from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import cpu_count
@@ -211,44 +212,40 @@ def deblend_sources(data, segment_img, npixels, *, labels=None, nlevels=32,
         np.copyto(data_shm, data)
         np.copyto(segment_data_shm, segment_img.data)
 
-        # Create a list of shared memory names
-        # shm_names = [(shm1.name, shm2.name)] * len(labels)
-        shm1_names = [shm1.name] * len(labels)
-        shm2_names = [shm2.name] * len(labels)
-        shm1_dtypes = [data.dtype] * len(labels)
-        shm2_dtypes = [segment_img.data.dtype] * len(labels)
-
-        # Create a list of source slices
-        source_slices = [segment_img.slices[idx] for idx in indices]
-
-        # Create a list of labels
-        labels_list = list(labels)
-        # _deblend_source_par(shm_name1, shm_name2, shm1_dtype, shm2_dtype,
-        # shape, source_slice, label, npixels, footprint, nlevels,
-        # contrast, mode):
-
-        # Create a list of arguments for the parallel deblending
-        args = zip(shm1_names, shm2_names, shm1_dtypes, shm2_dtypes,
-                   [data.shape] * len(labels),
-                   source_slices, labels_list, [npixels] * len(labels),
-                   [footprint] * len(labels), [nlevels] * len(labels),
-                   [contrast] * len(labels), [mode] * len(labels), strict=False)
-
         with ProcessPoolExecutor(max_workers=nproc) as executor:
-            results = list(executor.map(_deblend_source_par, *zip(*args, strict=False)))
-
-        max_label = segment_img.max_label + 1
-        for (source_deblended, warnings), label, idx in zip(results, labels,
-                                                            indices, strict=False):
-            if progress_bar:
-                indices.set_postfix_str(f'ID: {label}')
-            if source_deblended is not None:
+            futures = []
+            for label in labels:
+                idx = segment_img.get_index(label)
                 source_slice = segment_img.slices[idx]
-                source_mask = source_deblended > 0
-                segm_deblended[source_slice][source_mask] = (
-                    source_deblended[source_mask] + max_label)
-                nlabels = len(_get_labels(source_deblended))
-                max_label += nlabels
+                args = (shm1.name, shm2.name, dtype1, dtype2, shape,
+                        source_slice, label, npixels, footprint, nlevels,
+                        contrast, mode)
+                futures.append(executor.submit(_deblend_source_par, *args))
+
+            max_label = segment_img.max_label + 1
+            for future in concurrent.futures.as_completed(futures):
+                label, source_deblended, warnings = future.result()
+                idx = segment_img.get_index(label)
+                source_slice = segment_img.slices[idx]
+                if source_deblended is not None:
+                    source_mask = source_deblended > 0
+                    segm_deblended[source_slice][source_mask] = (
+                        source_deblended[source_mask] + max_label)
+                    nlabels = len(_get_labels(source_deblended))
+                    max_label += nlabels
+
+        # max_label = segment_img.max_label + 1
+        # for (source_deblended, warnings), label, idx in zip(results, labels,
+        #                                                     indices, strict=False):
+        #     if progress_bar:
+        #         indices.set_postfix_str(f'ID: {label}')
+        #     if source_deblended is not None:
+        #         source_slice = segment_img.slices[idx]
+        #         source_mask = source_deblended > 0
+        #         segm_deblended[source_slice][source_mask] = (
+        #             source_deblended[source_mask] + max_label)
+        #         nlabels = len(_get_labels(source_deblended))
+        #         max_label += nlabels
 
         # Close the shared memory blocks
         shm1.close()
@@ -284,7 +281,6 @@ def _deblend_source_par(shm_name1, shm_name2, shm1_dtype, shm2_dtype, shape,
     """
     Convenience function to deblend a single labeled source.
     """
-
     #print(shm_name1, shm_name2, shm1_dtype, shm2_dtype, shape, source_slice,
     #      label, npixels, footprint, nlevels, contrast, mode)
 
@@ -303,7 +299,7 @@ def _deblend_source_par(shm_name1, shm_name2, shm1_dtype, shm2_dtype, shape,
     deblender = _SingleSourceDeblender(data, segment_data, label, npixels,
                                        footprint, nlevels, contrast, mode)
 
-    out = deblender.deblend_source(), deblender.warnings
+    out = label, deblender.deblend_source(), deblender.warnings
     try:
         return out
     finally:
