@@ -170,11 +170,12 @@ def deblend_sources(data, segment_img, npixels, *, labels=None, nlevels=32,
     segm_deblended = segment_img.data.copy()
 
     indices = segment_img.get_indices(labels)
-    if progress_bar:
-        desc = 'Deblending'
-        indices = add_progress_bar(indices, desc=desc)  # pragma: no cover
 
     if nproc == 1:
+        if progress_bar:
+            desc = 'Deblending'
+            indices = add_progress_bar(indices, desc=desc)  # pragma: no cover
+
         max_label = segment_img.max_label + 1
         for label, idx in zip(labels, indices, strict=True):
             if progress_bar:
@@ -234,8 +235,14 @@ def deblend_sources(data, segment_img, npixels, *, labels=None, nlevels=32,
             #         nlabels = len(_get_labels(source_deblended))
             #         max_label += nlabels
 
-        # warnings
-        results = [future.result() for future in futures]
+            # warnings
+            results = []
+            from tqdm import tqdm
+            with tqdm(total=len(futures), desc='Deblending PR') as pbar:
+                for future, label in zip(futures, labels, strict=False):
+                    pbar.set_postfix_str(f'ID: {label}')
+                    results.append(future.result())
+                    pbar.update(1)
 
         segm_deblended = np.array(segment_data_shm)
         # TODO:
