@@ -4,7 +4,6 @@ This module provides tools for deblending overlapping sources labeled in
 a segmentation image.
 """
 
-import concurrent.futures
 import warnings
 from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import cpu_count
@@ -235,20 +234,28 @@ def deblend_sources(data, segment_img, npixels, *, labels=None, nlevels=32,
             #         nlabels = len(_get_labels(source_deblended))
             #         max_label += nlabels
 
+        # warnings
         results = [future.result() for future in futures]
 
-        max_label = segment_img.max_label + 1
-        for (source_deblended, warnings), label, idx in zip(results, labels,
-                                                            indices, strict=False):
-            if progress_bar:
-                indices.set_postfix_str(f'ID: {label}')
-            if source_deblended is not None:
-                source_slice = segment_img.slices[idx]
-                source_mask = source_deblended > 0
-                segm_deblended[source_slice][source_mask] = (
-                    source_deblended[source_mask] + max_label)
-                nlabels = len(_get_labels(source_deblended))
-                max_label += nlabels
+        segm_deblended = np.array(segment_data_shm)
+        # TODO:
+        # need to relabel the deblended segments
+        # no way to get the max_label from the shared memory block
+        # and ordering would be random based on the order of the future
+        # completion
+
+        # max_label = segment_img.max_label + 1
+        # for (source_deblended, warnings), label, idx in zip(results, labels,
+        #                                                     indices, strict=False):
+        #     if progress_bar:
+        #         indices.set_postfix_str(f'ID: {label}')
+        #     if source_deblended is not None:
+        #         source_slice = segment_img.slices[idx]
+        #         source_mask = source_deblended > 0
+        #         segm_deblended[source_slice][source_mask] = (
+        #             source_deblended[source_mask] + max_label)
+        #         nlabels = len(_get_labels(source_deblended))
+        #         max_label += nlabels
 
         # Close the shared memory blocks
         shm1.close()
@@ -301,8 +308,10 @@ def _deblend_source_par(shm_name1, shm_name2, shm1_dtype, shm2_dtype, shape,
 
     deblender = _SingleSourceDeblender(data, segment_data, label, npixels,
                                        footprint, nlevels, contrast, mode)
+    deblender.deblend_source_inplace()
 
-    out = deblender.deblend_source(), deblender.warnings
+    # out = deblender.deblend_source(), deblender.warnings
+    out = deblender.warnings
     try:
         return out
     finally:
@@ -610,6 +619,12 @@ class _SingleSourceDeblender:
         # markers may not be consecutive if a label was removed due to
         # the contrast criterion
         return _relabel_array(markers, start_label=1)
+
+    def deblend_source_inplace(self):
+        new_segment_data = self.deblend_source()
+        if new_segment_data is not None:
+            self.segment_data[self.segment_mask] = (
+                new_segment_data[self.segment_mask])
 
 
 def _get_labels(array):
