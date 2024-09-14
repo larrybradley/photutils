@@ -222,30 +222,33 @@ def deblend_sources(data, segment_img, npixels, *, labels=None, nlevels=32,
                         contrast, mode)
                 futures.append(executor.submit(_deblend_source_par, *args))
 
-            max_label = segment_img.max_label + 1
-            for future in concurrent.futures.as_completed(futures):
-                label, source_deblended, warnings = future.result()
-                idx = segment_img.get_index(label)
-                source_slice = segment_img.slices[idx]
-                if source_deblended is not None:
-                    source_mask = source_deblended > 0
-                    segm_deblended[source_slice][source_mask] = (
-                        source_deblended[source_mask] + max_label)
-                    nlabels = len(_get_labels(source_deblended))
-                    max_label += nlabels
+            # this results in randoming ordering of the resulting labels
+            # max_label = segment_img.max_label + 1
+            # for future in concurrent.futures.as_completed(futures):
+            #     label, source_deblended, warnings = future.result()
+            #     idx = segment_img.get_index(label)
+            #     source_slice = segment_img.slices[idx]
+            #     if source_deblended is not None:
+            #         source_mask = source_deblended > 0
+            #         segm_deblended[source_slice][source_mask] = (
+            #             source_deblended[source_mask] + max_label)
+            #         nlabels = len(_get_labels(source_deblended))
+            #         max_label += nlabels
 
-        # max_label = segment_img.max_label + 1
-        # for (source_deblended, warnings), label, idx in zip(results, labels,
-        #                                                     indices, strict=False):
-        #     if progress_bar:
-        #         indices.set_postfix_str(f'ID: {label}')
-        #     if source_deblended is not None:
-        #         source_slice = segment_img.slices[idx]
-        #         source_mask = source_deblended > 0
-        #         segm_deblended[source_slice][source_mask] = (
-        #             source_deblended[source_mask] + max_label)
-        #         nlabels = len(_get_labels(source_deblended))
-        #         max_label += nlabels
+        results = [future.result() for future in futures]
+
+        max_label = segment_img.max_label + 1
+        for (source_deblended, warnings), label, idx in zip(results, labels,
+                                                            indices, strict=False):
+            if progress_bar:
+                indices.set_postfix_str(f'ID: {label}')
+            if source_deblended is not None:
+                source_slice = segment_img.slices[idx]
+                source_mask = source_deblended > 0
+                segm_deblended[source_slice][source_mask] = (
+                    source_deblended[source_mask] + max_label)
+                nlabels = len(_get_labels(source_deblended))
+                max_label += nlabels
 
         # Close the shared memory blocks
         shm1.close()
@@ -299,7 +302,7 @@ def _deblend_source_par(shm_name1, shm_name2, shm1_dtype, shm2_dtype, shape,
     deblender = _SingleSourceDeblender(data, segment_data, label, npixels,
                                        footprint, nlevels, contrast, mode)
 
-    out = label, deblender.deblend_source(), deblender.warnings
+    out = deblender.deblend_source(), deblender.warnings
     try:
         return out
     finally:
