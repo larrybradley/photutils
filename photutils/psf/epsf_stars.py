@@ -14,7 +14,6 @@ from astropy.utils import lazyproperty
 from astropy.utils.exceptions import AstropyUserWarning
 
 from photutils.aperture import BoundingBox
-from photutils.psf.image_models import _LegacyEPSFModel
 from photutils.psf.utils import _interpolate_missing_data
 from photutils.utils._parameters import as_pair
 from photutils.utils.cutouts import _overlap_slices as overlap_slices
@@ -194,17 +193,12 @@ class EPSFStar:
         data : `~numpy.ndarray`
             A 2D array of the registered/scaled ePSF.
         """
-        legacy_epsf = _LegacyEPSFModel(epsf.data, flux=epsf.flux, x_0=epsf.x_0,
-                                       y_0=epsf.y_0,
-                                       oversampling=epsf.oversampling,
-                                       fill_value=epsf.fill_value)
-
         yy, xx = np.indices(self.shape, dtype=float)
-        xx = xx - self.cutout_center[0]
-        yy = yy - self.cutout_center[1]
+        xx = epsf.oversampling[1] * (xx - self.cutout_center[0])
+        yy = epsf.oversampling[0] * (yy - self.cutout_center[1])
 
-        return self.flux * legacy_epsf.evaluate(xx, yy, flux=1.0, x_0=0.0,
-                                                y_0=0.0)
+        return (self.flux * np.prod(epsf.oversampling)
+                * epsf.evaluate(xx, yy, flux=1.0, x_0=0.0, y_0=0.0))
 
     def compute_residual_image(self, epsf):
         """
