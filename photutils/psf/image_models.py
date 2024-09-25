@@ -654,12 +654,14 @@ class ImagePRF(Fittable2DModel):
         result : `~numpy.ndarray`
             The value of the model evaluated at the input coordinates.
         """
+        # imageprf_test2.ipynb
         # TODO:
         # - x, x_0, and origin can all have fractional shifts
         # - how to deal with case where the x/y input grid is smaller
         #   than the oversampled PSF image, but larger than the
         #   downsampled PSF image? How to handle the shift in this case?
         #   How to avoid truncation?
+        # - fill value area not correct
 
         xi = np.asarray(x, dtype=float) - x_0
         yi = np.asarray(y, dtype=float) - y_0
