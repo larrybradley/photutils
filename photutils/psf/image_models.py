@@ -654,11 +654,22 @@ class ImagePRF(Fittable2DModel):
         result : `~numpy.ndarray`
             The value of the model evaluated at the input coordinates.
         """
+        # TODO:
+        # - x, x_0, and origin can all have fractional shifts
+        # - how to deal with case where the x/y input grid is smaller
+        #   than the oversampled PSF image, but larger than the
+        #   downsampled PSF image? How to handle the shift in this case?
+        #   How to avoid truncation?
+
         xi = np.asarray(x, dtype=float) - x_0
         yi = np.asarray(y, dtype=float) - y_0
+
+        #xi = np.arange(self.data.shape[0], dtype=float) - x_0
+        #yi = np.arange(self.data.shape[1], dtype=float) - y_0
         xi += self._origin[0]
         yi += self._origin[1]
 
+        # evaluated_model = flux * self.interpolator(xi, yi, grid=True)
         evaluated_model = flux * self.interpolator(xi, yi, grid=False)
 
         img = block_reduce_center(evaluated_model, self.oversampling)
@@ -671,6 +682,15 @@ class ImagePRF(Fittable2DModel):
             invalid = (xi < 0) | (xi > nx - 1) | (yi < 0) | (yi > ny - 1)
             img[invalid] = self.fill_value
 
+        # FIXME: this is a hack to get the right shape
+        # psfdata all zeros, 99x99, ov=3 xy eval=51x51, x0 = 25.2 y0 = 25.9
+        #y0 = 23
+        #x0 = 24
+
+        # gaussian psf, 99x99, ov=3, eval=51x51, x0=y0=25
+        #y0 = 16
+        #x0 = 16
+        # return img[y0:y0+x.shape[0], x0:x0+x.shape[1]]
         return img
 
 
