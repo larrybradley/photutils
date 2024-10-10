@@ -296,7 +296,10 @@ def _deblend_source_par(shm_name1, shm_name2, shm1_dtype, shm2_dtype, shape,
                         source_slice, label, npixels, footprint, nlevels,
                         contrast, mode):
     """
-    Convenience function to deblend a single labeled source.
+    Convenience function to deblend a single labeled source using
+    multiprocessing.
+
+    Each source is deblended in place in shared memory blocks.
     """
     #print(shm_name1, shm_name2, shm1_dtype, shm2_dtype, shape, source_slice,
     #      label, npixels, footprint, nlevels, contrast, mode)
@@ -317,10 +320,8 @@ def _deblend_source_par(shm_name1, shm_name2, shm1_dtype, shm2_dtype, shape,
                                        footprint, nlevels, contrast, mode)
     deblender.deblend_source_inplace()
 
-    # out = deblender.deblend_source(), deblender.warnings
-    out = deblender.warnings
     try:
-        return out
+        return deblender.warnings
     finally:
         shm1.close()
         shm2.close()
