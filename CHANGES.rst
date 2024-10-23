@@ -1,3 +1,21 @@
+2.1.0 (unreleased)
+------------------
+
+General
+^^^^^^^
+
+- The minimum required Python is now 3.11. [#1930]
+
+New Features
+^^^^^^^^^^^^
+
+Bug Fixes
+^^^^^^^^^
+
+API Changes
+^^^^^^^^^^^
+
+
 2.0.2 (unreleased)
 ------------------
 
