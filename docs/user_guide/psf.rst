@@ -336,9 +336,11 @@ Let's plot the image:
                                              min_separation=10, seed=0)
     noise = make_noise_image(data.shape, mean=0, stddev=1, seed=0)
     data += noise
-    plt.imshow(data, origin='lower')
-    plt.title('Simulated Data')
-    plt.colorbar()
+
+    fig, ax = plt.subplots()
+    axim = ax.imshow(data, origin='lower')
+    ax.set_title('Simulated Data')
+    fig.colorbar(axim)
 
 
 Fitting multiple stars
