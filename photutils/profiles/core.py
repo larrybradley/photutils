@@ -189,7 +189,7 @@ class ProfileBase(metaclass=abc.ABCMeta):
         fluxes = []
         fluxerrs = []
         areas = []
-        for aperture in self._circular_apertures:
+        for aperture in self.apertures:
             if aperture is None:
                 flux, fluxerr = [0.0], [0.0]
                 area = 0.0

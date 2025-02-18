@@ -8,7 +8,7 @@ from scipy.interpolate import PchipInterpolator
 
 from photutils.profiles.core import ProfileBase
 
-__all__ = ['CurveOfGrowth']
+__all__ = ['CurveOfGrowth', 'EnsquaredCurveOfGrowth']
 
 
 class CurveOfGrowth(ProfileBase):
@@ -349,5 +349,336 @@ class CurveOfGrowth(ProfileBase):
                    '(especially the starting radii) and/or using the '
                    '"exact" aperture overlap method.')
             raise ValueError(msg)
+
+        return PchipInterpolator(profile, radius, extrapolate=False)(ee)
+
+
+class EnsquaredCurveOfGrowth(ProfileBase):
+    """
+    Class to create a curve of growth using concentric square apertures.
+
+    The ensquared curve of growth profile (sometimes referred to as
+    ensquared energy) represents the square aperture flux as a function
+    of the square size.
+
+    Parameters
+    ----------
+    data : 2D `~numpy.ndarray`
+        The 2D data array. The data should be background-subtracted.
+        Non-finite values (e.g., NaN or inf) in the ``data`` or
+        ``error`` array are automatically masked.
+
+    xycen : tuple of 2 floats
+        The ``(x, y)`` pixel coordinate of the source center.
+
+    sizes : 1D float `~numpy.ndarray`
+        An array of the square sizes. ``sizes`` must be strictly
+        increasing with a minimum value greater than zero, and contain
+        at least 2 values. The size spacing does not need to be
+        constant.
+
+    error : 2D `~numpy.ndarray`, optional
+        The 1-sigma errors of the input ``data``. ``error`` is assumed
+        to include all sources of error, including the Poisson error
+        of the sources (see `~photutils.utils.calc_total_error`) .
+        ``error`` must have the same shape as the input ``data``.
+        Non-finite values (e.g., NaN or inf) in the ``data`` or
+        ``error`` array are automatically masked.
+
+    mask : 2D bool `~numpy.ndarray`, optional
+        A boolean mask with the same shape as ``data`` where a `True`
+        value indicates the corresponding element of ``data`` is masked.
+        Masked data are excluded from all calculations.
+
+    method : {'exact', 'center', 'subpixel'}, optional
+        The method used to determine the overlap of the aperture on the
+        pixel grid:
+
+        * ``'exact'`` (default):
+          The exact fractional overlap of the aperture and each pixel is
+          calculated. The aperture weights will contain values between 0
+          and 1.
+
+        * ``'center'``:
+          A pixel is considered to be entirely in or out of the aperture
+          depending on whether its center is in or out of the aperture.
+          The aperture weights will contain values only of 0 (out) and 1
+          (in).
+
+        * ``'subpixel'``:
+          A pixel is divided into subpixels (see the ``subpixels``
+          keyword), each of which are considered to be entirely in or
+          out of the aperture depending on whether its center is in
+          or out of the aperture. If ``subpixels=1``, this method is
+          equivalent to ``'center'``. The aperture weights will contain
+          values between 0 and 1.
+
+    subpixels : int, optional
+        For the ``'subpixel'`` method, resample pixels by this factor
+        in each dimension. That is, each pixel is divided into
+        ``subpixels**2`` subpixels. This keyword is ignored unless
+        ``method='subpixel'``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from astropy.modeling.models import Gaussian2D
+    >>> from astropy.visualization import simple_norm
+    >>> from photutils.centroids import centroid_quadratic
+    >>> from photutils.datasets import make_noise_image
+    >>> from photutils.profiles import EnsquaredCurveOfGrowth
+
+    Create an artificial single source. Note that this image does not
+    have any background.
+
+    >>> gmodel = Gaussian2D(42.1, 47.8, 52.4, 4.7, 4.7, 0)
+    >>> yy, xx = np.mgrid[0:100, 0:100]
+    >>> data = gmodel(xx, yy)
+    >>> bkg_sig = 2.4
+    >>> noise = make_noise_image(data.shape, mean=0., stddev=bkg_sig, seed=123)
+    >>> data += noise
+    >>> error = np.zeros_like(data) + bkg_sig
+
+    Create the curve of growth.
+
+    >>> xycen = centroid_quadratic(data, xpeak=48, ypeak=52)
+    >>> sizes = np.arange(1, 26)
+    >>> cog = EnsquaredCurveOfGrowth(data, xycen, radii, error=error,
+    ...                              mask=None)
+
+    >>> print(cog.sizes)  # doctest: +FLOAT_CMP
+    [ 1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24
+     25]
+
+    >>> print(cog.profile)  # doctest: +FLOAT_CMP
+
+    >>> print(cog.profile_error)  # doctest: +FLOAT_CMP
+
+    Plot the ensquared curve of growth.
+
+    .. plot::
+
+        import matplotlib.pyplot as plt
+        import numpy as np
+        from astropy.modeling.models import Gaussian2D
+
+        from photutils.centroids import centroid_quadratic
+        from photutils.datasets import make_noise_image
+        from photutils.profiles import CurveOfGrowth
+
+        # create an artificial single source
+        gmodel = Gaussian2D(42.1, 47.8, 52.4, 4.7, 4.7, 0)
+        yy, xx = np.mgrid[0:100, 0:100]
+        data = gmodel(xx, yy)
+        bkg_sig = 2.4
+        noise = make_noise_image(data.shape, mean=0., stddev=bkg_sig, seed=123)
+        data += noise
+        error = np.zeros_like(data) + bkg_sig
+
+        # find the source centroid
+        xycen = centroid_quadratic(data, xpeak=48, ypeak=52)
+
+        # create the curve of growth
+        radii = np.arange(1, 26)
+        cog = CurveOfGrowth(data, xycen, radii, error=error, mask=None)
+
+        # plot the curve of growth
+        fig, ax = plt.subplots(figsize=(8, 6))
+        cog.plot(ax=ax)
+        cog.plot_error(ax=ax)
+
+    Normalize the profile and plot the normalized curve of growth.
+
+    .. plot::
+
+        import matplotlib.pyplot as plt
+        import numpy as np
+        from astropy.modeling.models import Gaussian2D
+
+        from photutils.centroids import centroid_quadratic
+        from photutils.datasets import make_noise_image
+        from photutils.profiles import CurveOfGrowth
+
+        # create an artificial single source
+        gmodel = Gaussian2D(42.1, 47.8, 52.4, 4.7, 4.7, 0)
+        yy, xx = np.mgrid[0:100, 0:100]
+        data = gmodel(xx, yy)
+        bkg_sig = 2.4
+        noise = make_noise_image(data.shape, mean=0., stddev=bkg_sig, seed=123)
+        data += noise
+        error = np.zeros_like(data) + bkg_sig
+
+        # find the source centroid
+        xycen = centroid_quadratic(data, xpeak=48, ypeak=52)
+
+        # create the curve of growth
+        radii = np.arange(1, 26)
+        cog = CurveOfGrowth(data, xycen, radii, error=error, mask=None)
+
+        # plot the curve of growth
+        cog.normalize()
+        fig, ax = plt.subplots(figsize=(8, 6))
+        cog.plot(ax=ax)
+        cog.plot_error(ax=ax)
+
+    Plot a couple of the apertures on the data.
+
+    .. plot::
+
+        import matplotlib.pyplot as plt
+        import numpy as np
+        from astropy.modeling.models import Gaussian2D
+        from astropy.visualization import simple_norm
+
+        from photutils.centroids import centroid_quadratic
+        from photutils.datasets import make_noise_image
+        from photutils.profiles import CurveOfGrowth
+
+        # create an artificial single source
+        gmodel = Gaussian2D(42.1, 47.8, 52.4, 4.7, 4.7, 0)
+        yy, xx = np.mgrid[0:100, 0:100]
+        data = gmodel(xx, yy)
+        bkg_sig = 2.4
+        noise = make_noise_image(data.shape, mean=0., stddev=bkg_sig, seed=123)
+        data += noise
+        error = np.zeros_like(data) + bkg_sig
+
+        # find the source centroid
+        xycen = centroid_quadratic(data, xpeak=48, ypeak=52)
+
+        # create the curve of growth
+        radii = np.arange(1, 26)
+        cog = CurveOfGrowth(data, xycen, radii, error=error, mask=None)
+
+        norm = simple_norm(data, 'sqrt')
+        fig, ax = plt.subplots(figsize=(5, 5))
+        ax.imshow(data, norm=norm, origin='lower')
+        cog.apertures[5].plot(ax=ax, color='C0', lw=2)
+        cog.apertures[10].plot(ax=ax, color='C1', lw=2)
+        cog.apertures[15].plot(ax=ax, color='C3', lw=2)
+    """
+
+    def __init__(self, data, xycen, sizes, *, error=None, mask=None,
+                 method='exact', subpixels=5):
+
+        sizes = np.array(sizes)
+        if sizes.min() <= 0:
+            raise ValueError('sizes must be > 0')
+        self.sizes = sizes
+
+        super().__init__(data, xycen, sizes, error=error, mask=mask,
+                         method=method, subpixels=subpixels)
+
+    @lazyproperty
+    def radius(self):
+        return self.sizes
+
+    @lazyproperty
+    def apertures(self):
+        """
+        A list of `~photutils.aperture.RectangularAperture` objects.
+
+        If ``radius_min`` is zero, then the first item will be `None`.
+        """
+        from photutils.aperture import RectangularAperture
+
+        apertures = []
+        for size in self.sizes:
+            if size <= 0.0:
+                apertures.append(None)
+            else:
+                apertures.append(RectangularAperture(self.xycen,
+                                                     w=size, h=size))
+        return apertures
+
+    @lazyproperty
+    def profile(self):
+        """
+        The curve-of-growth profile as a 1D `~numpy.ndarray`.
+        """
+        return self._photometry[0]
+
+    @lazyproperty
+    def profile_error(self):
+        """
+        The curve-of-growth profile errors as a 1D `~numpy.ndarray`.
+        """
+        return self._photometry[1]
+
+    @lazyproperty
+    def area(self):
+        """
+        The unmasked area in each circular aperture as a function of
+        radius as a 1D `~numpy.ndarray`.
+        """
+        return self._photometry[2]
+
+    def calc_ee_at_radius(self, radius):
+        """
+        Calculate the encircled energy at a given radius using a cubic
+        interpolator based on the profile data.
+
+        Note that this function assumes that input data has been
+        normalized such that the total enclosed flux is 1 for an
+        infinitely large radius. You can also use the `normalize` method
+        before calling this method to normalize the profile to be 1 at
+        the largest input ``radii``.
+
+        Parameters
+        ----------
+        radius : float or 1D `~numpy.ndarray`
+            The circular radius/radii.
+
+        Returns
+        -------
+        ee : `~numpy.ndarray`
+            The encircled energy at each radius/radii. Returns NaN for
+            radii outside the range of the profile data.
+        """
+        return PchipInterpolator(self.radius, self.profile,
+                                 extrapolate=False)(radius)
+
+    def calc_radius_at_ee(self, ee):
+        """
+        Calculate the radius at a given encircled energy using a cubic
+        interpolator based on the profile data.
+
+        Note that this function assumes that input data has been
+        normalized such that the total enclosed flux is 1 for an
+        infinitely large radius. You can also use the `normalize` method
+        before calling this method to normalize the profile to be 1 at
+        the largest input ``radii``.
+
+        This interpolator returns values only for regions where the
+        curve-of-growth profile is monotonically increasing.
+
+        Parameters
+        ----------
+        ee : float or 1D `~numpy.ndarray`
+            The encircled energy.
+
+        Returns
+        -------
+        radius : `~numpy.ndarray`
+            The radius at each encircled energy. Returns NaN for
+            encircled energies outside the range of the profile data.
+        """
+        # restrict the profile to the monotonically increasing region;
+        # this is necessary for the interpolator
+        radius = self.radius
+        profile = self.profile
+        diff = np.diff(profile) <= 0
+        if np.any(diff):
+            idx = np.argmax(diff)  # first non-monotonic point
+            radius = radius[0:idx]
+            profile = profile[0:idx]
+
+        if len(radius) < 2:
+            raise ValueError('The curve-of-growth profile is not '
+                             'monotonically increasing even at the '
+                             'smallest radii -- cannot interpolate. Try '
+                             'using different input radii (especially the '
+                             'starting radii) and/or using the "exact" '
+                             'aperture overlap method.')
 
         return PchipInterpolator(profile, radius, extrapolate=False)(ee)
