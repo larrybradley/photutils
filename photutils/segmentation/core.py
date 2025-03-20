@@ -103,7 +103,11 @@ class SegmentationImage:
         """
         segments = []
 
-        if HAS_RASTERIO and HAS_SHAPELY:
+        # do not show AstropyUserWarning when creating segments
+        # due to rasterio and shapely not being installed (required to
+        # create the polygons)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', category=AstropyUserWarning)
             for label, slc, bbox, area, polygon in zip(self.labels,
                                                        self.slices,
                                                        self.bbox,
@@ -112,11 +116,6 @@ class SegmentationImage:
                                                        strict=True):
                 segments.append(Segment(self.data, label, slc, bbox, area,
                                         polygon=polygon))
-        else:
-            for label, slc, bbox, area in zip(self.labels, self.slices,
-                                              self.bbox, self.areas,
-                                              strict=True):
-                segments.append(Segment(self.data, label, slc, bbox, area))
 
         return segments
 
@@ -1326,13 +1325,13 @@ class SegmentationImage:
         A list of `Shapely <https://shapely.readthedocs.io/en/stable/>`_
         polygons representing each source segment.
         """
-        try:
-            from shapely import transform
-            from shapely.geometry import shape
-        except ImportError:
+        if not HAS_RASTERIO or not HAS_SHAPELY:
             warnings.warn('The rasterio and shapely packages are required '
                           'to create the polygons.', AstropyUserWarning)
             return [None] * self.nlabels
+
+        from shapely import transform
+        from shapely.geometry import shape
 
         polygons = [shape(geo_poly[0]) for geo_poly in self._geo_polygons
                     if geo_poly[1] != 0]
@@ -1716,7 +1715,7 @@ class Segment:
     area : float
         The area of the segment in pixels**2.
 
-    polygon : Shapely polygon, optional
+    polygon : `None` or Shapely polygon, optional
         The outline of the segment as a `Shapely
         <https://shapely.readthedocs.io/en/stable/>`_ polygon.
     """
