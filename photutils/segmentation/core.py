@@ -318,10 +318,6 @@ class SegmentationImage:
         return self.get_index(labels)
 
     @lazyproperty
-    def _raw_slices(self):
-        return find_objects(self.data)
-
-    @lazyproperty
     def slices(self):
         """
         A list of tuples, where each tuple contains two slices
@@ -331,7 +327,7 @@ class SegmentationImage:
         a length equal to the number of labels and matches the order of
         the ``labels`` attribute.
         """
-        return [slc for slc in self._raw_slices if slc is not None]
+        return [slc for slc in find_objects(self.data) if slc is not None]
 
     @lazyproperty
     def bbox(self):
