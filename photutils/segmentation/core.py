@@ -1326,8 +1326,13 @@ class SegmentationImage:
         A list of `Shapely <https://shapely.readthedocs.io/en/stable/>`_
         polygons representing each source segment.
         """
-        from shapely import transform
-        from shapely.geometry import shape
+        try:
+            from shapely import transform
+            from shapely.geometry import shape
+        except ImportError:
+            warnings.warn('The rasterio and shapely packages are required '
+                          'to create the polygons.', AstropyUserWarning)
+            return [None] * self.nlabels
 
         polygons = [shape(geo_poly[0]) for geo_poly in self._geo_polygons
                     if geo_poly[1] != 0]
@@ -1357,13 +1362,22 @@ class SegmentationImage:
 
         Notes
         -----
+        This method requires the regions and shapely packages to be
+        installed.
+
         The polygons can be written to a file using the
         :meth:`regions.Regions.write` method.
         """
-        from regions import Regions
+        try:
+            from regions import Regions
 
-        return Regions([_shapely_polygon_to_region(poly)
-                        for poly in self.polygons])
+            return Regions([_shapely_polygon_to_region(poly)
+                            for poly in self.polygons])
+        except ImportError:
+            warnings.warn('The rasterio, shapely, and regions packages are '
+                          'required to create the regions.',
+                          AstropyUserWarning)
+            return [None] * self.nlabels
 
     def to_patches(self, *, origin=(0, 0), scale=1.0, **kwargs):
         """
@@ -1394,6 +1408,11 @@ class SegmentationImage:
             segments.
         """
         from matplotlib.patches import Polygon
+
+        if self.polygons[0] is None:
+            warnings.warn('The rasterio and shapely packages are required to '
+                          'create the patches.', AstropyUserWarning)
+            return [None] * self.nlabels
 
         origin = np.array(origin)
         patch_kwargs = {'edgecolor': 'white', 'facecolor': 'none'}
@@ -1460,10 +1479,15 @@ class SegmentationImage:
         """
         import matplotlib.pyplot as plt
 
+        patches = self.to_patches(origin=origin, scale=scale, **kwargs)
+        if patches[0] is None:
+            warnings.warn('The rasterio and shapely packages are required '
+                          'to plot the patches.', AstropyUserWarning)
+            return [None] * self.nlabels
+
         if ax is None:
             ax = plt.gca()
 
-        patches = self.to_patches(origin=origin, scale=scale, **kwargs)
         if labels is not None:
             patches = np.array(patches)
             indices = self.get_indices(labels)
