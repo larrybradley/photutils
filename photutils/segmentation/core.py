@@ -335,7 +335,7 @@ class SegmentationImage:
         """
         return self._data.size - np.count_nonzero(self._data)
 
-    @lazyproperty
+    @property
     def areas(self):
         """
         A 1D array of areas (in pixel**2) of the non-zero labeled
@@ -345,10 +345,9 @@ class SegmentationImage:
         returned array has a length equal to the number of labels and
         matches the order of the ``labels`` attribute.
         """
-        areas = []
-        for label, slices in zip(self.labels, self.slices, strict=True):
-            areas.append(np.count_nonzero(self._data[slices] == label))
-        return np.array(areas)
+        # this method is explicitly defined only to document the
+        # areas property
+        return self.__dict__['areas']
 
     def get_area(self, label):
         """
