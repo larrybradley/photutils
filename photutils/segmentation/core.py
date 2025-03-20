@@ -45,10 +45,7 @@ class SegmentationImage:
     """
 
     def __init__(self, data):
-        if not isinstance(data, np.ndarray):
-            raise TypeError('Input data must be a numpy array')
         self.data = data
-        self._deblend_label_map = {}  # set by source deblender
 
     def __str__(self):
         cls_name = f'<{self.__class__.__module__}.{self.__class__.__name__}>'
@@ -185,13 +182,6 @@ class SegmentationImage:
         return self._deblend_label_map
 
     @property
-    def data(self):
-        """
-        The segmentation array.
-        """
-        return self._data
-
-    @property
     def _lazyproperties(self):
         """
         A list of all class lazyproperties (even in superclasses).
@@ -206,23 +196,38 @@ class SegmentationImage:
         for key in self._lazyproperties:
             self.__dict__.pop(key, None)
 
-    @data.setter
-    def data(self, value):
-        if not np.issubdtype(value.dtype, np.integer):
-            raise TypeError('data must be have integer type')
+    def _set_data(self, arr):
+        labels, inverse_indices, counts = np.unique(arr[arr != 0],
+                                                    return_inverse=True,
+                                                    return_counts=True)
 
-        labels = self._get_labels(value)  # array([]) if value all zeros
-        if labels.shape != (0,) and np.min(labels) < 0:
-            raise ValueError('The segmentation image cannot contain '
-                             'negative integers.')
-
+        # reset cached properties when data is reassigned, but not on init
         if '_data' in self.__dict__:
-            # reset cached properties when data is reassigned, but not on init
             self._reset_lazyproperties()
 
-        self._data = value  # pylint: disable=attribute-defined-outside-init
+        self._data = arr  # pylint: disable=attribute-defined-outside-init
         self.__dict__['labels'] = labels
+        self.__dict__['_inverse_indices'] = inverse_indices
+        self.__dict__['areas'] = counts
         self.__dict__['_deblend_label_map'] = {}  # reset deblended labels
+
+    @property
+    def data(self):
+        """
+        The segmentation array.
+        """
+        return self._data
+
+    @data.setter
+    def data(self, arr):
+        if not isinstance(arr, np.ndarray):
+            raise TypeError('Input data must be a numpy array')
+        if not np.issubdtype(arr.dtype, np.integer):
+            raise TypeError('data must be have integer type')
+        if np.min(arr) < 0:
+            raise ValueError('The segmentation image cannot contain '
+                             'negative integers.')
+        self._set_data(arr)
 
     @lazyproperty
     def data_ma(self):

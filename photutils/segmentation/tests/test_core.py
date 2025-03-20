@@ -595,5 +595,5 @@ def test_subclass():
                       [70, 70, 0, 0],
                       [70, 70, 0, 1]])
     segm.data = data2
-    assert len(segm.__dict__) == 3
+    assert len(segm.__dict__) == 5
     assert_equal(segm.areas, [1, 2, 2, 4])
