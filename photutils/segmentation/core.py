@@ -136,7 +136,14 @@ class SegmentationImage:
             self.__dict__.pop(key, None)
 
     def _set_data(self, arr, in_labels=None):
-        labels, inverse_indices, counts = np.unique(arr[arr != 0],
+        if in_labels is not None:
+            labels = np.array(in_labels, dtype=arr.dtype)
+            #inverse_indices = np.searchsorted(labels, arr[arr != 0])
+            #counts = np.array([np.sum(arr == label) for label in labels])
+            inverse_indices = None
+            counts = None
+        else:
+            labels, inverse_indices, counts = np.unique(arr[arr != 0],
                                                     return_inverse=True,
                                                     return_counts=True)
         # sanity check that in_labels and labels agree

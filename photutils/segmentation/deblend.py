@@ -169,6 +169,9 @@ def deblend_sources(data, segment_img, npixels, *, labels=None, nlevels=32,
     # include only sources that have at least (2 * npixels);
     # this is required for a source to be deblended into multiple
     # sources, each with a minimum of npixels
+    #print('labels', labels)
+    #print('segment_img.areas', segment_img.areas)
+    #print('segment_img', segment_img)
     mask = (segment_img.areas[segment_img.get_indices(labels)]
             >= (npixels * 2))
     labels = labels[mask]
