@@ -72,6 +72,12 @@ class TestSegmentationImage:
         with pytest.raises(TypeError, match=match):
             SegmentationImage(data)
 
+        # not 2D
+        data = np.ones(3)
+        match = 'data must be a 2D array'
+        with pytest.raises(ValueError, match=match):
+            SegmentationImage(data)
+
         # contains a negative value
         data = np.arange(-1, 8).reshape(3, 3).astype(int)
         match = 'The segmentation image cannot contain negative integers'
@@ -199,12 +205,6 @@ class TestSegmentationImage:
         match = 'are invalid'
         with pytest.raises(ValueError, match=match):
             self.segm.check_labels([2, 6])
-
-    def test_bbox_1d(self):
-        segm = SegmentationImage(np.array([0, 0, 1, 1, 0, 2, 2, 0]))
-        match = 'The "bbox" attribute requires a 2D segmentation image'
-        with pytest.raises(ValueError, match=match):
-            _ = segm.bbox
 
     @pytest.mark.skipif(not HAS_MATPLOTLIB, reason='matplotlib is required')
     def test_reset_cmap(self):
