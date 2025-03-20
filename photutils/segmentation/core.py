@@ -256,21 +256,15 @@ class SegmentationImage:
         """
         return self._data.ndim
 
-    @lazyproperty
+    @property
     def labels(self):
         """
         The sorted non-zero labels in the segmentation array.
         """
-        if '_raw_slices' in self.__dict__:
-            labels_all = np.arange(len(self._raw_slices)) + 1
-            labels = []
-            # if a label is missing, raw_slices will be None instead of a slice
-            for label, slc in zip(labels_all, self._raw_slices, strict=True):
-                if slc is not None:
-                    labels.append(label)
-            return np.array(labels, dtype=self._data.dtype)
-
-        return np.unique(self.data[self.data != 0])
+        # this method is explicitly defined only to document the
+        # labels property
+        return self.__dict__.get('labels',
+                                 np.array([], dtype=self._data.dtype))
 
     @lazyproperty
     def nlabels(self):
