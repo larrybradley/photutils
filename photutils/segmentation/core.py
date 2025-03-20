@@ -73,6 +73,18 @@ class SegmentationImage:
 
         raise TypeError(f'{key!r} is not a valid 2D slice object')
 
+    def __setattr__(self, name, value):
+        """
+        Set attributes.
+
+        Prevent direct modification of the _data attribute.
+        """
+        if name == '_data':
+            msg = ('Direct modification of _data is not allowed. Use '
+                   'self.data or self._set_data().')
+            raise AttributeError(msg)
+        super().__setattr__(name, value)
+
     def __array__(self):
         """
         Array representation of the segmentation array (e.g., for
@@ -169,16 +181,20 @@ class SegmentationImage:
         for key in self._lazyproperties:
             self.__dict__.pop(key, None)
 
-    def _set_data(self, arr):
+    def _set_data(self, arr, in_labels=None):
         labels, inverse_indices, counts = np.unique(arr[arr != 0],
                                                     return_inverse=True,
                                                     return_counts=True)
+        # sanity check that in_labels and labels agree
+        if in_labels is not None and not np.array_equal(labels, in_labels):
+            raise ValueError('Input labels do not match the unique labels '
+                             'in the data')
 
         # reset cached properties when data is reassigned, but not on init
         if '_data' in self.__dict__:
             self._reset_lazyproperties()
 
-        self._data = arr  # pylint: disable=attribute-defined-outside-init
+        self.__dict__['_data'] = arr
         self.__dict__['labels'] = labels
         self.__dict__['_inverse_indices'] = inverse_indices
         self.__dict__['areas'] = counts
@@ -568,18 +584,21 @@ class SegmentationImage:
         """
         return self.make_cmap(background_color='#000000ff', seed=0)
 
-    def _update_deblend_label_map(self, relabel_map):
+    def _update_deblend_label_map(self, deblend_label_map, relabel_map):
         """
         Update the deblended label map based on a relabel map.
 
         Parameters
         ----------
-        relabel_map : `~numpy.ndarray`
-            An array mapping the original label numbers to the new label
-            numbers.
+        deblend_label_map : dict
+            A dictionary mapping the original parent label numbers to the
+            child (deblended) label numbers.
+
+        relabel_map : dict
+            New label maps due to relabeling.
         """
         # child_labels are the deblended labels
-        for parent_label, child_labels in self._deblend_label_map.items():
+        for parent_label, child_labels in deblend_label_map.items():
             self._deblend_label_map[parent_label] = relabel_map[child_labels]
 
     def reassign_label(self, label, new_label, relabel=False):
@@ -750,9 +769,9 @@ class SegmentationImage:
                 relabel_map = map2[relabel_map]
 
         data_new = relabel_map[self.data]
-        self._reset_lazyproperties()  # reset all cached properties
-        self._data = data_new  # use _data to avoid validation
-        self._update_deblend_label_map(relabel_map)
+        deblend_label_map = self._deblend_label_map.copy()
+        self._set_data(data_new)  # avoid validation
+        self._update_deblend_label_map(deblend_label_map, relabel_map)
 
     def relabel_consecutive(self, start_label=1):
         """
@@ -803,12 +822,11 @@ class SegmentationImage:
         new_label_map[self.labels] = new_labels
 
         data_new = new_label_map[self.data]
-        self._reset_lazyproperties()  # reset all cached properties
-        self._data = data_new  # use _data to avoid validation
-        self.__dict__['labels'] = new_labels
+        deblend_label_map = self._deblend_label_map.copy()
+        self._set_data(data_new, in_labels=new_labels)  # avoid validation
         if old_slices is not None:
             self.__dict__['slices'] = old_slices  # slice order is unchanged
-        self._update_deblend_label_map(new_label_map)
+        self._update_deblend_label_map(deblend_label_map, new_label_map)
 
     def keep_label(self, label, relabel=False):
         """

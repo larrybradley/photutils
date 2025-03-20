@@ -316,7 +316,7 @@ def deblend_sources(data, segment_img, npixels, *, labels=None, nlevels=32,
                                                           relabel_map)
 
     segm_img = object.__new__(SegmentationImage)
-    segm_img._data = segm_deblended
+    segm_img._set_data(segm_deblended)
     segm_img._deblend_label_map = deblend_label_map
 
     # store the warnings in the output SegmentationImage info attribute
