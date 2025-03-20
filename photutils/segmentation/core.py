@@ -66,6 +66,7 @@ class SegmentationImage:
         Slice the segmentation image, returning a new SegmentationImage
         object.
         """
+        # check for tuple of 2D slice objects
         if (isinstance(key, tuple) and len(key) == 2
                 and all(isinstance(key[i], slice)
                         and (key[i].start != key[i].stop) for i in (0, 1))):
@@ -1204,6 +1205,10 @@ class SegmentationImage:
         """
         A list of `Shapely <https://shapely.readthedocs.io/en/stable/>`_
         polygons representing each source segment.
+
+        This property requires the rasterio and shapely packages to
+        be installed. If they are not installed, then a list of `None`
+        values is returned.
         """
         if not HAS_RASTERIO or not HAS_SHAPELY:
             warnings.warn('The rasterio and shapely packages are required '
@@ -1241,8 +1246,9 @@ class SegmentationImage:
 
         Notes
         -----
-        This method requires the regions and shapely packages to be
-        installed.
+        This method requires the rasterio, shapely, and regions packages
+        to be installed. If they are not installed, then a list of
+        `None` values is returned.
 
         The polygons can be written to a file using the
         :meth:`regions.Regions.write` method.
@@ -1285,6 +1291,12 @@ class SegmentationImage:
         patches : list of `~matplotlib.patches.Polygon`
             A list of matplotlib polygon patches for the source
             segments.
+
+        Notes
+        -----
+        This method requires the rasterio, shapely, and matplotlib
+        packages to be installed. If they are not installed, then a list
+        of `None` values is returned.
         """
         from matplotlib.patches import Polygon
 
@@ -1337,6 +1349,12 @@ class SegmentationImage:
             A list of matplotlib polygon patches for the plotted
             polygons. The patches can be used, for example, when adding
             a plot legend.
+
+        Notes
+        -----
+        This method requires the rasterio, shapely, and matplotlib
+        packages to be installed. If they are not installed, then a list
+        of `None` values is returned.
 
         Examples
         --------
