@@ -119,52 +119,6 @@ class SegmentationImage:
 
         return segments
 
-    @lazyproperty
-    def deblended_labels(self):
-        """
-        A sorted 1D array of deblended label numbers.
-
-        The list will be empty if deblending has not been performed or
-        if no sources were deblended.
-        """
-        if len(self._deblend_label_map) == 0:
-            return np.array([], dtype=self._data.dtype)
-        return np.sort(np.concatenate(list(self._deblend_label_map.values())))
-
-    @lazyproperty
-    def deblended_labels_map(self):
-        """
-        A dictionary mapping deblended label numbers to the original
-        parent label numbers.
-
-        The keys are the deblended label numbers and the values are the
-        original parent label numbers. Only deblended sources are
-        included in the dictionary.
-
-        The dictionary will be empty if deblending has not been
-        performed or if no sources were deblended.
-        """
-        inverse_map = {}
-        for key, values in self._deblend_label_map.items():
-            for value in values:
-                inverse_map[value] = key
-        return inverse_map
-
-    @lazyproperty
-    def deblended_labels_inverse_map(self):
-        """
-        A dictionary mapping the original parent label numbers to the
-        deblended label numbers.
-
-        The keys are the original parent label numbers and the values
-        are the deblended label numbers. Only deblended sources are
-        included in the dictionary.
-
-        The dictionary will be empty if deblending has not been
-        performed or if no sources were deblended.
-        """
-        return self._deblend_label_map
-
     @property
     def _lazyproperties(self):
         """
@@ -198,6 +152,17 @@ class SegmentationImage:
         self.__dict__['_inverse_indices'] = inverse_indices
         self.__dict__['areas'] = counts
         self.__dict__['_deblend_label_map'] = {}  # reset deblended labels
+
+    def copy(self):
+        """
+        Return a deep copy of this object.
+
+        Returns
+        -------
+        result : `SegmentationImage`
+            A deep copy of this object.
+        """
+        return deepcopy(self)
 
     @property
     def data(self):
@@ -307,6 +272,69 @@ class SegmentationImage:
         return self.get_index(labels)
 
     @lazyproperty
+    def deblended_labels(self):
+        """
+        A sorted 1D array of deblended label numbers.
+
+        The list will be empty if deblending has not been performed or
+        if no sources were deblended.
+        """
+        if len(self._deblend_label_map) == 0:
+            return np.array([], dtype=self._data.dtype)
+        return np.sort(np.concatenate(list(self._deblend_label_map.values())))
+
+    @lazyproperty
+    def deblended_labels_map(self):
+        """
+        A dictionary mapping deblended label numbers to the original
+        parent label numbers.
+
+        The keys are the deblended label numbers and the values are the
+        original parent label numbers. Only deblended sources are
+        included in the dictionary.
+
+        The dictionary will be empty if deblending has not been
+        performed or if no sources were deblended.
+        """
+        inverse_map = {}
+        for key, values in self._deblend_label_map.items():
+            for value in values:
+                inverse_map[value] = key
+        return inverse_map
+
+    @lazyproperty
+    def deblended_labels_inverse_map(self):
+        """
+        A dictionary mapping the original parent label numbers to the
+        deblended label numbers.
+
+        The keys are the original parent label numbers and the values
+        are the deblended label numbers. Only deblended sources are
+        included in the dictionary.
+
+        The dictionary will be empty if deblending has not been
+        performed or if no sources were deblended.
+        """
+        return self._deblend_label_map
+
+    def _update_deblend_label_map(self, deblend_label_map, relabel_map):
+        """
+        Update the deblended label map based on a relabel map.
+
+        Parameters
+        ----------
+        deblend_label_map : dict
+            A dictionary mapping the original parent label numbers to the
+            child (deblended) label numbers.
+
+        relabel_map : dict
+            New label maps due to relabeling.
+        """
+        # child_labels are the deblended labels
+        for parent_label, child_labels in deblend_label_map.items():
+            self._deblend_label_map[parent_label] = relabel_map[child_labels]
+
+    @lazyproperty
     def slices(self):
         """
         A list of tuples, where each tuple contains two slices
@@ -404,17 +432,6 @@ class SegmentationImage:
         return np.array(sorted(set(range(self.max_label + 1))
                                .difference(np.insert(self.labels, 0, 0))))
 
-    def copy(self):
-        """
-        Return a deep copy of this object.
-
-        Returns
-        -------
-        result : `SegmentationImage`
-            A deep copy of this object.
-        """
-        return deepcopy(self)
-
     def check_label(self, label):
         """
         Check that the input label is a valid label number within the
@@ -462,123 +479,6 @@ class SegmentationImage:
             if len(bad_labels) == 1:
                 raise ValueError(f'label {bad_labels} is invalid')
             raise ValueError(f'labels {bad_labels} are invalid')
-
-    def _make_cmap(self, ncolors, background_color='#000000ff', seed=None):
-        """
-        Define a matplotlib colormap consisting of (random) muted
-        colors.
-
-        This is useful for plotting the segmentation array.
-
-        Parameters
-        ----------
-        ncolors : int
-            The number of the colors in the colormap.
-
-        background_color : Matplotlib color, optional
-            The color of the first color in the colormap.
-            The color may be specified using any of
-            the `Matplotlib color formats
-            <https://matplotlib.org/stable/tutorials/colors/colors.html>`_.
-            This color will be used as the background color (label = 0)
-            when plotting the segmentation image. The default color is
-            black with alpha=1.0 ('#000000ff').
-
-        seed : int, optional
-            A seed to initialize the `numpy.random.BitGenerator`. If
-            `None`, then fresh, unpredictable entropy will be pulled
-            from the OS. Separate function calls with the same ``seed``
-            will generate the same colormap.
-
-        Returns
-        -------
-        cmap : `matplotlib.colors.ListedColormap`
-            The matplotlib colormap with colors in RGBA format.
-        """
-        if self.nlabels == 0:
-            return None
-
-        from matplotlib import colors
-
-        cmap = make_random_cmap(ncolors, seed=seed)
-
-        if background_color is not None:
-            cmap.colors[0] = colors.to_rgba(background_color)
-
-        return cmap
-
-    def make_cmap(self, background_color='#000000ff', seed=None):
-        """
-        Define a matplotlib colormap consisting of (random) muted
-        colors.
-
-        This is useful for plotting the segmentation array.
-
-        Parameters
-        ----------
-        background_color : Matplotlib color, optional
-            The color of the first color in the colormap.
-            The color may be specified using any of
-            the `Matplotlib color formats
-            <https://matplotlib.org/stable/tutorials/colors/colors.html>`_.
-            This color will be used as the background color (label = 0)
-            when plotting the segmentation image. The default color is
-            black with alpha=1.0 ('#000000ff').
-
-        seed : int, optional
-            A seed to initialize the `numpy.random.BitGenerator`. If
-            `None`, then fresh, unpredictable entropy will be pulled
-            from the OS. Separate function calls with the same ``seed``
-            will generate the same colormap.
-
-        Returns
-        -------
-        cmap : `matplotlib.colors.ListedColormap`
-            The matplotlib colormap with colors in RGBA format.
-        """
-        return self._make_cmap(self.max_label + 1,
-                               background_color=background_color,
-                               seed=seed)
-
-    def reset_cmap(self, seed=None):
-        """
-        Reset the colormap (`cmap` attribute) to a new random colormap.
-
-        Parameters
-        ----------
-        seed : int, optional
-            A seed to initialize the `numpy.random.BitGenerator`. If
-            `None`, then fresh, unpredictable entropy will be pulled
-            from the OS. Separate function calls with the same ``seed``
-            will generate the same colormap.
-        """
-        self.cmap = self.make_cmap(background_color='#000000ff', seed=seed)
-
-    @lazyproperty
-    def cmap(self):
-        """
-        A matplotlib colormap consisting of (random) muted colors.
-
-        This is useful for plotting the segmentation array.
-        """
-        return self.make_cmap(background_color='#000000ff', seed=0)
-
-    def _update_deblend_label_map(self, deblend_label_map, relabel_map):
-        """
-        Update the deblended label map based on a relabel map.
-
-        Parameters
-        ----------
-        deblend_label_map : dict
-            A dictionary mapping the original parent label numbers to the
-            child (deblended) label numbers.
-
-        relabel_map : dict
-            New label maps due to relabeling.
-        """
-        # child_labels are the deblended labels
-        for parent_label, child_labels in deblend_label_map.items():
-            self._deblend_label_map[parent_label] = relabel_map[child_labels]
 
     def reassign_label(self, label, new_label, relabel=False):
         """
@@ -1482,6 +1382,106 @@ class SegmentationImage:
             patches = list(patches)
 
         return patches
+
+    def _make_cmap(self, ncolors, background_color='#000000ff', seed=None):
+        """
+        Define a matplotlib colormap consisting of (random) muted
+        colors.
+
+        This is useful for plotting the segmentation array.
+
+        Parameters
+        ----------
+        ncolors : int
+            The number of the colors in the colormap.
+
+        background_color : Matplotlib color, optional
+            The color of the first color in the colormap.
+            The color may be specified using any of
+            the `Matplotlib color formats
+            <https://matplotlib.org/stable/tutorials/colors/colors.html>`_.
+            This color will be used as the background color (label = 0)
+            when plotting the segmentation image. The default color is
+            black with alpha=1.0 ('#000000ff').
+
+        seed : int, optional
+            A seed to initialize the `numpy.random.BitGenerator`. If
+            `None`, then fresh, unpredictable entropy will be pulled
+            from the OS. Separate function calls with the same ``seed``
+            will generate the same colormap.
+
+        Returns
+        -------
+        cmap : `matplotlib.colors.ListedColormap`
+            The matplotlib colormap with colors in RGBA format.
+        """
+        if self.nlabels == 0:
+            return None
+
+        from matplotlib import colors
+
+        cmap = make_random_cmap(ncolors, seed=seed)
+
+        if background_color is not None:
+            cmap.colors[0] = colors.to_rgba(background_color)
+
+        return cmap
+
+    def make_cmap(self, background_color='#000000ff', seed=None):
+        """
+        Define a matplotlib colormap consisting of (random) muted
+        colors.
+
+        This is useful for plotting the segmentation array.
+
+        Parameters
+        ----------
+        background_color : Matplotlib color, optional
+            The color of the first color in the colormap.
+            The color may be specified using any of
+            the `Matplotlib color formats
+            <https://matplotlib.org/stable/tutorials/colors/colors.html>`_.
+            This color will be used as the background color (label = 0)
+            when plotting the segmentation image. The default color is
+            black with alpha=1.0 ('#000000ff').
+
+        seed : int, optional
+            A seed to initialize the `numpy.random.BitGenerator`. If
+            `None`, then fresh, unpredictable entropy will be pulled
+            from the OS. Separate function calls with the same ``seed``
+            will generate the same colormap.
+
+        Returns
+        -------
+        cmap : `matplotlib.colors.ListedColormap`
+            The matplotlib colormap with colors in RGBA format.
+        """
+        return self._make_cmap(self.max_label + 1,
+                               background_color=background_color,
+                               seed=seed)
+
+    def reset_cmap(self, seed=None):
+        """
+        Reset the colormap (`cmap` attribute) to a new random colormap.
+
+        Parameters
+        ----------
+        seed : int, optional
+            A seed to initialize the `numpy.random.BitGenerator`. If
+            `None`, then fresh, unpredictable entropy will be pulled
+            from the OS. Separate function calls with the same ``seed``
+            will generate the same colormap.
+        """
+        self.cmap = self.make_cmap(background_color='#000000ff', seed=seed)
+
+    @lazyproperty
+    def cmap(self):
+        """
+        A matplotlib colormap consisting of (random) muted colors.
+
+        This is useful for plotting the segmentation array.
+        """
+        return self.make_cmap(background_color='#000000ff', seed=0)
 
     def imshow(self, ax=None, figsize=None, dpi=None, cmap=None, alpha=None):
         """
