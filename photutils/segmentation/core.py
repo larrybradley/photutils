@@ -227,7 +227,7 @@ class SegmentationImage:
 
     def get_index(self, label):
         """
-        Find the index of the input ``label``.
+        Find the index of the input ``label`` in the `labels` array.
 
         Parameters
         ----------
@@ -250,7 +250,7 @@ class SegmentationImage:
 
     def get_indices(self, labels):
         """
-        Find the indices of the input ``labels``.
+        Find the indices of the input ``labels`` in the `labels` array.
 
         Parameters
         ----------
