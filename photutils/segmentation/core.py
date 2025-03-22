@@ -356,12 +356,19 @@ class SegmentationImage:
                             iymin=slc[0].start, iymax=slc[0].stop)
                 for slc in self.slices]
 
-    @lazyproperty
+    @property
     def background_area(self):
         """
         The area (in pixel**2) of the background (label=0) region.
         """
         return self._data.size - np.count_nonzero(self._data)
+
+
+    def _calc_areas(self):
+        areas = []
+        for label, slices in zip(self.labels, self.slices, strict=True):
+            areas.append(np.count_nonzero(self._data[slices] == label))
+        return np.array(areas)
 
     @property
     def areas(self):
@@ -375,7 +382,27 @@ class SegmentationImage:
         """
         # this method is explicitly defined only to document the
         # areas property
-        return self.__dict__['areas']
+        # return self._calc_areas() if 'areas' not in self.__dict__ else
+#     self.__dict__['areas']
+
+        return self._calc_areas()
+        #if self.__dict__['areas'] is None:
+        #    return self._calc_areas()
+        #return self.__dict__.get('areas', self._calc_areas())
+
+
+        #return self.__dict__['areas']
+
+    @property
+    def areas2(self):
+        arr = self.data
+        labels, counts = np.unique(arr[arr != 0], return_counts=True)
+        return counts
+
+    @property
+    def areas3(self):
+        arr = self.data
+        return np.bincount(arr[arr != 0])[1:]  # ignore background (label=0)
 
     def get_area(self, label):
         """
