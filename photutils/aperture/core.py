@@ -509,7 +509,7 @@ class PixelAperture(Aperture):
         return good_mask & (segm == 0)
 
     def do_photometry(self, data, error=None, mask=None, method='exact',
-                      subpixels=5, segment_img=None):
+                      subpixels=5, segment_img=None, return_info=False):
         """
         Perform aperture photometry on the input data.
 
@@ -569,6 +569,7 @@ class PixelAperture(Aperture):
             aperture center are masked. This is useful for masking
             neighboring sources in the data (as defined by the
             segmentation image) that are located within the aperture.
+
 
         Returns
         -------
@@ -632,6 +633,8 @@ class PixelAperture(Aperture):
         aperture_sums = []
         aperture_sum_errs = []
         good_masks = []
+        unmasked_area_pre_segmask = []
+        unmasked_area = []
         for label, apermask in zip(labels, apermasks, strict=True):
             (slc_large,
              aper_weights,
@@ -643,11 +646,19 @@ class PixelAperture(Aperture):
                 aperture_sum_errs.append(np.nan)
                 continue
 
+            if return_info:
+                # unmasked area before applying the segmentation mask
+                area = aper_weights[good_mask].sum()
+                unmasked_area_pre_segmask.append(area)
+
             if segment_img is not None:
                 segment_cutout = segment_img.data[slc_large]
                 good_mask = self._make_total_good_mask(good_mask,
                                                        segment_cutout,
                                                        label)
+                if return_info:
+                    # unmasked area after applying the segmentation mask
+                    unmasked_area.append(aper_weights[good_mask].sum())
 
             with warnings.catch_warnings():
                 # ignore multiplication with non-finite data values
@@ -661,8 +672,10 @@ class PixelAperture(Aperture):
                                 * aper_weights)[good_mask]
                     aperture_sum_errs.append(np.sqrt(variance.sum()))
 
+            # TEMP
             good_masks.append(good_mask)
 
+        # TEMP
         self.good_masks = good_masks
 
         aperture_sums = np.array(aperture_sums)
@@ -672,6 +685,20 @@ class PixelAperture(Aperture):
         if unit is not None:
             aperture_sums <<= unit
             aperture_sum_errs <<= unit
+
+        if return_info:
+            if not unmasked_area:
+                unmasked_area = unmasked_area_pre_segmask
+
+            unmasked_area_pre_segmask = np.array(unmasked_area_pre_segmask)
+            unmasked_area = np.array(unmasked_area)
+
+            info = {}
+            info['aperture_area'] = self.area
+            info['unmasked_area_pre_segmask'] = unmasked_area_pre_segmask
+            info['unmasked_area'] = unmasked_area
+            info['masked_area'] = self.area - unmasked_area
+            return aperture_sums, aperture_sum_errs, info
 
         return aperture_sums, aperture_sum_errs
 
