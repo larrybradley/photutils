@@ -14,6 +14,7 @@ from astropy.coordinates import SkyCoord
 from astropy.utils import lazyproperty
 
 from photutils.aperture.bounding_box import BoundingBox
+from photutils.utils._round import py2intround
 from photutils.utils._wcs_helpers import _pixel_scale_angle_at_skycoord
 
 __all__ = ['Aperture', 'PixelAperture', 'SkyAperture']
@@ -455,8 +456,24 @@ class PixelAperture(Aperture):
         msg = 'Needs to be implemented in a subclass'
         raise NotImplementedError(msg)
 
+    def _get_aperture_labels(self, segment_img):
+        # get label(s) at the aperture center(s)
+
+        # always round away from zero for consistency
+        x = py2intround(self.positions[0])
+        y = py2intround(self.positions[1])
+
+        condition = ((0 <= x < segment_img.shape[1])
+                     & (0 <= y < segment_img.shape[0]))
+        return np.where(condition, segment_img.data[y, x], 0)
+
+    def _make_total_pixel_mask(self, pixel_mask, segment_cutout, label):
+        segm = segment_cutout.copy()
+        segm[segm == label] = 0
+        return pixel_mask & (segm == 0)
+
     def do_photometry(self, data, error=None, mask=None, method='exact',
-                      subpixels=5):
+                      subpixels=5, segment_img=None):
         """
         Perform aperture photometry on the input data.
 
@@ -509,6 +526,14 @@ class PixelAperture(Aperture):
             into ``subpixels**2`` subpixels. This keyword is ignored
             unless ``method='subpixel'``.
 
+        segment_img : `~photutils.segmentation.SegmentationImage`, optional
+            A segmentation image with the same shape as the input
+            ``data`` to be used for advanced masking. Any non-zero
+            labels in the segmentation image that are not at the
+            aperture center are masked. This is useful for masking
+            neighboring sources in the data (as defined by the
+            segmentation image) that are located within the aperture.
+
         Returns
         -------
         aperture_sums : `~numpy.ndarray` or `~astropy.units.Quantity`
@@ -549,6 +574,12 @@ class PixelAperture(Aperture):
                    'the same units')
             raise ValueError(msg)
 
+        if segment_img is not None:
+            labels = self._get_aperture_labels(segment_img)
+        else:
+            labels = np.zeros(self.shape, dtype=int)
+        labels = np.atleast_1d(labels)
+
         # strip data and error units for performance
         unit = unit.pop()
         if unit is not None:
@@ -564,7 +595,8 @@ class PixelAperture(Aperture):
 
         aperture_sums = []
         aperture_sum_errs = []
-        for apermask in apermasks:
+        pixel_masks = []
+        for label, apermask in zip(labels, apermasks, strict=True):
             (slc_large,
              aper_weights,
              pixel_mask) = apermask._get_overlap_cutouts(data.shape, mask=mask)
@@ -575,6 +607,12 @@ class PixelAperture(Aperture):
                 aperture_sum_errs.append(np.nan)
                 continue
 
+            if segment_img is not None:
+                segment_cutout = segment_img.data[slc_large]
+                pixel_mask = self._make_total_pixel_mask(pixel_mask,
+                                                         segment_cutout,
+                                                         label)
+
             with warnings.catch_warnings():
                 # ignore multiplication with non-finite data values
                 warnings.simplefilter('ignore', RuntimeWarning)
@@ -583,8 +621,13 @@ class PixelAperture(Aperture):
                 aperture_sums.append(values.sum())
 
                 if error is not None:
-                    variance = (error[slc_large]**2 * aper_weights)[pixel_mask]
+                    variance = (error[slc_large]**2
+                                * aper_weights)[pixel_mask]
                     aperture_sum_errs.append(np.sqrt(variance.sum()))
+
+            pixel_masks.append(pixel_mask)
+
+        self.pixel_masks = pixel_masks
 
         aperture_sums = np.array(aperture_sums)
         aperture_sum_errs = np.array(aperture_sum_errs)
