@@ -457,8 +457,23 @@ class PixelAperture(Aperture):
         raise NotImplementedError(msg)
 
     def _get_aperture_labels(self, segment_img):
-        # get label(s) at the aperture center(s)
+        """
+        Get the label(s) at the aperture center(s) from a
+        `~photutils.segmentation.SegmentationImage`.
 
+        Parameters
+        ----------
+        segment_img : `~photutils.segmentation.SegmentationImage`
+            A segmentation image with the same shape as the input
+            ``data``.
+
+        Returns
+        -------
+        labels : `~numpy.ndarray`
+            The label(s) at the aperture center(s). If the aperture is
+            scalar then a single label is returned, otherwise a list
+            of labels is returned.
+        """
         # always round away from zero for consistency
         x = py2intround(self.positions[0])
         y = py2intround(self.positions[1])
@@ -468,6 +483,27 @@ class PixelAperture(Aperture):
         return np.where(condition, segment_img.data[y, x], 0)
 
     def _make_total_good_mask(self, good_mask, segment_cutout, label):
+        """
+        Create a mask that excludes non-zero pixels in the segmentation
+        image that are not at the aperture center.
+
+        Parameters
+        ----------
+        good_mask : `~numpy.ndarray` (bool)
+            The good mask from the aperture mask.
+
+        segment_cutout : `~numpy.ndarray`
+            The cutout of the segmentation image that overlaps the
+            aperture.
+
+        label : int
+            The label at the aperture center.
+
+        Returns
+        -------
+        good_mask : `~numpy.ndarray` (bool)
+            The updated good mask.
+        """
         segm = segment_cutout.copy()
         segm[segm == label] = 0
         return good_mask & (segm == 0)
