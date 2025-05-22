@@ -252,15 +252,17 @@ class ApertureMask:
         aper_weights: 2D float `~numpy.ndarray`
             The cutout aperture mask weights for the overlap.
 
-        pixel_mask: 2D bool `~numpy.ndarray`
-            The cutout pixel mask for the overlap.
+        good_mask: 2D bool `~numpy.ndarray`
+            The cutout pixel mask for the overlap. True indicates a
+            good pixel (i.e., not masked).
 
         Notes
         -----
         This method is separate from ``get_values`` to facilitate
-        applying the same slices, aper_weights, and pixel_mask to
-        multiple associated arrays (e.g., data and error arrays). It is
-        used in this way by the `PixelAperture.do_photometry` method.
+        applying the same ``slices_large``, ``aper_weights``,
+        and ``good_mask`` to multiple associated arrays (e.g.,
+        data and error arrays). It is used in this way by the
+        `PixelAperture.do_photometry` method.
         """
         if mask is not None and mask.shape != shape:
             msg = 'mask and data must have the same shape'
@@ -271,12 +273,17 @@ class ApertureMask:
             return None, None, None
 
         aper_weights = self.data[slc_small]
-        pixel_mask = (aper_weights > 0)  # good pixels
 
+        # Define a boolean mask of good pixel values. A mask is needed
+        # in addition to the aperture weights to mask out non-finite data
+        # values outside of the aperture mask (aperture weights = 0), but
+        # are within the aperture bounding box (e.g, 0 * np.nan = np.nan,
+        # 0 * np.inf = np.nan, etc.).
+        good_mask = (aper_weights > 0)  # True=good pixels
         if mask is not None:
-            pixel_mask &= ~mask[slc_large]
+            good_mask &= ~mask[slc_large]
 
-        return slc_large, aper_weights, pixel_mask
+        return slc_large, aper_weights, good_mask
 
     def get_values(self, data, mask=None):
         """
@@ -304,7 +311,7 @@ class ApertureMask:
             input ``data``, the result will be an empty array with shape
             (0,).
         """
-        slc_large, aper_weights, pixel_mask = self._get_overlap_cutouts(
+        slc_large, aper_weights, good_mask = self._get_overlap_cutouts(
             data.shape, mask=mask)
 
         if slc_large is None:
@@ -313,6 +320,4 @@ class ApertureMask:
         # ignore multiplication with non-finite data values
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', RuntimeWarning)
-            # pixel_mask is used so that pixels value where data = 0 and
-            # aper_weights != 0 are still returned
-            return (data[slc_large] * aper_weights)[pixel_mask]
+            return (data[slc_large] * aper_weights)[good_mask]

@@ -467,10 +467,10 @@ class PixelAperture(Aperture):
                      & (0 <= y < segment_img.shape[0]))
         return np.where(condition, segment_img.data[y, x], 0)
 
-    def _make_total_pixel_mask(self, pixel_mask, segment_cutout, label):
+    def _make_total_good_mask(self, good_mask, segment_cutout, label):
         segm = segment_cutout.copy()
         segm[segm == label] = 0
-        return pixel_mask & (segm == 0)
+        return good_mask & (segm == 0)
 
     def do_photometry(self, data, error=None, mask=None, method='exact',
                       subpixels=5, segment_img=None):
@@ -595,11 +595,11 @@ class PixelAperture(Aperture):
 
         aperture_sums = []
         aperture_sum_errs = []
-        pixel_masks = []
+        good_masks = []
         for label, apermask in zip(labels, apermasks, strict=True):
             (slc_large,
              aper_weights,
-             pixel_mask) = apermask._get_overlap_cutouts(data.shape, mask=mask)
+             good_mask) = apermask._get_overlap_cutouts(data.shape, mask=mask)
 
             # no overlap of the aperture with the data
             if slc_large is None:
@@ -609,25 +609,25 @@ class PixelAperture(Aperture):
 
             if segment_img is not None:
                 segment_cutout = segment_img.data[slc_large]
-                pixel_mask = self._make_total_pixel_mask(pixel_mask,
-                                                         segment_cutout,
-                                                         label)
+                good_mask = self._make_total_good_mask(good_mask,
+                                                       segment_cutout,
+                                                       label)
 
             with warnings.catch_warnings():
                 # ignore multiplication with non-finite data values
                 warnings.simplefilter('ignore', RuntimeWarning)
 
-                values = (data[slc_large] * aper_weights)[pixel_mask]
+                values = (data[slc_large] * aper_weights)[good_mask]
                 aperture_sums.append(values.sum())
 
                 if error is not None:
                     variance = (error[slc_large]**2
-                                * aper_weights)[pixel_mask]
+                                * aper_weights)[good_mask]
                     aperture_sum_errs.append(np.sqrt(variance.sum()))
 
-            pixel_masks.append(pixel_mask)
+            good_masks.append(good_mask)
 
-        self.pixel_masks = pixel_masks
+        self.good_masks = good_masks
 
         aperture_sums = np.array(aperture_sums)
         aperture_sum_errs = np.array(aperture_sum_errs)
