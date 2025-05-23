@@ -632,13 +632,17 @@ class PixelAperture(Aperture):
 
         aperture_sums = []
         aperture_sum_errs = []
-        good_masks = []
+        aperture_mask_area = []
+        aperture_overlap_areas = []
+        good_masks = []  # TEMP
         unmasked_area_pre_segmask = []
         unmasked_area = []
         for label, apermask in zip(labels, apermasks, strict=True):
             (slc_large,
              aper_weights,
              good_mask) = apermask._get_overlap_cutouts(data.shape, mask=mask)
+
+            aperture_mask_area.append(apermask.data.sum())
 
             # no overlap of the aperture with the data
             if slc_large is None:
@@ -647,6 +651,7 @@ class PixelAperture(Aperture):
                 continue
 
             if return_info:
+                aperture_overlap_areas.append(aper_weights.sum())
                 # unmasked area before applying the segmentation mask
                 area = aper_weights[good_mask].sum()
                 unmasked_area_pre_segmask.append(area)
@@ -690,14 +695,23 @@ class PixelAperture(Aperture):
             if not unmasked_area:
                 unmasked_area = unmasked_area_pre_segmask
 
+            aperture_overlap_area = np.array(aperture_overlap_areas)
             unmasked_area_pre_segmask = np.array(unmasked_area_pre_segmask)
             unmasked_area = np.array(unmasked_area)
+            aperture_mask_area = np.array(aperture_mask_area)
 
             info = {}
-            info['aperture_area'] = self.area
+            info['exact_aperture_area'] = self.area
+            info['aperture_mask_area'] = aperture_mask_area
+            info['aperture_overlap_area'] = aperture_overlap_area
+
             info['unmasked_area_pre_segmask'] = unmasked_area_pre_segmask
             info['unmasked_area'] = unmasked_area
-            info['masked_area'] = self.area - unmasked_area
+
+            # TODO: this does not, but should *include* the masked area
+            # from partial data overlap (e.g., edge)
+            info['overlap_masked_area'] = aperture_overlap_area - unmasked_area
+            info['total_masked_area'] = aperture_mask_area - unmasked_area
             return aperture_sums, aperture_sum_errs, info
 
         return aperture_sums, aperture_sum_errs
