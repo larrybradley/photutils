@@ -504,8 +504,9 @@ class PixelAperture(Aperture):
         good_mask : `~numpy.ndarray` (bool)
             The updated good mask.
         """
-        segm = segment_cutout.copy()
-        segm[segm == label] = 0
+        #segm = segment_cutout.copy()
+        #segm[segm == label] = 0
+        segm_mask = (segment_cutout != 0) & (segment_cutout != label)
         return good_mask & (segm == 0)
 
     def do_photometry(self, data, error=None, mask=None, method='exact',
