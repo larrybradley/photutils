@@ -4,6 +4,7 @@ This module defines classes to estimate the 2D background and background
 RMS in an image.
 """
 
+import concurrent.futures
 import warnings
 
 import astropy.units as u
@@ -467,48 +468,74 @@ class Background2D:
 
         return data
 
+    def _compute_single_box_stats(self, box_data):
+        """
+        Compute background, background RMS, and ngood for a single box.
+        """
+        bkg = self.bkg_estimator(box_data, axis=-1)
+        bkgrms = self.bkgrms_estimator(box_data, axis=-1)
+        ngood = np.count_nonzero(~np.isnan(box_data), axis=-1)
+        if ngood <= self._good_npixels_threshold:
+            bkg = np.float32(np.nan)
+            bkgrms = np.float32(np.nan)
+        return bkg, bkgrms, ngood
+
+    def _compute_box_statistics_parallel(self, data, axis=None,
+                                         max_workers=None):
+        """
+        Compute the background and background RMS statistics in each box
+        in parallel.
+        """
+        ny, nx, nboxpix = data.shape
+        bkg = np.empty((ny, nx), dtype=np.float32)
+        bkgrms = np.empty((ny, nx), dtype=np.float32)
+        ngood = np.empty((ny, nx), dtype=np.float32)
+        # Prepare arguments for each box
+        args = [(data[iy, ix, :],) for iy in range(ny) for ix in range(nx)]
+        indices = [(iy, ix) for iy in range(ny) for ix in range(nx)]
+        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+            results = list(executor.map(lambda arg: Background2D._compute_single_box_stats_static(*arg, self.bkg_estimator, self.bkgrms_estimator, self._good_npixels_threshold), args))
+        for (iy, ix), (b, r, n) in zip(indices, results, strict=False):
+            bkg[iy, ix] = b
+            bkgrms[iy, ix] = r
+            ngood[iy, ix] = n
+        return bkg, bkgrms, ngood
+
+    @staticmethod
+    def _compute_single_box_stats_static(box_data, bkg_estimator,
+                                         bkgrms_estimator,
+                                         good_npixels_threshold):
+        bkg = bkg_estimator(box_data, axis=-1)
+        bkgrms = bkgrms_estimator(box_data, axis=-1)
+        ngood = np.count_nonzero(~np.isnan(box_data), axis=-1)
+        if ngood <= good_npixels_threshold:
+            bkg = np.float32(np.nan)
+            bkgrms = np.float32(np.nan)
+        return bkg, bkgrms, ngood
+
     def _compute_box_statistics(self, data, axis=None):
         """
         Compute the background and background RMS statistics in each
         box.
 
-        Parameters
-        ----------
-        data : `~numpy.ndarray`
-            The 4D array of box data.
-
-        axis : int or tuple of int, optional
-            The axis or axes along which to compute the statistics.
-
-        Returns
-        -------
-        bkg : 2D `~numpy.ndarray` or float
-            The background statistics in each box.
-
-        bkgrms : 2D `~numpy.ndarray` or float
-            The background RMS statistics in each box.
+        Uses parallelization for large arrays.
         """
         data = self._sigmaclip_boxes(data, axis=axis)
-
-        # make 2D arrays of the box statistics
+        # Use parallel version if data is large
+        if data.ndim == 3 and data.shape[0] * data.shape[1] > 1000:
+            return self._compute_box_statistics_parallel(data, axis=axis)
+        # Fallback to serial version for small arrays or 1D
         bkg = self.bkg_estimator(data, axis=axis)
         bkgrms = self.bkgrms_estimator(data, axis=axis)
-
-        # mask boxes with too few unmasked pixels
         ngood = np.count_nonzero(~np.isnan(data), axis=axis)
         box_mask = ngood <= self._good_npixels_threshold
-
         if np.ndim(bkg) == 0:
-            if box_mask:  # single corner box
-                # np.nan is float64; use np.float32 to prevent numpy from
-                # promoting the output data dtype to float64 if the
-                # input data is float32
+            if box_mask:
                 bkg = np.float32(np.nan)
                 bkgrms = np.float32(np.nan)
         else:
             bkg[box_mask] = np.nan
             bkgrms[box_mask] = np.nan
-
         return bkg, bkgrms, ngood
 
     def _calculate_stats(self):
