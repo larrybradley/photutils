@@ -548,3 +548,23 @@ class TestBackground2D:
         bkgim = bkg.background
         assert bkgim.shape == shape
         assert_equal(data, data_orig)
+
+    def test_box_size_equals_data_shape(self):
+        # Create a simple 2D array
+        data = np.arange(25*25, dtype=float).reshape((25, 25))
+        data_orig = data.copy()
+        box_size = data.shape
+        bkg2d = Background2D(data, box_size)
+        bkgimg = bkg2d.background
+        # The background mesh should be a single value (the median of data)
+        assert bkg2d.background_mesh.shape == (1, 1)
+        np.testing.assert_allclose(bkg2d.background_mesh, np.median(data))
+        # The background image should be constant and equal to the median
+        np.testing.assert_allclose(bkg2d.background, np.median(data))
+        # The background RMS mesh should be a single value
+        assert bkg2d.background_rms_mesh.shape == (1, 1)
+        # The npixels_mesh should be a single value equal to the number of pixels
+        assert bkg2d.npixels_mesh.shape == (1, 1)
+        assert bkg2d.npixels_mesh[0, 0] == data.size
+        # Check that the input data was not modified
+        np.testing.assert_array_equal(data, data_orig)

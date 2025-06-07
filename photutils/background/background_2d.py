@@ -550,7 +550,13 @@ class Background2D:
         # An explicit copy of the data array is needed to avoid
         # modifying the original data array if the shape of the data
         # array is (y1, x1) (i.e., box_size = data.shape).
-        core = reshape_as_blocks(self._data[:y1, :x1].copy(), self.box_size)
+        if tuple(self.box_size) == tuple(self._data.shape):
+            print('making a copy of the data array to avoid modifying')
+            core_data = self._data[:y1, :x1].copy()
+        else:
+            print('reshaping the data array to avoid making a copy')
+            core_data = self._data[:y1, :x1]
+        core = reshape_as_blocks(core_data, self.box_size)
         core_mask = reshape_as_blocks(mask[:y1, :x1], self.box_size)
         core = core.reshape((*nboxes, -1))
         core_mask = core_mask.reshape((*nboxes, -1))
