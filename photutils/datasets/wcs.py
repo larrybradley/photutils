@@ -6,6 +6,7 @@ This module provides tools for making example WCS objects.
 import astropy.units as u
 import numpy as np
 from astropy import coordinates as coord
+from astropy.coordinates import SkyCoord
 from astropy.modeling import models
 from astropy.wcs import WCS
 
@@ -14,7 +15,8 @@ __all__ = ['make_gwcs', 'make_wcs']
 __doctest_requires__ = {'make_gwcs': ['gwcs']}
 
 
-def make_wcs(shape, galactic=False):
+def make_wcs(shape, skycoord=SkyCoord(197.8925, -1.36555556, unit='deg'),
+             scale=0.1*u.arcsec, pa=30*u.deg, galactic=False):
     """
     Create a simple celestial `~astropy.wcs.WCS` object in either the
     ICRS or Galactic coordinate frame.
@@ -59,15 +61,24 @@ def make_wcs(shape, galactic=False):
         (197.89278975, -1.36561284)>
     """
     wcs = WCS(naxis=2)
-    rho = np.pi / 3.0
-    scale = 0.1 / 3600.0  # 0.1 arcsec/pixel in deg/pix
+
+    # PA=0  # straight up, 90 degrees CCW from the x-axis
+    rho = 90 - pa.to_value(u.rad)  # position angle in radians
+    # rho = np.pi / 3.0
+
+    # scale = 0.1 / 3600.0  # 0.1 arcsec/pixel in deg/pix
+    scale = scale.to_value(u.deg)
 
     wcs.pixel_shape = shape
     wcs.wcs.crpix = [shape[1] / 2, shape[0] / 2]  # 1-indexed (x, y)
-    wcs.wcs.crval = [197.8925, -1.36555556]
+    # wcs.wcs.crval = [197.8925, -1.36555556]
+    crval = [skycoord.ra.deg, skycoord.dec.deg]
+    wcs.wcs.crval = crval
     wcs.wcs.cunit = ['deg', 'deg']
     wcs.wcs.cd = [[-scale * np.cos(rho), scale * np.sin(rho)],
                   [scale * np.sin(rho), scale * np.cos(rho)]]
+
+    # TODO: determine the correct reference frame from the skycoord
     if not galactic:
         wcs.wcs.radesys = 'ICRS'
         wcs.wcs.ctype = ['RA---TAN', 'DEC--TAN']
