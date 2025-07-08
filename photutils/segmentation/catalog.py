@@ -220,6 +220,16 @@ class SourceCatalog:
         will be a circle with this minimum radius. This keyword will be
         ignored if ``detection_cat`` is input.
 
+    kron_axis_max : float, optional
+        The maximum size in pixels of the Kron elliptical aperture
+        semimajor axis. The Kron aperture semimajor axis length
+        is the product of the semimajor axis length measured
+        from moments (``semimajor_sigma``), the unscaled Kron
+        radius (``kron_radius``), and the Kron scale factor
+        (``kron_params[0]``). Any Kron aperture semimajor axis lengths
+        that are larger than this value will be rescaled to have the
+        specified maximum semimajor axis size.
+
     detection_cat : `SourceCatalog`, optional
         A `SourceCatalog` object for the detection image. The
         segmentation image used to create the detection catalog must
@@ -307,7 +317,7 @@ class SourceCatalog:
     def __init__(self, data, segment_img, *, convolved_data=None, error=None,
                  mask=None, background=None, wcs=None, localbkg_width=0,
                  apermask_method='correct', kron_params=(2.5, 1.4, 0.0),
-                 detection_cat=None, progress_bar=False):
+                 kron_axis_max=1000, detection_cat=None, progress_bar=False):
 
         inputs = (data, convolved_data, error, background)
         names = ('data', 'convolved_data', 'error', 'background')
@@ -326,6 +336,12 @@ class SourceCatalog:
         self.localbkg_width = self._validate_localbkg_width(localbkg_width)
         self.apermask_method = self._validate_apermask_method(apermask_method)
         self.kron_params = self._validate_kron_params(kron_params)
+
+        if kron_axis_max <= 0:
+            msg = 'kron_axis_max must be strictly positive'
+            raise ValueError(msg)
+        self.kron_axis_max = kron_axis_max
+
         self.progress_bar = progress_bar
 
         # needed for ordering and isscalar
@@ -2992,6 +3008,27 @@ class SourceCatalog:
             major_size = (major_size,)
             minor_size = (minor_size,)
             theta = (theta,)
+
+        # if the Kron elliptical aperture semimajor axis size
+        # (major_size) is larger than self.kron_axis_max, then rescale the
+        # Kron aperture axes to have that maximum semimajor axis size
+        kron_mask = major_size > self.kron_axis_max
+        if np.any(kron_mask):
+            # ignore divide-by-zero RuntimeWarning
+            # scale = major_size = 0 for
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', RuntimeWarning)
+                orig_axis_ratio = self.kron_axis_max / major_size
+            major_size[kron_mask] = self.kron_axis_max
+            minor_size[kron_mask] *= orig_axis_ratio[kron_mask]
+            max_labels = self.labels[kron_mask]
+            bad_labels = ', '.join(map(str, max_labels))
+            msg = ('Kron apertures were rescaled to have a maximum '
+                   f'semimajor axis of {self.kron_axis_max} pixels for the '
+                   f'following labels:\n[{bad_labels}]')
+            warnings.warn(msg)
+
+        self.orig_axis_ratio = orig_axis_ratio
 
         aperture = []
         for values in zip(xcen, ycen, major_size, minor_size, theta,
