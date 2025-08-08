@@ -683,11 +683,10 @@ class PSFPhotometry(ModelImageMixin):
         Validate the initial source positions to ensure they are within
         the data shape.
         """
-        if np.any(self._get_no_overlap_mask(init_params, shape)):
-            msg = ('Some of the sources have no overlap with the data. '
-                   'Check the initial source positions or increase the '
-                   'fit_shape.')
-            raise ValueError(msg)
+        # Do not raise an error here. Sources with no overlap with the
+        # data will be handled later by returning NaN results for their
+        # fitted parameters while continuing to fit other sources.
+        return None
 
     def _prepare_fit_inputs(self, data, *, mask=None, error=None,
                             init_params=None):
@@ -858,7 +857,23 @@ class PSFPhotometry(ModelImageMixin):
         col_order = ['id',
                      *list(self._param_mapper.fit_colnames.values()),
                      *list(self._param_mapper.err_colnames.values())]
-        return fit_table[col_order]
+        fit_table = fit_table[col_order]
+
+        # Overwrite fit and error columns with NaN for invalid sources
+        valid_mask = self.fit_info.get('valid_mask_by_id')
+        if valid_mask is not None:
+            invalid = ~np.array(valid_mask, dtype=bool)
+            for col in fit_table.colnames:
+                if col == 'id':
+                    continue
+                column = fit_table[col]
+                unit = getattr(column, 'unit', None)
+                if unit is not None:
+                    column[invalid] = (np.nan * unit)
+                else:
+                    column[invalid] = np.nan
+
+        return fit_table
 
     def _define_fit_data(self, sources, data, mask):
         yi = []
@@ -1067,12 +1082,41 @@ class PSFPhotometry(ModelImageMixin):
         all_models_grouped = []
         all_param_errs_grouped = []
         all_fit_infos_grouped = []
-        for model, fit_info in zip(group_models, group_fit_infos, strict=True):
-            s_models, s_errs, s_infos = self._parse_single_group(model,
-                                                                 fit_info)
-            all_models_grouped.extend(s_models)
-            all_param_errs_grouped.extend(s_errs)
-            all_fit_infos_grouped.extend(s_infos)
+        valid_masks = self._group_results.get('valid_masks', [])
+        source_groups = self._group_results.get('source_groups', [])
+
+        for group_index, (model, fit_info) in enumerate(zip(group_models, group_fit_infos, strict=True)):
+            valid_mask = valid_masks[group_index]
+            group_sources = source_groups[group_index]
+
+            if model is None:
+                # No valid sources in this group: fill placeholders
+                nfitparam = len(self._param_mapper.fitted_param_names)
+                for row in group_sources:
+                    placeholder_model = self._make_psf_model(Table(row))
+                    all_models_grouped.append(placeholder_model)
+                    all_param_errs_grouped.append(np.array([np.nan] * nfitparam))
+                    all_fit_infos_grouped.append({})
+                continue
+
+            # Parse only valid sources from the fitted compound model
+            s_models, s_errs, s_infos = self._parse_single_group(model, fit_info)
+
+            # Expand back to include invalid sources with placeholders
+            nfitparam = len(self._param_mapper.fitted_param_names)
+            valid_iter_models = iter(s_models)
+            valid_iter_errs = iter(s_errs)
+            valid_iter_infos = iter(s_infos)
+            for is_valid, row in zip(valid_mask, group_sources, strict=True):
+                if is_valid:
+                    all_models_grouped.append(next(valid_iter_models))
+                    all_param_errs_grouped.append(next(valid_iter_errs))
+                    all_fit_infos_grouped.append(next(valid_iter_infos))
+                else:
+                    placeholder_model = self._make_psf_model(Table(row))
+                    all_models_grouped.append(placeholder_model)
+                    all_param_errs_grouped.append(np.array([np.nan] * nfitparam))
+                    all_fit_infos_grouped.append({})
 
         # reorder the results from group-order to source-ID-order
         fit_models_by_id = self._order_by_id(all_models_grouped)
@@ -1084,6 +1128,16 @@ class PSFPhotometry(ModelImageMixin):
         self.fit_info['fit_infos'] = fit_infos_by_id
         self.fit_info['fit_param_errs'] = fit_param_errs_by_id
         self.fit_info['fit_error_indices'] = self._get_fit_error_indices()
+
+        # store a per-source validity mask in source-ID order
+        if len(valid_masks) > 0:
+            # flatten valid_masks in group order then reorder by id
+            flat = []
+            for vm in valid_masks:
+                flat.extend(list(vm))
+            self.fit_info['valid_mask_by_id'] = np.array(self._order_by_id(flat), dtype=bool)
+        else:
+            self.fit_info['valid_mask_by_id'] = None
 
         return fit_models_by_id
 
@@ -1176,13 +1230,100 @@ class PSFPhotometry(ModelImageMixin):
                                              desc='Fit source/group')
 
         for source_group in source_groups:
-            nmodels = len(source_group)
-            self._group_results['nmodels'].append([nmodels] * nmodels)
-            psf_model = self._make_psf_model(source_group)
-            fit_model, fit_info = self._run_fitter(psf_model, source_group,
+            # Determine per-source validity within this group
+            valid_mask = []
+            npixfit_full = []
+            cen_index_full = []
+
+            ny, nx = self.fit_shape
+            y_offsets, x_offsets = np.mgrid[0:ny, 0:nx]
+            nfitparam_per_source = len(self._param_mapper.fitted_param_names)
+
+            for row in source_group:
+                x_cen = row[self._param_mapper.init_colnames['x']]
+                y_cen = row[self._param_mapper.init_colnames['y']]
+
+                try:
+                    slc_lg, _ = overlap_slices(data.shape, self.fit_shape,
+                                               (y_cen, x_cen), mode='trim')
+                except NoOverlapError:
+                    valid_mask.append(False)
+                    npixfit_full.append(0)
+                    cen_index_full.append(np.nan)
+                    continue
+
+                y_start = slc_lg[0].start
+                x_start = slc_lg[1].start
+                ny_cutout = slc_lg[0].stop - y_start
+                nx_cutout = slc_lg[1].stop - x_start
+                trimmed_y_offsets = y_offsets[:ny_cutout, :nx_cutout]
+                trimmed_x_offsets = x_offsets[:ny_cutout, :nx_cutout]
+                yy = trimmed_y_offsets + y_start
+                xx = trimmed_x_offsets + x_start
+
+                if mask is not None:
+                    inv_mask = ~mask[yy, xx]
+                    npix = int(np.count_nonzero(inv_mask))
+                    if npix == 0:
+                        valid_mask.append(False)
+                        npixfit_full.append(0)
+                        cen_index_full.append(np.nan)
+                        continue
+                    yy_flat = yy[inv_mask]
+                    xx_flat = xx[inv_mask]
+                else:
+                    yy_flat = yy.ravel()
+                    xx_flat = xx.ravel()
+                    npix = int(yy_flat.size)
+
+                # center pixel index for residual metrics
+                x_cen_idx = np.ceil(x_cen - 0.5).astype(int)
+                y_cen_idx = np.ceil(y_cen - 0.5).astype(int)
+                idx = np.where((xx_flat == x_cen_idx) & (yy_flat == y_cen_idx))[0]
+                cen_index_full.append(idx[0] if len(idx) > 0 else np.nan)
+                npixfit_full.append(npix)
+
+                # require at least as many pixels as fitted parameters
+                valid_mask.append(npix >= nfitparam_per_source)
+
+            valid_mask = np.array(valid_mask, dtype=bool)
+
+            num_valid = int(np.count_nonzero(valid_mask))
+            # record the number of models actually fit per source in this group
+            self._group_results['nmodels'].append([num_valid] * len(source_group))
+            # store validity and original group for later parsing
+            self._group_results['valid_masks'].append(valid_mask)
+            self._group_results['source_groups'].append(source_group)
+
+            if num_valid == 0:
+                # No valid sources in this group. Create a placeholder model
+                # so downstream processing can proceed; values will be set to
+                # NaN later.
+                placeholder_model = self._make_psf_model(source_group)
+                fit_models.append(placeholder_model)
+                fit_infos.append({})
+                self._group_results['npixfit'].append(npixfit_full)
+                self._group_results['psfcenter_indices'].append(cen_index_full)
+                continue
+
+            # Fit only valid sources
+            valid_sources = source_group[valid_mask]
+            psf_model = self._make_psf_model(valid_sources)
+            fit_model, fit_info = self._run_fitter(psf_model, valid_sources,
                                                    data, mask, error)
             fit_models.append(fit_model)
             fit_infos.append(fit_info)
+
+            # overwrite per-group metrics with full-length versions
+            # replace the last appended entries created in _define_fit_data
+            if len(self._group_results['npixfit']) > 0:
+                self._group_results['npixfit'][-1] = npixfit_full
+            else:
+                self._group_results['npixfit'].append(npixfit_full)
+            if len(self._group_results['psfcenter_indices']) > 0:
+                self._group_results['psfcenter_indices'][-1] = cen_index_full
+            else:
+                self._group_results['psfcenter_indices'].append(cen_index_full)
 
         return fit_models, fit_infos
 
@@ -1233,11 +1374,31 @@ class PSFPhotometry(ModelImageMixin):
             self.fit_info['fit_infos'] = fit_infos
             self.fit_info['fit_error_indices'] = self._get_fit_error_indices()
             self.fit_info['fit_param_errs'] = np.array(fit_param_errs)
+            # Build validity mask for ungrouped sources based on npixfit
+            if len(self._group_results['npixfit']) == len(final_models):
+                minpix = len(self._param_mapper.fitted_param_names)
+                npix_list = [vals[0] if isinstance(vals, list) else vals
+                             for vals in self._group_results['npixfit']]
+                self.fit_info['valid_mask_by_id'] = np.array([int(n) >= minpix for n in npix_list], dtype=bool)
+            else:
+                self.fit_info['valid_mask_by_id'] = None
 
         fitted_models_table = self._all_model_params_to_table(final_models)
         self._fitted_models_table = fitted_models_table
 
         self.fit_params = self._prepare_fit_results(fitted_models_table)
+
+        # Ensure invalid sources do not contribute to model images by
+        # setting their flux parameter to zero in the fitted models table.
+        valid_mask = self.fit_info.get('valid_mask_by_id')
+        if valid_mask is not None:
+            invalid = ~np.array(valid_mask, dtype=bool)
+            flux_param = self._param_mapper.alias_to_model_param['flux']
+            # preserve units by operating on the column directly
+            try:
+                self._fitted_models_table[flux_param][invalid] = 0 * self._fitted_models_table[flux_param]
+            except Exception:
+                self._fitted_models_table[flux_param][invalid] = 0
 
         return self.fit_params
 
@@ -1278,13 +1439,17 @@ class PSFPhotometry(ModelImageMixin):
         split_index = [np.cumsum(npixfit)[:-1]
                        for npixfit in self._group_results['npixfit']]
 
-        # find the key with the fit residual (fitter dependent)
-        finfo_keys = self._group_results['fit_infos'][0].keys()
+        # find a residual key present in any group's fit_info (fitter dependent)
         keys = ('fvec', 'fun')
         key = None
-        for key_ in keys:
-            if key_ in finfo_keys:
-                key = key_
+        for finfo in self._group_results['fit_infos']:
+            if isinstance(finfo, dict):
+                for key_ in keys:
+                    if key_ in finfo:
+                        key = key_
+                        break
+            if key is not None:
+                break
 
         # For fitters that do not return residuals (e.g.,
         # SimplexLSQFitter), return NaNs. We could manually compute the
@@ -1296,10 +1461,16 @@ class PSFPhotometry(ModelImageMixin):
             return qfit, cfit
 
         fit_residuals = []
-        for idx, fit_info in zip(split_index,
-                                 self._group_results['fit_infos'],
-                                 strict=True):
-            fit_residuals.extend(np.split(fit_info[key], idx))
+        for idx, fit_info, npix_list in zip(
+                split_index,
+                self._group_results['fit_infos'],
+                self._group_results['npixfit'],
+                strict=True):
+            if isinstance(fit_info, dict) and key in fit_info:
+                fit_residuals.extend(np.split(fit_info[key], idx))
+            else:
+                for npix in npix_list:
+                    fit_residuals.append(np.full(int(npix), np.nan))
         fit_residuals = self._order_by_id(fit_residuals)
 
         with warnings.catch_warnings():
@@ -1422,7 +1593,8 @@ class PSFPhotometry(ModelImageMixin):
         Assemble the final results table from the initial parameters and
         fitted parameters.
         """
-        results_tbl = join(init_params, fit_params)
+        # Keep all sources from init_params even if some were invalid for fitting
+        results_tbl = join(init_params, fit_params, join_type='left')
 
         npixfit = np.array(self._ungroup(self._group_results['npixfit']))
         results_tbl['npixfit'] = npixfit
