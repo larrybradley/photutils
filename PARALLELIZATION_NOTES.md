@@ -21,7 +21,7 @@ A new parameter `n_jobs` has been added to both `PSFPhotometry` and `IterativePS
    - Bypasses Python's GIL (Global Interpreter Lock) for CPU-intensive fitting
    - Provides true parallel execution for numerical computations
    - Includes model serialization to handle Astropy model objects
-   - Serializes model parameters and reconstructs models in worker processes
+   - Uses pickle serialization to preserve all model attributes and initialization arguments
 
 2. **Group-level Parallelization**: Each source group is processed in parallel:
    - Individual sources within a group are still processed together (as required)
@@ -62,14 +62,15 @@ iter_psf = IterativePSFPhotometry(psf_model, fit_shape, finder=finder, n_jobs=4)
 ## Technical Implementation
 
 ### Model Serialization
-- `_serialize_model_params()`: Extracts model class, parameters, and constraints
-- `_deserialize_model()`: Reconstructs model from serialized information
+- `_serialize_model_params()`: Serializes entire model using pickle and base64 encoding
+- `_deserialize_model()`: Reconstructs model from pickle data
 - `_worker_fit_single_group()`: Static method for multiprocessing compatibility
 
 ### Process Management
 - Uses `ProcessPoolExecutor` for true parallel execution
-- Each worker process receives serialized model parameters
+- Each worker process receives serialized model data
 - Results are collected and ordered to maintain consistency
+- Pickle serialization preserves all model attributes, including initialization arguments
 
 ## Error Handling
 

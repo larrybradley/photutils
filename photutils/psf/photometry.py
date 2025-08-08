@@ -1399,7 +1399,7 @@ class PSFPhotometry(ModelImageMixin):
     @staticmethod
     def _serialize_model_params(psf_model):
         """
-        Serialize model parameters for multiprocessing.
+        Serialize model for multiprocessing using pickle.
 
         Parameters
         ----------
@@ -1409,61 +1409,44 @@ class PSFPhotometry(ModelImageMixin):
         Returns
         -------
         model_info : dict
-            Dictionary containing model class and parameters.
+            Dictionary containing serialized model.
         """
-        # Get model class name and module
-        model_class = psf_model.__class__
-        model_info = {
-            'class_name': model_class.__name__,
-            'module_name': model_class.__module__,
-            'parameters': {},
-            'fixed': {},
-            'bounds': {},
+        import base64
+        import pickle
+
+        # Serialize the entire model using pickle
+        model_bytes = pickle.dumps(psf_model)
+        model_b64 = base64.b64encode(model_bytes).decode('ascii')
+
+        return {
+            'serialized_model': model_b64,
+            'model_type': 'pickle',
         }
-
-        # Serialize parameters
-        for param_name in psf_model.param_names:
-            param = getattr(psf_model, param_name)
-            model_info['parameters'][param_name] = param.value
-            model_info['fixed'][param_name] = param.fixed
-            if param.bounds is not None:
-                model_info['bounds'][param_name] = param.bounds
-
-        return model_info
 
     @staticmethod
     def _deserialize_model(model_info):
         """
-        Deserialize model from parameters.
+        Deserialize model from pickle data.
 
         Parameters
         ----------
         model_info : dict
-            Dictionary containing model information.
+            Dictionary containing serialized model.
 
         Returns
         -------
         model : `astropy.modeling.Model`
             The reconstructed model.
         """
-        import importlib
+        import base64
+        import pickle
 
-        # Import the model class
-        module = importlib.import_module(model_info['module_name'])
-        model_class = getattr(module, model_info['class_name'])
-
-        # Create model instance
-        model = model_class()
-
-        # Set parameters
-        for param_name, value in model_info['parameters'].items():
-            param = getattr(model, param_name)
-            param.value = value
-            param.fixed = model_info['fixed'][param_name]
-            if param_name in model_info['bounds']:
-                param.bounds = model_info['bounds'][param_name]
-
-        return model
+        if model_info['model_type'] == 'pickle':
+            # Deserialize using pickle
+            model_bytes = base64.b64decode(model_info['serialized_model'].encode('ascii'))
+            model = pickle.loads(model_bytes)
+            return model
+        raise ValueError(f"Unknown model serialization type: {model_info['model_type']}")
 
     @staticmethod
     def _worker_fit_single_group(args):
