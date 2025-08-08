@@ -664,29 +664,9 @@ class PSFPhotometry(ModelImageMixin):
 
         return init_params[col_order]
 
-    def _get_no_overlap_mask(self, init_params, shape):
-        """
-        Get a mask of sources with no overlap with the data.
-
-        This code is based on astropy.nddata.overlap_slices.
-        """
-        x_pos = init_params[self._param_mapper.init_colnames['x']]
-        y_pos = init_params[self._param_mapper.init_colnames['y']]
-        positions = np.column_stack((y_pos, x_pos))
-        delta = self.fit_shape / 2
-        min_idx = np.ceil(positions - delta)
-        max_idx = np.ceil(positions + delta)
-        return np.any(max_idx <= 0, axis=1) | np.any(min_idx >= shape, axis=1)
-
-    def _validate_source_positions(self, init_params, shape):
-        """
-        Validate the initial source positions to ensure they are within
-        the data shape.
-        """
-        # Do not raise an error here. Sources with no overlap with the
-        # data will be handled later by returning NaN results for their
-        # fitted parameters while continuing to fit other sources.
-        return
+    # _validate_source_positions and _get_no_overlap_mask are no longer
+    # needed because sources without overlap are handled gracefully during
+    # fitting by returning NaN results. The methods were removed.
 
     def _prepare_fit_inputs(self, data, *, mask=None, error=None,
                             init_params=None):
@@ -712,7 +692,7 @@ class PSFPhotometry(ModelImageMixin):
             # no sources found
             return None, None, None, None
 
-        self._validate_source_positions(init_params, data.shape)
+        # no-op: sources with no overlap are handled later without raising
 
         return data, mask, error, init_params
 
