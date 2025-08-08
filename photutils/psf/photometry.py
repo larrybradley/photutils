@@ -8,7 +8,7 @@ import inspect
 import multiprocessing
 import warnings
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 from itertools import chain
 
 import astropy.units as u
@@ -1348,14 +1348,24 @@ class PSFPhotometry(ModelImageMixin):
 
     def _perform_fits_parallel(self, source_groups, data, mask, error):
         """
-        Parallel implementation of fitting using ThreadPoolExecutor.
+        Parallel implementation of fitting using ProcessPoolExecutor.
         """
-        # Use ThreadPoolExecutor since Astropy models may not be picklable
-        with ThreadPoolExecutor(max_workers=self.n_jobs) as executor:
+        # Serialize the PSF model for multiprocessing
+        model_info = self._serialize_model_params(self.psf_model)
+
+        # Prepare arguments for worker processes
+        worker_args = []
+        for source_group in source_groups:
+            args = (model_info, self.fit_shape, source_group, data, mask, error,
+                   None, self.fitter_maxiters)  # param_mapper_info not needed in worker
+            worker_args.append(args)
+
+        # Use ProcessPoolExecutor for true parallel processing
+        with ProcessPoolExecutor(max_workers=self.n_jobs) as executor:
             # Submit all tasks
             future_to_group = {
-                executor.submit(self._fit_single_group, source_group, data, mask, error): i
-                for i, source_group in enumerate(source_groups)
+                executor.submit(self._worker_fit_single_group, args): i
+                for i, args in enumerate(worker_args)
             }
 
             # Collect results in order
@@ -1385,6 +1395,110 @@ class PSFPhotometry(ModelImageMixin):
             self._group_results['psfcenter_indices'].append(result['cen_index'])
 
         return fit_models, fit_infos
+
+    @staticmethod
+    def _serialize_model_params(psf_model):
+        """
+        Serialize model parameters for multiprocessing.
+
+        Parameters
+        ----------
+        psf_model : `astropy.modeling.Model`
+            The PSF model to serialize.
+
+        Returns
+        -------
+        model_info : dict
+            Dictionary containing model class and parameters.
+        """
+        # Get model class name and module
+        model_class = psf_model.__class__
+        model_info = {
+            'class_name': model_class.__name__,
+            'module_name': model_class.__module__,
+            'parameters': {},
+            'fixed': {},
+            'bounds': {},
+        }
+
+        # Serialize parameters
+        for param_name in psf_model.param_names:
+            param = getattr(psf_model, param_name)
+            model_info['parameters'][param_name] = param.value
+            model_info['fixed'][param_name] = param.fixed
+            if param.bounds is not None:
+                model_info['bounds'][param_name] = param.bounds
+
+        return model_info
+
+    @staticmethod
+    def _deserialize_model(model_info):
+        """
+        Deserialize model from parameters.
+
+        Parameters
+        ----------
+        model_info : dict
+            Dictionary containing model information.
+
+        Returns
+        -------
+        model : `astropy.modeling.Model`
+            The reconstructed model.
+        """
+        import importlib
+
+        # Import the model class
+        module = importlib.import_module(model_info['module_name'])
+        model_class = getattr(module, model_info['class_name'])
+
+        # Create model instance
+        model = model_class()
+
+        # Set parameters
+        for param_name, value in model_info['parameters'].items():
+            param = getattr(model, param_name)
+            param.value = value
+            param.fixed = model_info['fixed'][param_name]
+            if param_name in model_info['bounds']:
+                param.bounds = model_info['bounds'][param_name]
+
+        return model
+
+    @staticmethod
+    def _worker_fit_single_group(args):
+        """
+        Worker function for multiprocessing. This function must be at
+        module level and cannot be a method to work with
+        ProcessPoolExecutor.
+
+        Parameters
+        ----------
+        args : tuple
+            Tuple containing (model_info, fit_shape, source_group, data, mask, error,
+                           param_mapper_info, fitter_maxiters)
+
+        Returns
+        -------
+        result : dict
+            Dictionary containing the fit results and metadata.
+        """
+        (model_info, fit_shape, source_group, data, mask, error,
+         param_mapper_info, fitter_maxiters) = args
+
+        # Reconstruct the model
+        psf_model = PSFPhotometry._deserialize_model(model_info)
+
+        # Reconstruct parameter mapper
+        from photutils.psf.photometry import _PSFParameterManager
+        param_mapper = _PSFParameterManager(psf_model)
+
+        # Create a temporary PSFPhotometry instance for fitting
+        temp_psf = PSFPhotometry(psf_model, fit_shape, fitter_maxiters=fitter_maxiters)
+        temp_psf._param_mapper = param_mapper
+
+        # Perform the fit
+        return temp_psf._fit_single_group(source_group, data, mask, error)
 
     def _fit_single_group(self, source_group, data, mask, error):
         """
