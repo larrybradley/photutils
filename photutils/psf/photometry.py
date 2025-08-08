@@ -1467,7 +1467,8 @@ class PSFPhotometry(ModelImageMixin):
         if key is None:
             qfit = np.full(len(results_tbl), np.nan)
             cfit = np.full(len(results_tbl), np.nan)
-            return qfit, cfit
+            rchi2 = np.full(len(results_tbl), np.nan)
+            return qfit, cfit, rchi2
 
         fit_residuals = []
         for idx, fit_info, npix_list in zip(
@@ -1489,6 +1490,9 @@ class PSFPhotometry(ModelImageMixin):
             flux_col = self._param_mapper.fit_colnames['flux']
             qfit = []
             cfit = []
+            rchi2 = []
+            nfitparam = len(self._param_mapper.fitted_param_names)
+            npixfit_by_id = self._ungroup(self._group_results['npixfit'])
             for index, (residual, cen_idx_) in enumerate(
                     zip(fit_residuals, cen_idx, strict=True)):
 
@@ -1512,7 +1516,14 @@ class PSFPhotometry(ModelImageMixin):
                         cen_residual = -residual[cen_idx_]
                         cfit.append(cen_residual / flux_fit)
 
-        return qfit, cfit
+                # reduced chi-squared; if residuals finite and dof>0
+                dof = int(npixfit_by_id[index]) - nfitparam
+                if dof > 0 and np.all(np.isfinite(residual)):
+                    rchi2.append(float(np.sum(residual ** 2)) / dof)
+                else:
+                    rchi2.append(np.nan)
+
+        return qfit, cfit, rchi2
 
     def _define_flags(self, results_tbl, shape):
         """
@@ -1625,9 +1636,10 @@ class PSFPhotometry(ModelImageMixin):
         index = results_tbl.index_column('group_id') + 1
         results_tbl.add_column(nmodels, name='group_size', index=index)
 
-        qfit, cfit = self._calc_fit_metrics(results_tbl)
+        qfit, cfit, rchi2 = self._calc_fit_metrics(results_tbl)
         results_tbl['qfit'] = qfit
         results_tbl['cfit'] = cfit
+        results_tbl['rchi2'] = rchi2
 
         results_tbl['flags'] = self._define_flags(results_tbl, data_shape)
 

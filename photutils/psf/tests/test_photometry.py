@@ -185,6 +185,9 @@ def test_psf_photometry(test_data):
     assert phot['x_err'].max() > 0.0062
     assert phot['y_err'].max() > 0.0065
     assert phot['flux_err'].max() > 2.5
+    # rchi2 presence and finite for normal fits
+    assert 'rchi2' in phot.colnames
+    assert np.all(np.isfinite(phot['rchi2']))
 
     keys = ('fit_infos', 'fit_error_indices')
     for key in keys:
@@ -906,6 +909,7 @@ def test_fitter_no_maxiters_no_metrics(test_data):
     phot = psfphot(data, error=error)
     assert np.all(np.isnan(phot['qfit']))
     assert np.all(np.isnan(phot['cfit']))
+    assert np.all(np.isnan(phot['rchi2']))
 
 
 def test_xy_bounds(test_data):
