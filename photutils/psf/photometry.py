@@ -1234,6 +1234,7 @@ class PSFPhotometry(ModelImageMixin):
             valid_mask = []
             npixfit_full = []
             cen_index_full = []
+            invalid_reasons = []  # 'no_overlap', 'fully_masked', 'too_few_pixels', or None
 
             ny, nx = self.fit_shape
             y_offsets, x_offsets = np.mgrid[0:ny, 0:nx]
@@ -1250,6 +1251,7 @@ class PSFPhotometry(ModelImageMixin):
                     valid_mask.append(False)
                     npixfit_full.append(0)
                     cen_index_full.append(np.nan)
+                    invalid_reasons.append('no_overlap')
                     continue
 
                 y_start = slc_lg[0].start
@@ -1268,6 +1270,7 @@ class PSFPhotometry(ModelImageMixin):
                         valid_mask.append(False)
                         npixfit_full.append(0)
                         cen_index_full.append(np.nan)
+                        invalid_reasons.append('fully_masked')
                         continue
                     yy_flat = yy[inv_mask]
                     xx_flat = xx[inv_mask]
@@ -1284,7 +1287,12 @@ class PSFPhotometry(ModelImageMixin):
                 npixfit_full.append(npix)
 
                 # require at least as many pixels as fitted parameters
-                valid_mask.append(npix >= nfitparam_per_source)
+                if npix >= nfitparam_per_source:
+                    valid_mask.append(True)
+                    invalid_reasons.append(None)
+                else:
+                    valid_mask.append(False)
+                    invalid_reasons.append('too_few_pixels')
 
             valid_mask = np.array(valid_mask, dtype=bool)
 
@@ -1294,6 +1302,7 @@ class PSFPhotometry(ModelImageMixin):
             # store validity and original group for later parsing
             self._group_results['valid_masks'].append(valid_mask)
             self._group_results['source_groups'].append(source_group)
+            self._group_results['invalid_reasons'].append(invalid_reasons)
 
             if num_valid == 0:
                 # No valid sources in this group. Create a placeholder model
@@ -1524,6 +1533,9 @@ class PSFPhotometry(ModelImageMixin):
               ``fitter_maxiters`` keyword.
         - 16 : the fitter parameter covariance matrix was not returned
         - 32 : the fit x or y position is at the bounded value
+        - 64 : the source had no overlap with the input data
+        - 128 : the source region was completely masked
+        - 256 : too few unmasked pixels for a fit
 
         Parameters
         ----------
@@ -1585,6 +1597,16 @@ class PSFPhotometry(ModelImageMixin):
                 dy = y_bounds - row[y_param]
                 if np.any(dx == 0) or np.any(dy == 0):
                     flags[index] += 32
+
+        # flag=64,128,256: invalid source reasons captured during preparation
+        try:
+            reasons = self._ungroup(self._group_results['invalid_reasons'])
+            reasons = np.array(reasons, dtype=object)
+            flags[reasons == 'no_overlap'] += 64
+            flags[reasons == 'fully_masked'] += 128
+            flags[reasons == 'too_few_pixels'] += 256
+        except Exception:
+            pass
 
         return flags
 

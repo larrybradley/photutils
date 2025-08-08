@@ -529,6 +529,8 @@ def test_psf_photometry_mask(test_data):
         assert np.isnan(phot_masked[col][0])
     assert phot_masked['npixfit'][0] == 0
     assert phot_masked['group_size'][0] == 0
+    # new flag 128 for fully masked
+    assert (phot_masked['flags'][0] & 128) == 128
 
     # masked central pixel
     init_params = QTable()
@@ -616,6 +618,8 @@ def test_psf_photometry_init_params(test_data):
         assert np.isnan(phot_no_overlap[col][0])
     assert phot_no_overlap['npixfit'][0] == 0
     assert phot_no_overlap['group_size'][0] == 0
+    # new flag 64 for no overlap
+    assert (phot_no_overlap['flags'][0] & 64) == 64
 
     # too-few pixels (unmasking only 2 pixels < 3 free params) should give NaNs
     init_params = QTable()
@@ -630,6 +634,8 @@ def test_psf_photometry_init_params(test_data):
         assert np.isnan(phot_few[col][0])
     assert phot_few['npixfit'][0] == 2
     assert phot_few['group_size'][0] == 0
+    # new flag 256 for too few pixels
+    assert (phot_few['flags'][0] & 256) == 256
 
     # check that the first matching column name is used
     init_params = QTable()
