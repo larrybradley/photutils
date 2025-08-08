@@ -518,15 +518,17 @@ def test_psf_photometry_mask(test_data):
     with pytest.warns(NoDetectionsWarning, match=match):
         psfphot(data, mask=mask)
 
-    # completely masked source
-    match = ('is completely masked. Remove the source from init_params '
-             'or correct the input mask')
+    # completely masked source should return NaNs and not raise
     init_params = QTable()
     init_params['x'] = [63]
     init_params['y'] = [49]
     mask = np.ones(data.shape, dtype=bool)
-    with pytest.raises(ValueError, match=match):
-        _ = psfphot(data, mask=mask, init_params=init_params)
+    phot_masked = psfphot(data_orig, mask=mask, init_params=init_params)
+    assert len(phot_masked) == 1
+    for col in ('x_fit', 'y_fit', 'flux_fit', 'x_err', 'y_err', 'flux_err', 'qfit', 'cfit'):
+        assert np.isnan(phot_masked[col][0])
+    assert phot_masked['npixfit'][0] == 0
+    assert phot_masked['group_size'][0] == 0
 
     # masked central pixel
     init_params = QTable()
@@ -603,13 +605,31 @@ def test_psf_photometry_init_params(test_data):
         with pytest.raises(ValueError, match=match):
             _ = psfphot(data << u.Jy, init_params=init_params2)
 
+    # no-overlap source should return NaNs and not raise; also test too-few-pixels
     init_params = QTable()
     init_params['x'] = [-63]
     init_params['y'] = [-49]
     init_params['flux'] = [100]
-    match = 'Some of the sources have no overlap with the data'
-    with pytest.raises(ValueError, match=match):
-        _ = psfphot(data, init_params=init_params)
+    phot_no_overlap = psfphot(data, init_params=init_params)
+    assert len(phot_no_overlap) == 1
+    for col in ('x_fit', 'y_fit', 'flux_fit', 'x_err', 'y_err', 'flux_err', 'qfit', 'cfit'):
+        assert np.isnan(phot_no_overlap[col][0])
+    assert phot_no_overlap['npixfit'][0] == 0
+    assert phot_no_overlap['group_size'][0] == 0
+
+    # too-few pixels (unmasking only 2 pixels < 3 free params) should give NaNs
+    init_params = QTable()
+    init_params['x'] = [63]
+    init_params['y'] = [49]
+    mask = np.ones(data.shape, dtype=bool)
+    mask[49, 63] = False
+    mask[49, 64] = False
+    phot_few = psfphot(data, error=error, mask=mask, init_params=init_params)
+    assert len(phot_few) == 1
+    for col in ('x_fit', 'y_fit', 'flux_fit', 'x_err', 'y_err', 'flux_err', 'qfit', 'cfit'):
+        assert np.isnan(phot_few[col][0])
+    assert phot_few['npixfit'][0] == 2
+    assert phot_few['group_size'][0] == 0
 
     # check that the first matching column name is used
     init_params = QTable()
