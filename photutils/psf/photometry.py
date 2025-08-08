@@ -517,6 +517,12 @@ class PSFPhotometry(ModelImageMixin):
         init_params[x_col] = sources[x_name_found]
         init_params[y_col] = sources[y_name_found]
 
+        # strip units from x and y if they are present
+        if isinstance(init_params[x_col], u.Quantity):
+            init_params[x_col] = init_params[x_col].value
+        if isinstance(init_params[y_col], u.Quantity):
+            init_params[y_col] = init_params[y_col].value
+
         return init_params
 
     def _find_sources_if_needed(self, data, mask, init_params):
