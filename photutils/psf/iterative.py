@@ -630,12 +630,8 @@ class IterativePSFPhotometry(ModelImageMixin):
                     # fit new sources on the residual data
                     init_params = new_sources
 
-                # remove any sources that do not overlap the data
-                imask = self._psfphot._get_no_overlap_mask(init_params,
-                                                           data.shape)
-                init_params = init_params[~imask]
-                if self.mode == 'all':
-                    iter_detected = iter_detected[~imask]
+                # Sources with no overlap are now handled gracefully by PSFPhotometry
+                # by returning NaN results instead of raising errors
 
                 new_tbl = self._psfphot(residual_data, mask=mask, error=error,
                                         init_params=init_params)
