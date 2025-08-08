@@ -5,8 +5,10 @@ This module provides classes to perform PSF-fitting photometry.
 
 import contextlib
 import inspect
+import multiprocessing
 import warnings
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from itertools import chain
 
 import astropy.units as u
@@ -268,6 +270,11 @@ class PSFPhotometry(ModelImageMixin):
         The group size above which a warning is emitted when grouped
         sources are fit simultaneously. Default is 25.
 
+    n_jobs : int, optional
+        The number of jobs to run in parallel for fitting. If `None`,
+        all available cores will be used. If 1, no parallelization
+        will be used. Default is 1 (no parallelization).
+
     Notes
     -----
     The data that will be fit for each source is defined by the
@@ -322,7 +329,7 @@ class PSFPhotometry(ModelImageMixin):
     def __init__(self, psf_model, fit_shape, *, finder=None, grouper=None,
                  fitter=None, fitter_maxiters=100, xy_bounds=None,
                  localbkg_estimator=None, aperture_radius=None,
-                 progress_bar=False, group_warning_threshold=25):
+                 progress_bar=False, group_warning_threshold=25, n_jobs=1):
 
         self.psf_model = _validate_psf_model(psf_model)
         self._param_mapper = _PSFParameterManager(self.psf_model)
@@ -343,6 +350,14 @@ class PSFPhotometry(ModelImageMixin):
 
         self.group_warning_threshold = int(group_warning_threshold)
 
+        # Validate n_jobs
+        if n_jobs is None:
+            self.n_jobs = multiprocessing.cpu_count()
+        elif n_jobs < 1:
+            raise ValueError('n_jobs must be >= 1 or None')
+        else:
+            self.n_jobs = int(n_jobs)
+
         self._reset_results()
 
     def _reset_results(self):
@@ -361,7 +376,7 @@ class PSFPhotometry(ModelImageMixin):
     def __repr__(self):
         params = ('psf_model', 'fit_shape', 'finder', 'grouper', 'fitter',
                   'fitter_maxiters', 'xy_bounds', 'localbkg_estimator',
-                  'aperture_radius', 'progress_bar')
+                  'aperture_radius', 'progress_bar', 'n_jobs')
         return make_repr(self, params)
 
     def _validate_grouper(self, grouper):
@@ -1207,6 +1222,16 @@ class PSFPhotometry(ModelImageMixin):
         fit_infos : list
             A list of the ``fit_info`` dictionaries from the fitter.
         """
+        if self.n_jobs == 1:
+            # Sequential processing (original implementation)
+            return self._perform_fits_sequential(source_groups, data, mask, error)
+        # Parallel processing
+        return self._perform_fits_parallel(source_groups, data, mask, error)
+
+    def _perform_fits_sequential(self, source_groups, data, mask, error):
+        """
+        Sequential implementation of fitting.
+        """
         fit_models = []
         fit_infos = []
 
@@ -1320,6 +1345,163 @@ class PSFPhotometry(ModelImageMixin):
                 self._group_results['psfcenter_indices'].append(cen_index_full)
 
         return fit_models, fit_infos
+
+    def _perform_fits_parallel(self, source_groups, data, mask, error):
+        """
+        Parallel implementation of fitting using ThreadPoolExecutor.
+        """
+        # Use ThreadPoolExecutor since Astropy models may not be picklable
+        with ThreadPoolExecutor(max_workers=self.n_jobs) as executor:
+            # Submit all tasks
+            future_to_group = {
+                executor.submit(self._fit_single_group, source_group, data, mask, error): i
+                for i, source_group in enumerate(source_groups)
+            }
+
+            # Collect results in order
+            results = [None] * len(source_groups)
+            for future in future_to_group:
+                group_idx = future_to_group[future]
+                try:
+                    results[group_idx] = future.result()
+                except Exception as exc:
+                    # Handle any exceptions that occurred during fitting
+                    raise RuntimeError(f"Fitting failed for group {group_idx}: {exc}")
+
+        # Extract results and populate _group_results
+        fit_models = []
+        fit_infos = []
+
+        for result in results:
+            fit_models.append(result['fit_model'])
+            fit_infos.append(result['fit_info'])
+
+            # Store group results
+            self._group_results['nmodels'].append(result['nmodels'])
+            self._group_results['valid_masks'].append(result['valid_mask'])
+            self._group_results['source_groups'].append(source_groups[len(self._group_results['source_groups'])])
+            self._group_results['invalid_reasons'].append(result['invalid_reasons'])
+            self._group_results['npixfit'].append(result['npixfit'])
+            self._group_results['psfcenter_indices'].append(result['cen_index'])
+
+        return fit_models, fit_infos
+
+    def _fit_single_group(self, source_group, data, mask, error):
+        """
+        Fit a single source group. This is a helper function for
+        parallel processing.
+
+        Parameters
+        ----------
+        source_group : `~astropy.table.Table`
+            A table representing a single source or a group of sources.
+        data : 2D `~numpy.ndarray`
+            The data array.
+        mask : 2D bool `~numpy.ndarray` or `None`
+            The mask array.
+        error : 2D `~numpy.ndarray` or `None`
+            The error array.
+
+        Returns
+        -------
+        result : dict
+            Dictionary containing the fit results and metadata for this group.
+        """
+        # Determine per-source validity within this group
+        valid_mask = []
+        npixfit_full = []
+        cen_index_full = []
+        invalid_reasons = []  # 'no_overlap', 'fully_masked', 'too_few_pixels', or None
+
+        ny, nx = self.fit_shape
+        y_offsets, x_offsets = np.mgrid[0:ny, 0:nx]
+        nfitparam_per_source = len(self._param_mapper.fitted_param_names)
+
+        for row in source_group:
+            x_cen = row[self._param_mapper.init_colnames['x']]
+            y_cen = row[self._param_mapper.init_colnames['y']]
+
+            try:
+                slc_lg, _ = overlap_slices(data.shape, self.fit_shape,
+                                           (y_cen, x_cen), mode='trim')
+            except NoOverlapError:
+                valid_mask.append(False)
+                npixfit_full.append(0)
+                cen_index_full.append(np.nan)
+                invalid_reasons.append('no_overlap')
+                continue
+
+            y_start = slc_lg[0].start
+            x_start = slc_lg[1].start
+            ny_cutout = slc_lg[0].stop - y_start
+            nx_cutout = slc_lg[1].stop - x_start
+            trimmed_y_offsets = y_offsets[:ny_cutout, :nx_cutout]
+            trimmed_x_offsets = x_offsets[:ny_cutout, :nx_cutout]
+            yy = trimmed_y_offsets + y_start
+            xx = trimmed_x_offsets + x_start
+
+            if mask is not None:
+                inv_mask = ~mask[yy, xx]
+                npix = int(np.count_nonzero(inv_mask))
+                if npix == 0:
+                    valid_mask.append(False)
+                    npixfit_full.append(0)
+                    cen_index_full.append(np.nan)
+                    invalid_reasons.append('fully_masked')
+                    continue
+                yy_flat = yy[inv_mask]
+                xx_flat = xx[inv_mask]
+            else:
+                yy_flat = yy.ravel()
+                xx_flat = xx.ravel()
+                npix = int(yy_flat.size)
+
+            # center pixel index for residual metrics
+            x_cen_idx = np.ceil(x_cen - 0.5).astype(int)
+            y_cen_idx = np.ceil(y_cen - 0.5).astype(int)
+            idx = np.where((xx_flat == x_cen_idx) & (yy_flat == y_cen_idx))[0]
+            cen_index_full.append(idx[0] if len(idx) > 0 else np.nan)
+            npixfit_full.append(npix)
+
+            # require at least as many pixels as fitted parameters
+            if npix >= nfitparam_per_source:
+                valid_mask.append(True)
+                invalid_reasons.append(None)
+            else:
+                valid_mask.append(False)
+                invalid_reasons.append('too_few_pixels')
+
+        valid_mask = np.array(valid_mask, dtype=bool)
+        num_valid = int(np.count_nonzero(valid_mask))
+
+        if num_valid == 0:
+            # No valid sources in this group. Create a placeholder model
+            placeholder_model = self._make_psf_model(source_group)
+            return {
+                'fit_model': placeholder_model,
+                'fit_info': {},
+                'npixfit': npixfit_full,
+                'cen_index': cen_index_full,
+                'valid_mask': valid_mask,
+                'invalid_reasons': invalid_reasons,
+                'nmodels': [num_valid] * len(source_group),
+            }
+
+        # Fit only valid sources
+        valid_sources = source_group[valid_mask]
+        psf_model = self._make_psf_model(valid_sources)
+        fit_model, fit_info = self._run_fitter(psf_model, valid_sources,
+                                               data, mask, error)
+
+        return {
+            'fit_model': fit_model,
+            'fit_info': fit_info,
+            'npixfit': npixfit_full,
+            'cen_index': cen_index_full,
+            'valid_mask': valid_mask,
+            'invalid_reasons': invalid_reasons,
+            'nmodels': [num_valid] * len(source_group),
+        }
 
     def _finalize_results(self, fit_models, fit_infos, is_grouped):
         """
