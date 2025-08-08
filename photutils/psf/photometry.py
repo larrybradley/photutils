@@ -223,7 +223,8 @@ class PSFPhotometry(ModelImageMixin):
         in which a given source belongs. If `None`, then no grouping
         is performed, i.e. each source is fit independently. The
         ``group_id`` values in ``init_params`` override this keyword. A
-        warning is raised if any group size is larger than 25 sources.
+        warning is raised if any group size is larger than
+        ``group_warning_threshold`` sources.
 
     fitter : `~astropy.modeling.fitting.Fitter`, optional
         The fitter object used to perform the fit of the
@@ -262,6 +263,10 @@ class PSFPhotometry(ModelImageMixin):
         Whether to display a progress bar when fitting the sources
         (or groups). The progress bar requires that the `tqdm
         <https://tqdm.github.io/>`_ optional dependency be installed.
+
+    group_warning_threshold : int, optional
+        The group size above which a warning is emitted when grouped
+        sources are fit simultaneously. Default is 25.
 
     Notes
     -----
@@ -317,7 +322,7 @@ class PSFPhotometry(ModelImageMixin):
     def __init__(self, psf_model, fit_shape, *, finder=None, grouper=None,
                  fitter=None, fitter_maxiters=100, xy_bounds=None,
                  localbkg_estimator=None, aperture_radius=None,
-                 progress_bar=False):
+                 progress_bar=False, group_warning_threshold=25):
 
         self.psf_model = _validate_psf_model(psf_model)
         self._param_mapper = _PSFParameterManager(self.psf_model)
@@ -336,7 +341,7 @@ class PSFPhotometry(ModelImageMixin):
         self.aperture_radius = self._validate_radius(aperture_radius)
         self.progress_bar = progress_bar
 
-        self.group_warning_threshold = 25
+        self.group_warning_threshold = int(group_warning_threshold)
 
         self._reset_results()
 

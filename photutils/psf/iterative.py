@@ -82,7 +82,7 @@ class IterativePSFPhotometry(ModelImageMixin):
         is performed, i.e. each source is fit independently. The
         ``group_id`` values in ``init_params`` override this keyword
         *only for the first iteration*. A warning is raised if any group
-        size is larger than 25 sources.
+        size is larger than ``group_warning_threshold`` sources.
 
     fitter : `~astropy.modeling.fitting.Fitter`, optional
         The fitter object used to perform the fit of the
@@ -127,6 +127,10 @@ class IterativePSFPhotometry(ModelImageMixin):
         flux of each source. If initial flux values are present in the
         ``init_params`` table, they will override this keyword *only for
         the first iteration*.
+
+    group_warning_threshold : int, optional
+        The group size above which a warning is emitted when grouped
+        sources are fit simultaneously. Default is 25.
 
     sub_shape : `None`, int, or length-2 array_like
         The rectangular shape around the center of a star that will be
@@ -213,7 +217,8 @@ class IterativePSFPhotometry(ModelImageMixin):
     def __init__(self, psf_model, fit_shape, finder, *, grouper=None,
                  fitter=None, fitter_maxiters=100, xy_bounds=None,
                  maxiters=3, mode='new', localbkg_estimator=None,
-                 aperture_radius=None, sub_shape=None, progress_bar=False):
+                 aperture_radius=None, sub_shape=None, progress_bar=False,
+                 group_warning_threshold=25):
 
         if finder is None:
             msg = 'finder cannot be None for IterativePSFPhotometry'
@@ -229,7 +234,8 @@ class IterativePSFPhotometry(ModelImageMixin):
                                       xy_bounds=xy_bounds,
                                       localbkg_estimator=localbkg_estimator,
                                       aperture_radius=aperture_radius,
-                                      progress_bar=progress_bar)
+                                      progress_bar=progress_bar,
+                                      group_warning_threshold=group_warning_threshold)
 
         self.maxiters = self._validate_maxiters(maxiters)
 

@@ -3,6 +3,8 @@
 Tests for the photometry module.
 """
 
+import warnings
+
 import astropy.units as u
 import numpy as np
 import pytest
@@ -170,7 +172,7 @@ def test_psf_photometry(test_data):
     fit_shape = (5, 5)
     finder = DAOStarFinder(6.0, 2.0)
     psfphot = PSFPhotometry(psf_model, fit_shape, finder=finder,
-                            aperture_radius=4)
+                            aperture_radius=4, group_warning_threshold=25)
     phot = psfphot(data, error=error)
     resid_data = psfphot.make_residual_image(data, psf_shape=fit_shape)
 
@@ -201,7 +203,7 @@ def test_psf_photometry(test_data):
     unit = u.Jy
     finderu = DAOStarFinder(6.0 * unit, 2.0)
     psfphotu = PSFPhotometry(psf_model, fit_shape, finder=finderu,
-                             aperture_radius=4)
+                             aperture_radius=4, group_warning_threshold=25)
     photu = psfphotu(data * unit, error=error * unit)
     colnames = ('flux_init', 'flux_fit', 'flux_err', 'local_bkg')
     for col in colnames:
@@ -226,7 +228,7 @@ def test_psf_photometry_forced(test_data, fit_fwhm):
     fit_shape = (5, 5)
     finder = DAOStarFinder(6.0, 2.0)
     psfphot = PSFPhotometry(psf_model, fit_shape, finder=finder,
-                            aperture_radius=4)
+                            aperture_radius=4, group_warning_threshold=25)
     phot = psfphot(data, error=error)
     resid_data = psfphot.make_residual_image(data, psf_shape=fit_shape)
 
@@ -257,7 +259,7 @@ def test_psf_photometry_nddata(test_data):
     uncertainty = StdDevUncertainty(error)
     nddata = NDData(data, uncertainty=uncertainty)
     psfphot = PSFPhotometry(psf_model, fit_shape, finder=finder,
-                            aperture_radius=4)
+                            aperture_radius=4, group_warning_threshold=25)
     phot1 = psfphot(data, error=error)
     phot2 = psfphot(nddata)
     resid_data1 = psfphot.make_residual_image(data, psf_shape=fit_shape)
@@ -810,9 +812,45 @@ def test_large_group_warning():
                                              flux=(500, 700),
                                              min_separation=10, seed=0)
     match = 'Some groups have more than'
-    psfphot = PSFPhotometry(psf_model, fit_shape, grouper=grouper)
+    psfphot = PSFPhotometry(psf_model, fit_shape, grouper=grouper,
+                            group_warning_threshold=25)
     with pytest.warns(AstropyUserWarning, match=match):
         psfphot(data, init_params=true_params)
+
+
+def test_group_warning_threshold():
+    """
+    Test that the group_warning_threshold parameter works correctly.
+    """
+    psf_model = CircularGaussianPRF(flux=1, fwhm=2)
+    grouper = SourceGrouper(min_separation=50)
+    model_shape = (5, 5)
+    fit_shape = (5, 5)
+    n_sources = 10
+    shape = (101, 101)
+    data, true_params = make_psf_model_image(shape, psf_model, n_sources,
+                                             model_shape=model_shape,
+                                             flux=(500, 700),
+                                             min_separation=10, seed=0)
+
+    # Test with a small threshold that should trigger a warning
+    match = 'Some groups have more than 3 sources'
+    psfphot = PSFPhotometry(psf_model, fit_shape, grouper=grouper,
+                            group_warning_threshold=3)
+    with pytest.warns(AstropyUserWarning, match=match):
+        psfphot(data, init_params=true_params)
+
+    # Test with a large threshold that should not trigger a warning
+    psfphot = PSFPhotometry(psf_model, fit_shape, grouper=grouper,
+                            group_warning_threshold=50)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter('always')
+        psfphot(data, init_params=true_params)
+        # Check that no AstropyUserWarning was raised
+        astropy_warnings = [warning for warning in w
+                           if isinstance(warning.message, AstropyUserWarning)
+                           and 'Some groups have more than' in str(warning.message)]
+        assert len(astropy_warnings) == 0
 
 
 def test_local_bkg(test_data):
