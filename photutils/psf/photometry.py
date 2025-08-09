@@ -1411,15 +1411,13 @@ class PSFPhotometry(ModelImageMixin):
         model_info : dict
             Dictionary containing serialized model.
         """
-        import base64
         import pickle
 
         # Serialize the entire model using pickle
         model_bytes = pickle.dumps(psf_model)
-        model_b64 = base64.b64encode(model_bytes).decode('ascii')
 
         return {
-            'serialized_model': model_b64,
+            'serialized_model': model_bytes,
             'model_type': 'pickle',
         }
 
@@ -1438,13 +1436,11 @@ class PSFPhotometry(ModelImageMixin):
         model : `astropy.modeling.Model`
             The reconstructed model.
         """
-        import base64
         import pickle
 
         if model_info['model_type'] == 'pickle':
             # Deserialize using pickle
-            model_bytes = base64.b64decode(model_info['serialized_model'].encode('ascii'))
-            model = pickle.loads(model_bytes)
+            model = pickle.loads(model_info['serialized_model'])
             return model
         raise ValueError(f"Unknown model serialization type: {model_info['model_type']}")
 
