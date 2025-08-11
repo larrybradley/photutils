@@ -104,11 +104,12 @@ class EPSFFitter:
             msg = 'The input epsf must be an ImagePSF'
             raise TypeError(msg)
 
-        epsf = _LegacyEPSFModel(epsf.data, flux=epsf.flux, x_0=epsf.x_0,
-                                y_0=epsf.y_0, oversampling=epsf.oversampling,
-                                fill_value=epsf.fill_value)
+        # epsf = _LegacyEPSFModel(epsf.data, flux=epsf.flux, x_0=epsf.x_0,
+        #                         y_0=epsf.y_0, oversampling=epsf.oversampling,
+        #                         fill_value=epsf.fill_value)
 
         # make a copy of the input ePSF
+        # (copy only parameters, not the data)
         epsf = epsf.copy()
 
         # perform the fit
@@ -379,7 +380,7 @@ class EPSFBuilder:
 
     def _create_initial_epsf(self, stars):
         """
-        Create an initial `_LegacyEPSFModel` object.
+        Create an initial `ImagePSF` object.
 
         The initial ePSF data are all zeros.
 
@@ -430,9 +431,19 @@ class EPSFBuilder:
         xcenter = stars._max_shape[1] / 2.0
         ycenter = stars._max_shape[0] / 2.0
 
-        return _LegacyEPSFModel(data=data, origin=(xcenter, ycenter),
-                                oversampling=oversampling,
-                                norm_radius=norm_radius)
+        # return _LegacyEPSFModel(data=data, origin=(xcenter, ycenter),
+        #                         oversampling=oversampling,
+        #                         norm_radius=norm_radius)
+
+        # origin as center of data array in (x, y) order
+        origin_xy = ((data.shape[1] - 1) / 2.0, (data.shape[0] - 1) / 2.0)
+
+        epsf = ImagePSF(data=data, origin=origin_xy, oversampling=oversampling,
+                        fill_value=0.0)
+        # preserve norm_radius for backward compatibility
+        epsf._norm_radius = norm_radius
+        return epsf
+
 
     def _resample_residual(self, star, epsf):
         """
@@ -466,8 +477,13 @@ class EPSFBuilder:
         x = star._xidx_centered
         y = star._yidx_centered
 
+        #stardata = (star._data_values_normalized
+        #            - epsf.evaluate(x=x, y=y, flux=1.0, x_0=0.0, y_0=0.0))
+
         stardata = (star._data_values_normalized
-                    - epsf.evaluate(x=x, y=y, flux=1.0, x_0=0.0, y_0=0.0))
+                    - epsf.evaluate(x=star._xidx_centered,
+                                    y=star._yidx_centered,
+                                    flux=1.0, x_0=0.0, y_0=0.0))
 
         x = epsf.oversampling[1] * star._xidx_centered
         y = epsf.oversampling[0] * star._yidx_centered
@@ -477,10 +493,11 @@ class EPSFBuilder:
         xidx = py2intround(x + epsf_xcenter)
         yidx = py2intround(y + epsf_ycenter)
 
-        resampled_img = np.full(epsf.shape, np.nan)
+        epsf_shape = epsf.data.shape
+        resampled_img = np.full(epsf_shape, np.nan)
 
-        mask = np.logical_and(np.logical_and(xidx >= 0, xidx < epsf.shape[1]),
-                              np.logical_and(yidx >= 0, yidx < epsf.shape[0]))
+        mask = np.logical_and(np.logical_and(xidx >= 0, xidx < epsf_shape[1]),
+                              np.logical_and(yidx >= 0, yidx < epsf_shape[0]))
         xidx_ = xidx[mask]
         yidx_ = yidx[mask]
 
@@ -505,7 +522,8 @@ class EPSFBuilder:
         epsf_resid : 3D `~numpy.ndarray`
             A 3D cube containing the resampled residual images.
         """
-        shape = (stars.n_good_stars, epsf.shape[0], epsf.shape[1])
+        epsf_shape = epsf.data.shape
+        shape = (stars.n_good_stars, epsf_shape[0], epsf_shape[1])
         epsf_resid = np.zeros(shape)
         for i, star in enumerate(stars.all_good_stars):
             epsf_resid[i, :, :] = self._resample_residual(star, epsf)
@@ -613,62 +631,101 @@ class EPSFBuilder:
         result : 2D `~numpy.ndarray`
             The recentered ePSF data.
         """
-        epsf_data = epsf._data
+        epsf_data = epsf.data
 
-        epsf = _LegacyEPSFModel(data=epsf._data, origin=epsf.origin,
-                                oversampling=epsf.oversampling,
-                                norm_radius=epsf._norm_radius, normalize=False)
+        # epsf = _LegacyEPSFModel(data=epsf._data, origin=epsf.origin,
+        #                         oversampling=epsf.oversampling,
+        #                         norm_radius=epsf._norm_radius, normalize=False)
 
-        xcenter, ycenter = epsf.origin
+        # xcenter, ycenter = epsf.origin
 
-        y, x = np.indices(epsf._data.shape, dtype=float)
-        x /= epsf.oversampling[1]
-        y /= epsf.oversampling[0]
+        # y, x = np.indices(epsf._data.shape, dtype=float)
+        # x /= epsf.oversampling[1]
+        # y /= epsf.oversampling[0]
 
-        dx_total, dy_total = 0, 0
-        iter_num = 0
-        center_accuracy_sq = center_accuracy**2
-        center_dist_sq = center_accuracy_sq + 1.0e6
-        center_dist_sq_prev = center_dist_sq + 1
-        while (iter_num < maxiters and center_dist_sq >= center_accuracy_sq):
-            iter_num += 1
+        # dx_total, dy_total = 0, 0
+        # iter_num = 0
+        # center_accuracy_sq = center_accuracy**2
+        # center_dist_sq = center_accuracy_sq + 1.0e6
+        # center_dist_sq_prev = center_dist_sq + 1
+        # while (iter_num < maxiters and center_dist_sq >= center_accuracy_sq):
+        #     iter_num += 1
 
-            # Anderson & King (2000) recentering function depends
-            # on specific pixels, and thus does not need a cutout
-            slices_large, _ = overlap_slices(epsf_data.shape, box_size,
-                                             (ycenter * self.oversampling[0],
-                                              xcenter * self.oversampling[1]))
-            epsf_cutout = epsf_data[slices_large]
-            mask = ~np.isfinite(epsf_cutout)
+        #     # Anderson & King (2000) recentering function depends
+        #     # on specific pixels, and thus does not need a cutout
+        #     slices_large, _ = overlap_slices(epsf_data.shape, box_size,
+        #                                      (ycenter * self.oversampling[0],
+        #                                       xcenter * self.oversampling[1]))
+        #     epsf_cutout = epsf_data[slices_large]
+        #     mask = ~np.isfinite(epsf_cutout)
 
-            # find a new center position
-            xcenter_new, ycenter_new = centroid_func(epsf_cutout,
-                                                     mask=mask)
-            xcenter_new /= self.oversampling[1]
-            ycenter_new /= self.oversampling[0]
+        #     # find a new center position
+        #     xcenter_new, ycenter_new = centroid_func(epsf_cutout,
+        #                                              mask=mask)
+        #     xcenter_new /= self.oversampling[1]
+        #     ycenter_new /= self.oversampling[0]
 
-            xcenter_new += slices_large[1].start / self.oversampling[1]
-            ycenter_new += slices_large[0].start / self.oversampling[0]
+        #     xcenter_new += slices_large[1].start / self.oversampling[1]
+        #     ycenter_new += slices_large[0].start / self.oversampling[0]
 
-            # Calculate the shift; dx = i - x_star so if dx was positively
-            # incremented then x_star was negatively incremented for a given i.
-            # We will therefore actually subsequently subtract dx from xcenter
-            # (or x_star).
-            dx = xcenter_new - xcenter
-            dy = ycenter_new - ycenter
+        #     # Calculate the shift; dx = i - x_star so if dx was positively
+        #     # incremented then x_star was negatively incremented for a given i.
+        #     # We will therefore actually subsequently subtract dx from xcenter
+        #     # (or x_star).
+        #     dx = xcenter_new - xcenter
+        #     dy = ycenter_new - ycenter
 
-            center_dist_sq = dx**2 + dy**2
+        #     center_dist_sq = dx**2 + dy**2
 
-            if center_dist_sq >= center_dist_sq_prev:  # don't shift
-                break
-            center_dist_sq_prev = center_dist_sq
+        #     if center_dist_sq >= center_dist_sq_prev:  # don't shift
+        #         break
+        #     center_dist_sq_prev = center_dist_sq
 
-            dx_total += dx
-            dy_total += dy
+        #     dx_total += dx
+        #     dy_total += dy
 
-            epsf_data = epsf.evaluate(x=x, y=y, flux=1.0,
-                                      x_0=xcenter - dx_total,
-                                      y_0=ycenter - dy_total)
+        #     epsf_data = epsf.evaluate(x=x, y=y, flux=1.0,
+        #                               x_0=xcenter - dx_total,
+        #                               y_0=ycenter - dy_total)
+
+
+        # Find current peak location in array indices
+        ypeak, xpeak = np.unravel_index(np.nanargmax(epsf_data), epsf_data.shape)
+
+        # Get intended center based on ImagePSF origin
+        # origin is in (x, y) order; convert to array indices
+        origin_x, origin_y = epsf.origin
+        xcenter = origin_x
+        ycenter = origin_y
+
+        # Compute shift in array index units
+        shift_x = xcenter - xpeak
+        shift_y = ycenter - ypeak
+
+        # Define the extraction region
+        try:
+            slices_large, slices_small = overlap_slices(
+                epsf_data.shape, box_size,
+                position=(int(ycenter), int(xcenter))
+            )
+        except NoOverlapError:
+            raise NoOverlapError(
+                "Cannot recenter ePSF: computed recentering shift places "
+                "the recentering box completely outside the ePSF array. "
+                "This may indicate a mismatch between ImagePSF.origin and "
+                "the data array center."
+            )
+
+        # Create a new array with shifted data
+        recentered_data = np.zeros_like(epsf_data)
+        recentered_data[slices_large] = epsf_data[slices_small]
+
+        # Update epsf data in place
+        epsf = epsf.copy()
+        epsf.data = recentered_data
+        return epsf
+
+
 
         return epsf_data
 
@@ -723,14 +780,23 @@ class EPSFBuilder:
             residuals[~np.isfinite(residuals)] = 0.0
 
         # add the residuals to the previous ePSF image
-        new_epsf = epsf._data + residuals
+        new_epsf = epsf.data + residuals
 
         # smooth and recenter the ePSF
         new_epsf = self._smooth_epsf(new_epsf)
 
-        epsf = _LegacyEPSFModel(data=new_epsf, origin=epsf.origin,
-                                oversampling=epsf.oversampling,
-                                norm_radius=epsf._norm_radius, normalize=False)
+
+        epsf = ImagePSF(data=epsf.data,
+                        origin=((epsf.data.shape[1] - 1) / 2.0,
+                                (epsf.data.shape[0] - 1) / 2.0),
+                        oversampling=self.oversampling,
+                        fill_value=0.0)
+        #epsf._norm_radius = self.norm_radius
+
+
+#        epsf = _LegacyEPSFModel(data=new_epsf, origin=epsf.origin,
+#                                oversampling=epsf.oversampling,
+#                                norm_radius=epsf._norm_radius, normalize=False)
 
         epsf._data = self._recenter_epsf(
             epsf, centroid_func=self.recentering_func,
@@ -739,12 +805,21 @@ class EPSFBuilder:
 
         # Return the new ePSF object, but with undersampled grid pixel
         # coordinates.
-        xcenter = (epsf._data.shape[1] - 1) / 2.0 / epsf.oversampling[1]
-        ycenter = (epsf._data.shape[0] - 1) / 2.0 / epsf.oversampling[0]
+        xcenter = (epsf.data.shape[1] - 1) / 2.0 / epsf.oversampling[1]
+        ycenter = (epsf.data.shape[0] - 1) / 2.0 / epsf.oversampling[0]
 
-        return _LegacyEPSFModel(data=epsf._data, origin=(xcenter, ycenter),
-                                oversampling=epsf.oversampling,
-                                norm_radius=epsf._norm_radius)
+
+        new_epsf = ImagePSF(data=new_epsf.data,
+                            origin=((new_epsf.data.shape[1] - 1) / 2.0,
+                                    (new_epsf.data.shape[0] - 1) / 2.0),
+                            oversampling=self.oversampling,
+                            fill_value=0.0)
+        # new_epsf._norm_radius = self.norm_radius
+
+
+#        return _LegacyEPSFModel(data=epsf._data, origin=(xcenter, ycenter),
+#                                oversampling=epsf.oversampling,
+#                                norm_radius=epsf._norm_radius)
 
     def build_epsf(self, stars, *, init_epsf=None):
         """
