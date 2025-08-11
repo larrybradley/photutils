@@ -706,14 +706,14 @@ class EPSFBuilder:
         try:
             slices_large, slices_small = overlap_slices(
                 epsf_data.shape, box_size,
-                position=(int(ycenter), int(xcenter))
+                position=(int(ycenter), int(xcenter)),
             )
         except NoOverlapError:
             raise NoOverlapError(
-                "Cannot recenter ePSF: computed recentering shift places "
-                "the recentering box completely outside the ePSF array. "
-                "This may indicate a mismatch between ImagePSF.origin and "
-                "the data array center."
+                'Cannot recenter ePSF: computed recentering shift places '
+                'the recentering box completely outside the ePSF array. '
+                'This may indicate a mismatch between ImagePSF.origin and '
+                'the data array center.',
             )
 
         # Create a new array with shifted data
