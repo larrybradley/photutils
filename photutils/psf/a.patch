@@ -53,4 +53,3 @@
 +        stardata = (star._data_values_normalized
 +                    - epsf.evaluate(x=star._xidx_centered, y=star._yidx_centered,
 +                                    flux=1.0, x_0=0.0, y_0=0.0))
-
