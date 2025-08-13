@@ -174,6 +174,13 @@ class ImagePSF(Fittable2DModel):
     def __str__(self):
         return self._format_str(keywords=self._cls_info())
 
+    @property
+    def shape(self):
+        """
+        A tuple of dimensions of the data array in numpy style (ny, nx).
+        """
+        return self.data.shape
+
     def copy(self):
         """
         Return a copy of this model where only the model parameters are
