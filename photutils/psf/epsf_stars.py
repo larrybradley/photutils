@@ -17,7 +17,6 @@ from photutils.aperture import BoundingBox
 from photutils.psf.utils import _interpolate_missing_data
 from photutils.utils._parameters import as_pair
 from photutils.utils.cutouts import _overlap_slices as overlap_slices
-from photutils.psf.image_models import ImagePSF
 
 __all__ = ['EPSFStar', 'EPSFStars', 'LinkedEPSFStar', 'extract_stars']
 
