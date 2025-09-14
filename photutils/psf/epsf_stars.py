@@ -14,7 +14,7 @@ from astropy.utils import lazyproperty
 from astropy.utils.exceptions import AstropyUserWarning
 
 from photutils.aperture import BoundingBox
-from photutils.psf.image_models import _LegacyEPSFModel
+from photutils.psf.compatible_epsf import CompatibleImagePSF
 from photutils.psf.utils import _interpolate_missing_data
 from photutils.utils._parameters import as_pair
 from photutils.utils.cutouts import _overlap_slices as overlap_slices
@@ -194,10 +194,10 @@ class EPSFStar:
         data : `~numpy.ndarray`
             A 2D array of the registered/scaled ePSF.
         """
-        legacy_epsf = _LegacyEPSFModel(epsf.data, flux=epsf.flux, x_0=epsf.x_0,
-                                       y_0=epsf.y_0,
-                                       oversampling=epsf.oversampling,
-                                       fill_value=epsf.fill_value)
+        legacy_epsf = CompatibleImagePSF(epsf.data, flux=epsf.flux,
+                                          x_0=epsf.x_0, y_0=epsf.y_0,
+                                          oversampling=epsf.oversampling,
+                                          fill_value=epsf.fill_value)
 
         yy, xx = np.indices(self.shape, dtype=float)
         xx = xx - self.cutout_center[0]

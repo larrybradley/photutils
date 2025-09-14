@@ -15,8 +15,9 @@ from astropy.utils.exceptions import AstropyUserWarning
 from scipy.ndimage import convolve
 
 from photutils.centroids import centroid_com
+from photutils.psf.compatible_epsf import CompatibleImagePSF
 from photutils.psf.epsf_stars import EPSFStar, EPSFStars, LinkedEPSFStar
-from photutils.psf.image_models import ImagePSF, _LegacyEPSFModel
+from photutils.psf.image_models import ImagePSF
 from photutils.psf.utils import _interpolate_missing_data
 from photutils.utils._parameters import (SigmaClipSentinelDefault, as_pair,
                                          create_default_sigmaclip)
@@ -104,9 +105,11 @@ class EPSFFitter:
             msg = 'The input epsf must be an ImagePSF'
             raise TypeError(msg)
 
-        epsf = _LegacyEPSFModel(epsf.data, flux=epsf.flux, x_0=epsf.x_0,
-                                y_0=epsf.y_0, oversampling=epsf.oversampling,
-                                fill_value=epsf.fill_value)
+        epsf = CompatibleImagePSF(epsf.data, flux=epsf.flux, x_0=epsf.x_0,
+                                  y_0=epsf.y_0,
+                                  oversampling=epsf.oversampling,
+                                  fill_value=epsf.fill_value,
+                                  normalize=False)
 
         # make a copy of the input ePSF
         epsf = epsf.copy()
@@ -379,7 +382,7 @@ class EPSFBuilder:
 
     def _create_initial_epsf(self, stars):
         """
-        Create an initial `_LegacyEPSFModel` object.
+        Create an initial `CompatibleImagePSF` object.
 
         The initial ePSF data are all zeros.
 
@@ -396,7 +399,7 @@ class EPSFBuilder:
 
         Returns
         -------
-        epsf : `_LegacyEPSFModel`
+        epsf : `CompatibleImagePSF`
             The initial ePSF model.
         """
         norm_radius = self._norm_radius
@@ -430,9 +433,9 @@ class EPSFBuilder:
         xcenter = stars._max_shape[1] / 2.0
         ycenter = stars._max_shape[0] / 2.0
 
-        return _LegacyEPSFModel(data=data, origin=(xcenter, ycenter),
-                                oversampling=oversampling,
-                                norm_radius=norm_radius)
+        return CompatibleImagePSF(data=data, origin=(xcenter, ycenter),
+                                  oversampling=oversampling,
+                                  norm_radius=norm_radius, normalize=False)
 
     def _resample_residual(self, star, epsf):
         """
@@ -450,7 +453,7 @@ class EPSFBuilder:
         star : `EPSFStar` object
             A single star object.
 
-        epsf : `_LegacyEPSFModel` object
+        epsf : `CompatibleImagePSF` object
             The ePSF model.
 
         Returns
@@ -497,7 +500,7 @@ class EPSFBuilder:
         stars : `EPSFStars` object
             The stars used to build the ePSF.
 
-        epsf : `_LegacyEPSFModel` object
+        epsf : `CompatibleImagePSF` object
             The ePSF model.
 
         Returns
@@ -581,7 +584,7 @@ class EPSFBuilder:
 
         Parameters
         ----------
-        epsf : `_LegacyEPSFModel` object
+        epsf : `CompatibleImagePSF` object
             The ePSF model.
 
         centroid_func : callable, optional
@@ -613,15 +616,11 @@ class EPSFBuilder:
         result : 2D `~numpy.ndarray`
             The recentered ePSF data.
         """
-        epsf_data = epsf._data
-
-        epsf = _LegacyEPSFModel(data=epsf._data, origin=epsf.origin,
-                                oversampling=epsf.oversampling,
-                                norm_radius=epsf._norm_radius, normalize=False)
+        epsf_data = epsf.data
 
         xcenter, ycenter = epsf.origin
 
-        y, x = np.indices(epsf._data.shape, dtype=float)
+        y, x = np.indices(epsf.data.shape, dtype=float)
         x /= epsf.oversampling[1]
         y /= epsf.oversampling[0]
 
@@ -681,13 +680,13 @@ class EPSFBuilder:
         stars : `EPSFStars` object
             The stars used to build the ePSF.
 
-        epsf : `_LegacyEPSFModel` object, optional
+        epsf : `CompatibleImagePSF` object, optional
             The initial ePSF model. If not input, then the ePSF will be
             built from scratch.
 
         Returns
         -------
-        epsf : `_LegacyEPSFModel` object
+        epsf : `CompatibleImagePSF` object
             The updated ePSF.
         """
         if len(stars) < 1:
@@ -728,23 +727,25 @@ class EPSFBuilder:
         # smooth and recenter the ePSF
         new_epsf = self._smooth_epsf(new_epsf)
 
-        epsf = _LegacyEPSFModel(data=new_epsf, origin=epsf.origin,
-                                oversampling=epsf.oversampling,
-                                norm_radius=epsf._norm_radius, normalize=False)
+        epsf = CompatibleImagePSF(data=new_epsf, origin=epsf.origin,
+                                  oversampling=epsf.oversampling,
+                                  norm_radius=epsf.norm_radius,
+                                  normalize=False)
 
-        epsf._data = self._recenter_epsf(
+        epsf_data = self._recenter_epsf(
             epsf, centroid_func=self.recentering_func,
             box_size=self.recentering_boxsize,
             maxiters=self.recentering_maxiters)
 
         # Return the new ePSF object, but with undersampled grid pixel
         # coordinates.
-        xcenter = (epsf._data.shape[1] - 1) / 2.0 / epsf.oversampling[1]
-        ycenter = (epsf._data.shape[0] - 1) / 2.0 / epsf.oversampling[0]
+        xcenter = (epsf_data.shape[1] - 1) / 2.0 / epsf.oversampling[1]
+        ycenter = (epsf_data.shape[0] - 1) / 2.0 / epsf.oversampling[0]
 
-        return _LegacyEPSFModel(data=epsf._data, origin=(xcenter, ycenter),
-                                oversampling=epsf.oversampling,
-                                norm_radius=epsf._norm_radius)
+        return CompatibleImagePSF(data=epsf_data, origin=(xcenter, ycenter),
+                                  oversampling=epsf.oversampling,
+                                  norm_radius=epsf.norm_radius,
+                                  normalize=False)
 
     def build_epsf(self, stars, *, init_epsf=None):
         """
@@ -783,10 +784,12 @@ class EPSFBuilder:
         if epsf is None:
             legacy_epsf = None
         else:
-            legacy_epsf = _LegacyEPSFModel(epsf.data, flux=epsf.flux,
-                                           x_0=epsf.x_0, y_0=epsf.y_0,
-                                           oversampling=epsf.oversampling,
-                                           fill_value=epsf.fill_value)
+            legacy_epsf = CompatibleImagePSF(epsf.data, flux=epsf.flux,
+                                             x_0=epsf.x_0, y_0=epsf.y_0,
+                                             oversampling=epsf.oversampling,
+                                             fill_value=epsf.fill_value,
+                                             norm_radius=self._norm_radius,
+                                             normalize=False)
 
         while (iter_num < self.maxiters and not np.all(fit_failed)
                and np.max(center_dist_sq) >= self.center_accuracy_sq):
