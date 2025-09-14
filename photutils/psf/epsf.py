@@ -1192,58 +1192,6 @@ class EPSFBuilder:
 
         return epsf_resid
 
-    def _compute_residual_median(self, stars, epsf):
-        """
-        Compute sigma-clipped median of residual images without storing
-        the full 3D array in memory.
-
-        This is a memory-efficient alternative to creating a large 3D
-        residual array. It processes residuals iteratively and computes
-        the sigma-clipped median directly.
-
-        Parameters
-        ----------
-        stars : `EPSFStars` object
-            The stars used to build the ePSF.
-
-        epsf : `ImagePSF` object
-            The ePSF model.
-
-        Returns
-        -------
-        residual_median : 2D `~numpy.ndarray`
-            The sigma-clipped median residual image.
-        """
-        n_stars = stars.n_good_stars
-        if n_stars == 0:
-            msg = 'No good stars available for residual computation'
-            raise ValueError(msg)
-
-        # Initialize with first star's residual
-        first_star = next(iter(stars.all_good_stars))
-        first_residual = self._resample_residual(first_star, epsf)
-
-        if n_stars == 1:
-            return first_residual
-
-        # For multiple stars, collect all residuals for sigma clipping
-        # We still need all data for proper sigma clipping, but we can
-        # process in chunks for very large datasets
-        residuals_list = [first_residual]
-        residuals_list.extend(self._resample_residual(star, epsf)
-                              for star in list(stars.all_good_stars)[1:])
-
-        # Stack residuals for sigma clipping
-        residuals = np.array(residuals_list)
-
-        # Apply sigma clipping and compute median
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore', category=RuntimeWarning)
-            warnings.simplefilter('ignore', category=AstropyUserWarning)
-            residuals = self._sigma_clip(residuals, axis=0, masked=False,
-                                         return_bounds=False)
-            return nanmedian(residuals, axis=0)
-
     def _smooth_epsf(self, epsf_data):
         """
         Smooth the ePSF array by convolving it with a kernel.
@@ -1419,7 +1367,15 @@ class EPSFBuilder:
             epsf = copy.copy(epsf)
 
         # compute a 3D stack of 2D residual images
-        residuals = self._compute_residual_median(stars, epsf)
+        residuals = self._resample_residuals(stars, epsf)
+
+        # compute the sigma-clipped median along the 3D stack
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', category=RuntimeWarning)
+            warnings.simplefilter('ignore', category=AstropyUserWarning)
+            residuals = self._sigma_clip(residuals, axis=0, masked=False,
+                                         return_bounds=False)
+            residuals = nanmedian(residuals, axis=0)
 
         # interpolate any missing data (np.nan)
         mask = ~np.isfinite(residuals)
