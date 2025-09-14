@@ -193,21 +193,7 @@ class EPSFStar:
         data : `~numpy.ndarray`
             A 2D array of the registered/scaled ePSF.
         """
-        # legacy_epsf = _LegacyEPSFModel(epsf.data, flux=epsf.flux, x_0=epsf.x_0,
-        #                                y_0=epsf.y_0,
-        #                                oversampling=epsf.oversampling,
-        #                                fill_value=epsf.fill_value)
-
-        # yy, xx = np.indices(self.shape, dtype=float)
-        # xx = xx - self.cutout_center[0]
-        # yy = yy - self.cutout_center[1]
-
-        #return self.flux * legacy_epsf.evaluate(xx, yy, flux=1.0, x_0=0.0,
-        #                                        y_0=0.0)
-
         yy, xx = np.indices(self.shape, dtype=float)
-        xx = xx
-        yy = yy
         # Evaluate directly using ImagePSF coordinate convention
         return self.flux * epsf.evaluate(xx, yy, flux=1.0,
                                          x_0=self.cutout_center[0],
