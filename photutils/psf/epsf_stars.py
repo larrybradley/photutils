@@ -596,32 +596,55 @@ class LinkedEPSFStar(EPSFStars):
             sky_coords[i] = star.wcs_large.pixel_to_world_values(
                 x_positions[i], y_positions[i])
 
-        # Compute mean sky coordinates using spherical trigonometry
-        # for proper handling of coordinate system singularities
-        lon, lat = sky_coords.T
-        lon_rad = np.deg2rad(lon)
-        lat_rad = np.deg2rad(lat)
-
-        # Convert to Cartesian coordinates for averaging
-        x_cart = np.cos(lat_rad) * np.cos(lon_rad)
-        y_cart = np.cos(lat_rad) * np.sin(lon_rad)
-        z_cart = np.sin(lat_rad)
-
-        # Compute mean Cartesian coordinates
-        mean_x = np.mean(x_cart)
-        mean_y = np.mean(y_cart)
-        mean_z = np.mean(z_cart)
-
-        # Convert mean Cartesian coordinates back to spherical
-        hypot = np.hypot(mean_x, mean_y)
-        mean_lon = np.rad2deg(np.arctan2(mean_y, mean_x))
-        mean_lat = np.rad2deg(np.arctan2(mean_z, hypot))
+        # Compute mean sky coordinate using spherical averaging
+        mean_lon, mean_lat = _compute_mean_sky_coordinate(sky_coords)
 
         # Convert mean sky coordinates back to pixel coordinates for each star
         for star in good_stars:
             pixel_center = star.wcs_large.world_to_pixel_values(
                 mean_lon, mean_lat)
             star.cutout_center = np.asarray(pixel_center) - star.origin
+
+
+def _compute_mean_sky_coordinate(sky_coords):
+    """
+    Compute the mean sky coordinate using spherical trigonometry.
+
+    This method properly handles coordinate system singularities by
+    converting to Cartesian coordinates for averaging, then converting
+    back to spherical coordinates.
+
+    Parameters
+    ----------
+    sky_coords : array-like, shape (N, 2)
+        Array of sky coordinates in degrees, where each row contains
+        (longitude, latitude).
+
+    Returns
+    -------
+    mean_lon, mean_lat : float
+        Mean longitude and latitude in degrees.
+    """
+    lon, lat = sky_coords.T
+    lon_rad = np.deg2rad(lon)
+    lat_rad = np.deg2rad(lat)
+
+    # Convert to Cartesian coordinates for averaging
+    x_cart = np.cos(lat_rad) * np.cos(lon_rad)
+    y_cart = np.cos(lat_rad) * np.sin(lon_rad)
+    z_cart = np.sin(lat_rad)
+
+    # Compute mean Cartesian coordinates
+    mean_x = np.mean(x_cart)
+    mean_y = np.mean(y_cart)
+    mean_z = np.mean(z_cart)
+
+    # Convert mean Cartesian coordinates back to spherical
+    hypot = np.hypot(mean_x, mean_y)
+    mean_lon = np.rad2deg(np.arctan2(mean_y, mean_x))
+    mean_lat = np.rad2deg(np.arctan2(mean_z, hypot))
+
+    return mean_lon, mean_lat
 
 
 def extract_stars(data, catalogs, *, size=(11, 11)):
@@ -767,51 +790,71 @@ def extract_stars(data, catalogs, *, size=(11, 11)):
 
     size = as_pair('size', size, lower_bound=(3, 0), check_odd=True)
 
-    if len(catalogs) == 1:  # may included linked stars
-        use_xy = True
-        if len(data) > 1:
-            use_xy = False  # linked stars require skycoord positions
-
-        # stars is a list of lists, one list of stars in each image
-        stars = [_extract_stars(img, catalogs[0], size=size, use_xy=use_xy)
-                 for img in data]
-
-        # transpose the list of lists, to associate linked stars
-        stars = list(map(list, zip(*stars, strict=True)))
-
-        # remove 'None' stars (i.e., no or partial overlap in one or
-        # more images) and handle the case of only one "linked" star
-        stars_out = []
+    if len(catalogs) == 1:  # may include linked stars
+        stars_out = _extract_linked_stars(data, catalogs[0], size)
         n_input = len(catalogs[0]) * len(data)
-        n_extracted = 0
-        for star in stars:
-            good_stars = [i for i in star if i is not None]
-            n_extracted += len(good_stars)
-            if not good_stars:
-                continue  # no overlap in any image
-
-            if len(good_stars) == 1:
-                good_stars = good_stars[0]  # only one star, cannot be linked
-            else:
-                good_stars = LinkedEPSFStar(good_stars)
-
-            stars_out.append(good_stars)
     else:  # no linked stars
-        stars_out = []
-        for img, cat in zip(data, catalogs, strict=True):
-            stars_out.extend(_extract_stars(img, cat, size=size, use_xy=True))
+        stars_out = _extract_unlinked_stars(data, catalogs, size)
+        n_input = sum(len(cat) for cat in catalogs)
 
-        n_input = len(stars_out)
-        stars_out = [star for star in stars_out if star is not None]
-        n_extracted = len(stars_out)
-
+    n_extracted = len([star for star in stars_out
+                      if star is not None])
     n_excluded = n_input - n_extracted
+
     if n_excluded > 0:
         warnings.warn(f'{n_excluded} star(s) were not extracted because '
                       'their cutout region extended beyond the input image.',
                       AstropyUserWarning)
 
     return EPSFStars(stars_out)
+
+
+def _extract_linked_stars(data, catalog, size):
+    """
+    Extract stars that may be linked across multiple images.
+
+    Returns a list of EPSFStar or LinkedEPSFStar objects.
+    """
+    use_xy = len(data) == 1  # Use pixel coords only for single image
+
+    # Extract stars from each image
+    stars = [_extract_stars(img, catalog, size=size, use_xy=use_xy)
+             for img in data]
+
+    # Transpose to associate linked stars across images
+    stars = list(map(list, zip(*stars, strict=True)))
+
+    # Process each potential linked star group
+    stars_out = []
+    for star_group in stars:
+        good_stars = [star for star in star_group if star is not None]
+
+        if not good_stars:
+            continue  # No valid stars in any image
+
+        if len(good_stars) == 1:
+            # Single star, not linked
+            stars_out.append(good_stars[0])
+        else:
+            # Multiple stars - create linked star
+            stars_out.append(LinkedEPSFStar(good_stars))
+
+    return stars_out
+
+
+def _extract_unlinked_stars(data, catalogs, size):
+    """
+    Extract stars from individual catalogs (no linking).
+
+    Returns a flat list of EPSFStar objects.
+    """
+    stars_out = []
+    for img, cat in zip(data, catalogs, strict=True):
+        extracted = _extract_stars(img, cat, size=size, use_xy=True)
+        stars_out.extend(extracted)
+
+    # Filter out None values
+    return [star for star in stars_out if star is not None]
 
 
 def _extract_stars(data, catalog, *, size=(11, 11), use_xy=True):
