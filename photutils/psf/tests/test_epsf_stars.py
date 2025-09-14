@@ -173,8 +173,11 @@ class TestEPSFStar:
         Test handling of invalid pixel values.
         """
         data = np.ones((5, 5))
+        # Add enough invalid data to trigger the warning (>10%)
         data[1, 1] = np.nan
         data[2, 2] = np.inf
+        data[3, 3] = np.nan
+        data[4, 4] = np.inf
 
         # Should warn about high percentage of invalid data
         with warnings.catch_warnings(record=True) as w:
@@ -183,8 +186,12 @@ class TestEPSFStar:
             # Should mask invalid pixels
             assert star.mask[1, 1]
             assert star.mask[2, 2]
+            assert star.mask[3, 3]
+            assert star.mask[4, 4]
             assert star.weights[1, 1] == 0.0
             assert star.weights[2, 2] == 0.0
+            assert star.weights[3, 3] == 0.0
+            assert star.weights[4, 4] == 0.0
             # Check that warning was issued about invalid data
             assert len(w) > 0
 
