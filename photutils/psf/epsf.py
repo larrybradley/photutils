@@ -144,6 +144,10 @@ class EPSFValidator:
         ValueError
             If oversampling is invalid.
         """
+        if oversampling is None:
+            msg = "'oversampling' must be specified"
+            raise ValueError(msg)
+
         try:
             oversampling = as_pair('oversampling', oversampling,
                                    lower_bound=(0, 1))
@@ -155,8 +159,7 @@ class EPSFValidator:
             raise ValueError(msg) from None
         else:
             if any(x < 1 for x in oversampling):
-                msg = (f"Oversampling factors must be >= 1, got "
-                       f"{oversampling}")
+                msg = 'oversampling must be > 0'
                 if context:
                     msg = f"{context}: {msg}"
                 raise ValueError(msg)
@@ -317,8 +320,7 @@ class EPSFValidator:
             raise TypeError(msg)
 
         if maxiters <= 0:
-            msg = ('maxiters must be positive, got '
-                   f"{maxiters}. Typical values are 10-50.")
+            msg = 'maxiters must be a positive number'
             raise ValueError(msg)
 
         if maxiters > 1000:
