@@ -487,34 +487,50 @@ class LinkedEPSFStar(EPSFStars):
 
         good_stars = [self._data[i]
                       for i in idx]  # pylint: disable=not-an-iterable
+        n_good = len(good_stars)
 
-        coords = []
+        if n_good == 0:
+            return
+
+        # Extract all pixel coordinates at once for better performance
+        pixel_coords = np.array([star.center for star in good_stars])
+        x_positions = pixel_coords[:, 0]
+        y_positions = pixel_coords[:, 1]
+
+        # Convert all pixel coordinates to sky coordinates
+        # Note: we still need individual conversions since each star
+        # may have different WCS transformations
+        sky_coords = np.empty((n_good, 2))
+        for i, star in enumerate(good_stars):
+            sky_coords[i] = star.wcs_large.pixel_to_world_values(
+                x_positions[i], y_positions[i])
+
+        # Compute mean sky coordinates using spherical trigonometry
+        # for proper handling of coordinate system singularities
+        lon, lat = sky_coords.T
+        lon_rad = np.deg2rad(lon)
+        lat_rad = np.deg2rad(lat)
+
+        # Convert to Cartesian coordinates for averaging
+        x_cart = np.cos(lat_rad) * np.cos(lon_rad)
+        y_cart = np.cos(lat_rad) * np.sin(lon_rad)
+        z_cart = np.sin(lat_rad)
+
+        # Compute mean Cartesian coordinates
+        mean_x = np.mean(x_cart)
+        mean_y = np.mean(y_cart)
+        mean_z = np.mean(z_cart)
+
+        # Convert mean Cartesian coordinates back to spherical
+        hypot = np.hypot(mean_x, mean_y)
+        mean_lon = np.rad2deg(np.arctan2(mean_y, mean_x))
+        mean_lat = np.rad2deg(np.arctan2(mean_z, hypot))
+
+        # Convert mean sky coordinates back to pixel coordinates for each star
         for star in good_stars:
-            wcs = star.wcs_large
-            xposition = star.center[0]
-            yposition = star.center[1]
-            coords.append(wcs.pixel_to_world_values(xposition, yposition))
-
-        # compute mean cartesian coordinates
-        lon, lat = np.transpose(coords)
-        lon *= np.pi / 180.0
-        lat *= np.pi / 180.0
-        x_mean = np.mean(np.cos(lat) * np.cos(lon))
-        y_mean = np.mean(np.cos(lat) * np.sin(lon))
-        z_mean = np.mean(np.sin(lat))
-
-        # convert mean cartesian coordinates back to spherical
-        hypot = np.hypot(x_mean, y_mean)
-        mean_lon = np.arctan2(y_mean, x_mean)
-        mean_lat = np.arctan2(z_mean, hypot)
-        mean_lon *= 180.0 / np.pi
-        mean_lat *= 180.0 / np.pi
-
-        # convert mean sky coordinates back to center pixel coordinates
-        # for each star
-        for star in good_stars:
-            center = star.wcs_large.world_to_pixel_values(mean_lon, mean_lat)
-            star.cutout_center = np.array(center) - star.origin
+            pixel_center = star.wcs_large.world_to_pixel_values(
+                mean_lon, mean_lat)
+            star.cutout_center = np.asarray(pixel_center) - star.origin
 
 
 def extract_stars(data, catalogs, *, size=(11, 11)):
