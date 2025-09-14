@@ -796,6 +796,189 @@ class EPSFBuilder:
                         oversampling=self.oversampling,
                         fill_value=0.0)
 
+    def _validate_and_initialize_build(self, stars, init_epsf):
+        """
+        Validate inputs and initialize variables for ePSF building.
+
+        Parameters
+        ----------
+        stars : `EPSFStars` object
+            The stars used to build the ePSF.
+        init_epsf : `ImagePSF` object or None
+            The initial ePSF model.
+
+        Returns
+        -------
+        legacy_epsf : `_LegacyEPSFModel` object or None
+            Legacy ePSF model for internal iterations.
+        fit_failed : `~numpy.ndarray`
+            Boolean array tracking failed fits.
+        centers : `~numpy.ndarray`
+            Initial star center positions.
+        """
+        # Input validation happens in build_epsf method signature
+
+        fit_failed = np.zeros(stars.n_stars, dtype=bool)
+        centers = stars.cutout_center_flat
+
+        if init_epsf is None:
+            legacy_epsf = None
+        else:
+            legacy_epsf = _LegacyEPSFModel(
+                init_epsf.data, flux=init_epsf.flux,
+                x_0=init_epsf.x_0, y_0=init_epsf.y_0,
+                oversampling=init_epsf.oversampling,
+                fill_value=init_epsf.fill_value)
+
+        return legacy_epsf, fit_failed, centers
+
+    def _setup_progress_bar(self):
+        """
+        Setup progress bar for ePSF building iterations.
+
+        Returns
+        -------
+        pbar : progress bar object or None
+            Progress bar instance if enabled, None otherwise.
+        """
+        if not self.progress_bar:
+            return None
+
+        desc = f'EPSFBuilder ({self.maxiters} maxiters)'
+        return add_progress_bar(total=self.maxiters,
+                                desc=desc)  # pragma: no cover
+
+    def _check_convergence(self, stars, centers, fit_failed):
+        """
+        Check if the ePSF building has converged.
+
+        Parameters
+        ----------
+        stars : `EPSFStars` object
+            The stars used to build the ePSF.
+        centers : `~numpy.ndarray`
+            Previous star center positions.
+        fit_failed : `~numpy.ndarray`
+            Boolean array tracking failed fits.
+
+        Returns
+        -------
+        converged : bool
+            True if convergence criteria are met.
+        center_dist_sq : `~numpy.ndarray`
+            Squared distances of center movements.
+        new_centers : `~numpy.ndarray`
+            Updated star center positions.
+        """
+        # Calculate center movements
+        new_centers = stars.cutout_center_flat
+        dx_dy = new_centers - centers
+        dx_dy = dx_dy[np.logical_not(fit_failed)]
+        center_dist_sq = np.sum(dx_dy * dx_dy, axis=1, dtype=np.float64)
+
+        # Check convergence
+        converged = np.max(center_dist_sq) < self.center_accuracy_sq
+
+        return converged, center_dist_sq, new_centers
+
+    def _process_iteration(self, stars, legacy_epsf, iter_num):
+        """
+        Process a single iteration of ePSF building.
+
+        Parameters
+        ----------
+        stars : `EPSFStars` object
+            The stars used to build the ePSF.
+        legacy_epsf : `_LegacyEPSFModel` object
+            Current ePSF model.
+        iter_num : int
+            Current iteration number.
+
+        Returns
+        -------
+        legacy_epsf : `_LegacyEPSFModel` object
+            Updated ePSF model.
+        stars : `EPSFStars` object
+            Updated stars with new fitted centers.
+        fit_failed : `~numpy.ndarray`
+            Boolean array tracking failed fits.
+        """
+        # Build/improve the ePSF
+        legacy_epsf = self._build_epsf_step(stars, epsf=legacy_epsf)
+
+        # Fit the new ePSF to the stars to find improved centers
+        with warnings.catch_warnings():
+            message = '.*The fit may be unsuccessful;.*'
+            warnings.filterwarnings('ignore', message=message,
+                                    category=AstropyUserWarning)
+
+            image_psf = ImagePSF(data=legacy_epsf.data,
+                                 flux=legacy_epsf.flux,
+                                 x_0=legacy_epsf.x_0,
+                                 y_0=legacy_epsf.y_0,
+                                 oversampling=legacy_epsf.oversampling,
+                                 fill_value=legacy_epsf.fill_value)
+
+            stars = self.fitter(image_psf, stars)
+
+        # Find all stars where the fit failed
+        fit_failed = np.array([star._fit_error_status > 0
+                              for star in stars.all_stars])
+
+        if np.all(fit_failed):
+            msg = 'The ePSF fitting failed for all stars.'
+            raise ValueError(msg)
+
+        # Permanently exclude fitting any star where the fit fails
+        # after 3 iterations
+        if iter_num > 3 and np.any(fit_failed):
+            idx = fit_failed.nonzero()[0]
+            for i in idx:  # pylint: disable=not-an-iterable
+                stars.all_stars[i]._excluded_from_fit = True
+
+        # Store the ePSF from this iteration
+        self._epsf.append(legacy_epsf)
+
+        return legacy_epsf, stars, fit_failed
+
+    def _finalize_build(self, legacy_epsf, stars, pbar, iter_num):
+        """
+        Finalize the ePSF building process.
+
+        Parameters
+        ----------
+        legacy_epsf : `_LegacyEPSFModel` object
+            Final legacy ePSF model.
+        stars : `EPSFStars` object
+            Final fitted stars.
+        pbar : progress bar object or None
+            Progress bar instance.
+        iter_num : int
+            Number of completed iterations.
+
+        Returns
+        -------
+        epsf : `ImagePSF` object
+            Final ePSF model.
+        stars : `EPSFStars` object
+            Final fitted stars.
+        """
+        # Handle progress bar completion
+        if pbar is not None:
+            if iter_num < self.maxiters:
+                pbar.write(f'EPSFBuilder converged after {iter_num} '
+                           f'iterations (of {self.maxiters} maximum '
+                           'iterations)')
+            pbar.close()
+
+        # Convert legacy ePSF back to ImagePSF
+        epsf = ImagePSF(data=legacy_epsf.data, flux=legacy_epsf.flux,
+                        x_0=legacy_epsf.x_0, y_0=legacy_epsf.y_0,
+                        oversampling=legacy_epsf.oversampling,
+                        fill_value=legacy_epsf.fill_value)
+
+        return epsf, stars
+
     def build_epsf(self, stars, *, init_epsf=None):
         """
         Build iteratively an ePSF from star cutouts.
@@ -818,87 +1001,34 @@ class EPSFBuilder:
             The input stars with updated centers and fluxes derived
             from fitting the output ``epsf``.
         """
+        # Initialize variables and validate inputs
+        legacy_epsf, fit_failed, centers = self._validate_and_initialize_build(
+            stars, init_epsf)
+
+        # Setup progress tracking
+        pbar = self._setup_progress_bar()
+
+        # Initialize iteration variables
         iter_num = 0
-        fit_failed = np.zeros(stars.n_stars, dtype=bool)
-        epsf = init_epsf
         center_dist_sq = self.center_accuracy_sq + 1.0
-        centers = stars.cutout_center_flat
 
-        pbar = None
-        if self.progress_bar:
-            desc = f'EPSFBuilder ({self.maxiters} maxiters)'
-            pbar = add_progress_bar(total=self.maxiters,
-                                    desc=desc)  # pragma: no cover
-
-        if epsf is None:
-            legacy_epsf = None
-        else:
-            legacy_epsf = _LegacyEPSFModel(epsf.data, flux=epsf.flux,
-                                           x_0=epsf.x_0, y_0=epsf.y_0,
-                                           oversampling=epsf.oversampling,
-                                           fill_value=epsf.fill_value)
-
+        # Main iteration loop
         while (iter_num < self.maxiters and not np.all(fit_failed)
                and np.max(center_dist_sq) >= self.center_accuracy_sq):
 
             iter_num += 1
 
-            # build/improve the ePSF
-            legacy_epsf = self._build_epsf_step(stars, epsf=legacy_epsf)
+            # Process one iteration
+            legacy_epsf, stars, fit_failed = self._process_iteration(
+                stars, legacy_epsf, iter_num)
 
-            # fit the new ePSF to the stars to find improved centers
-            # we catch fit warnings here -- stars with unsuccessful fits
-            # are excluded from the ePSF build process
-            with warnings.catch_warnings():
-                message = '.*The fit may be unsuccessful;.*'
-                warnings.filterwarnings('ignore', message=message,
-                                        category=AstropyUserWarning)
+            # Check convergence
+            converged, center_dist_sq, centers = self._check_convergence(
+                stars, centers, fit_failed)
 
-                image_psf = ImagePSF(data=legacy_epsf.data,
-                                     flux=legacy_epsf.flux,
-                                     x_0=legacy_epsf.x_0,
-                                     y_0=legacy_epsf.y_0,
-                                     oversampling=legacy_epsf.oversampling,
-                                     fill_value=legacy_epsf.fill_value)
-
-                stars = self.fitter(image_psf, stars)
-
-            # find all stars where the fit failed
-            fit_failed = np.array([star._fit_error_status > 0
-                                   for star in stars.all_stars])
-            if np.all(fit_failed):
-                msg = 'The ePSF fitting failed for all stars.'
-                raise ValueError(msg)
-
-            # permanently exclude fitting any star where the fit fails
-            # after 3 iterations
-            if iter_num > 3 and np.any(fit_failed):
-                idx = fit_failed.nonzero()[0]
-                for i in idx:  # pylint: disable=not-an-iterable
-                    stars.all_stars[i]._excluded_from_fit = True
-
-            # if no star centers have moved by more than pixel accuracy,
-            # stop the iteration loop early
-            dx_dy = stars.cutout_center_flat - centers
-            dx_dy = dx_dy[np.logical_not(fit_failed)]
-            center_dist_sq = np.sum(dx_dy * dx_dy, axis=1, dtype=np.float64)
-            centers = stars.cutout_center_flat
-
-            self._epsf.append(legacy_epsf)
-
+            # Update progress bar
             if pbar is not None:
                 pbar.update()
 
-        if pbar is not None:
-            if iter_num < self.maxiters:
-                pbar.write(f'EPSFBuilder converged after {iter_num} '
-                           f'iterations (of {self.maxiters} maximum '
-                           'iterations)')
-            pbar.close()
-
-        epsf = ImagePSF(data=legacy_epsf.data, flux=legacy_epsf.flux,
-                        x_0=legacy_epsf.x_0, y_0=legacy_epsf.y_0,
-                        oversampling=legacy_epsf.oversampling,
-                        fill_value=legacy_epsf.fill_value)
-
-        return epsf, stars
+        # Finalize and return results
+        return self._finalize_build(legacy_epsf, stars, pbar, iter_num)
