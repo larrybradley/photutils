@@ -27,7 +27,95 @@ from photutils.utils._stats import nanmedian
 from photutils.utils.cutouts import _overlap_slices as overlap_slices
 
 __all__ = ['CoordinateTransformer', 'EPSFBuildResult', 'EPSFBuilder',
-           'EPSFFitter', 'EPSFValidator']
+           'EPSFFitter', 'EPSFValidator', 'SmoothingKernel']
+
+
+class SmoothingKernel:
+    """
+    Utility class for ePSF smoothing kernel generation and convolution.
+
+    This class encapsulates the creation of smoothing kernels used in
+    ePSF building and provides consistent smoothing operations.
+    """
+
+    # Pre-computed kernels based on polynomial fits
+    QUARTIC_KERNEL = np.array([
+        [+0.041632, -0.080816, 0.078368, -0.080816, +0.041632],
+        [-0.080816, -0.019592, 0.200816, -0.019592, -0.080816],
+        [+0.078368, +0.200816, 0.441632, +0.200816, +0.078368],
+        [-0.080816, -0.019592, 0.200816, -0.019592, -0.080816],
+        [+0.041632, -0.080816, 0.078368, -0.080816, +0.041632]])
+
+    QUADRATIC_KERNEL = np.array([
+        [-0.07428311, 0.01142786, 0.03999952, 0.01142786, -0.07428311],
+        [+0.01142786, 0.09714283, 0.12571449, 0.09714283, +0.01142786],
+        [+0.03999952, 0.12571449, 0.15428215, 0.12571449, +0.03999952],
+        [+0.01142786, 0.09714283, 0.12571449, 0.09714283, +0.01142786],
+        [-0.07428311, 0.01142786, 0.03999952, 0.01142786, -0.07428311]])
+
+    @classmethod
+    def get_kernel(cls, kernel_type):
+        """
+        Get a smoothing kernel by type.
+
+        Parameters
+        ----------
+        kernel_type : {'quartic', 'quadratic'} or array_like
+            The type of kernel to retrieve or a custom kernel array.
+
+        Returns
+        -------
+        kernel : 2D numpy.ndarray
+            The smoothing kernel.
+
+        Raises
+        ------
+        TypeError
+            If kernel_type is not supported.
+
+        Notes
+        -----
+        The predefined kernels are derived from polynomial fits:
+
+        - 'quartic': From Polynomial2D fit with degree=4 to 5x5 array of
+          zeros with 1.0 at the center. Based on fourth degree polynomial.
+
+        - 'quadratic': From Polynomial2D fit with degree=2 to 5x5 array of
+          zeros with 1.0 at the center. Based on second degree polynomial.
+        """
+        if isinstance(kernel_type, np.ndarray):
+            return kernel_type.copy()
+        if kernel_type == 'quartic':
+            return cls.QUARTIC_KERNEL.copy()
+        if kernel_type == 'quadratic':
+            return cls.QUADRATIC_KERNEL.copy()
+
+        msg = f"Unsupported kernel type: {kernel_type}. "
+        msg += "Supported types are 'quartic', 'quadratic', or ndarray."
+        raise TypeError(msg)
+
+    @staticmethod
+    def apply_smoothing(data, kernel_type):
+        """
+        Apply smoothing to data using the specified kernel.
+
+        Parameters
+        ----------
+        data : 2D numpy.ndarray
+            The data to smooth.
+        kernel_type : {'quartic', 'quadratic'}, array_like, or None
+            The type of kernel to use for smoothing, or None for no smoothing.
+
+        Returns
+        -------
+        smoothed_data : 2D numpy.ndarray
+            The smoothed data. Returns original data if kernel_type is None.
+        """
+        if kernel_type is None:
+            return data
+
+        kernel = SmoothingKernel.get_kernel(kernel_type)
+        return convolve(data, kernel)
 
 
 class EPSFValidator:
@@ -1019,52 +1107,8 @@ class EPSFBuilder:
         result : 2D `~numpy.ndarray`
             The smoothed (convolved) ePSF data.
         """
-        if self.smoothing_kernel is None:
-            return epsf_data
-
-        # do this check first as comparing a ndarray to string causes a warning
-        if isinstance(self.smoothing_kernel, np.ndarray):
-            kernel = self.smoothing_kernel
-
-        elif self.smoothing_kernel == 'quartic':
-            # from Polynomial2D fit with degree=4 to 5x5 array of
-            # zeros with 1.0 at the center
-            # Polynomial2D(4, c0_0=0.04163265, c1_0=-0.76326531,
-            #              c2_0=0.99081633, c3_0=-0.4, c4_0=0.05,
-            #              c0_1=-0.76326531, c0_2=0.99081633, c0_3=-0.4,
-            #              c0_4=0.05, c1_1=0.32653061, c1_2=-0.08163265,
-            #              c1_3=0.0, c2_1=-0.08163265, c2_2=0.02040816,
-            #              c3_1=-0.0)>
-            kernel = np.array(
-                [[+0.041632, -0.080816, 0.078368, -0.080816, +0.041632],
-                 [-0.080816, -0.019592, 0.200816, -0.019592, -0.080816],
-                 [+0.078368, +0.200816, 0.441632, +0.200816, +0.078368],
-                 [-0.080816, -0.019592, 0.200816, -0.019592, -0.080816],
-                 [+0.041632, -0.080816, 0.078368, -0.080816, +0.041632]])
-
-        elif self.smoothing_kernel == 'quadratic':
-            # from Polynomial2D fit with degree=2 to 5x5 array of
-            # zeros with 1.0 at the center
-            # Polynomial2D(2, c0_0=-0.07428571, c1_0=0.11428571,
-            #              c2_0=-0.02857143, c0_1=0.11428571,
-            #              c0_2=-0.02857143, c1_1=-0.0)
-            kernel = np.array(
-                [[-0.07428311, 0.01142786, 0.03999952, 0.01142786,
-                  -0.07428311],
-                 [+0.01142786, 0.09714283, 0.12571449, 0.09714283,
-                  +0.01142786],
-                 [+0.03999952, 0.12571449, 0.15428215, 0.12571449,
-                  +0.03999952],
-                 [+0.01142786, 0.09714283, 0.12571449, 0.09714283,
-                  +0.01142786],
-                 [-0.07428311, 0.01142786, 0.03999952, 0.01142786,
-                  -0.07428311]])
-
-        else:
-            msg = 'Unsupported kernel'
-            raise TypeError(msg)
-
-        return convolve(epsf_data, kernel)
+        return SmoothingKernel.apply_smoothing(epsf_data,
+                                               self.smoothing_kernel)
 
     def _recenter_epsf(self, epsf, _centroid_func=centroid_com,
                        _box_size=(5, 5), _maxiters=20,
