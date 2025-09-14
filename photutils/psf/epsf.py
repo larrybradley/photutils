@@ -26,7 +26,107 @@ from photutils.utils._round import py2intround
 from photutils.utils._stats import nanmedian
 from photutils.utils.cutouts import _overlap_slices as overlap_slices
 
-__all__ = ['EPSFBuildResult', 'EPSFBuilder', 'EPSFFitter']
+__all__ = ['CoordinateTransformer', 'EPSFBuildResult', 'EPSFBuilder',
+           'EPSFFitter']
+
+
+class CoordinateTransformer:
+    """
+    Handle coordinate transformations between pixel and oversampled
+    spaces.
+
+    This class centralizes all coordinate system conversions used in ePSF
+    building, providing consistent transformations between the input star
+    coordinate system and the oversampled ePSF coordinate system.
+
+    Parameters
+    ----------
+    oversampling : tuple of int
+        The (y, x) oversampling factors for the ePSF.
+    """
+
+    def __init__(self, oversampling):
+        self.oversampling = np.asarray(oversampling)
+
+    def star_to_epsf_coords(self, star_x, star_y, epsf_origin):
+        """
+        Transform star-relative coordinates to ePSF grid coordinates.
+
+        Parameters
+        ----------
+        star_x, star_y : array_like
+            Star coordinates in undersampled units relative to star center.
+        epsf_origin : tuple
+            The (x, y) origin of the ePSF in oversampled coordinates.
+
+        Returns
+        -------
+        epsf_x, epsf_y : array_like
+            Integer coordinates in the oversampled ePSF grid.
+        """
+        # Apply oversampling transformation
+        x_oversampled = self.oversampling[1] * star_x
+        y_oversampled = self.oversampling[0] * star_y
+
+        # Add ePSF center offset
+        epsf_xcenter, epsf_ycenter = epsf_origin
+        epsf_x = py2intround(x_oversampled + epsf_xcenter)
+        epsf_y = py2intround(y_oversampled + epsf_ycenter)
+
+        return epsf_x, epsf_y
+
+    def compute_epsf_shape(self, star_shapes):
+        """
+        Compute the appropriate ePSF shape from input star shapes.
+
+        Parameters
+        ----------
+        star_shapes : list of tuple
+            List of (height, width) tuples for each star.
+
+        Returns
+        -------
+        epsf_shape : tuple
+            The (height, width) shape for the oversampled ePSF.
+        """
+        if not star_shapes:
+            msg = 'Need at least one star to compute ePSF shape'
+            raise ValueError(msg)
+
+        # Find maximum star dimensions
+        max_height = max(shape[0] for shape in star_shapes)
+        max_width = max(shape[1] for shape in star_shapes)
+
+        # Apply oversampling with +1 for well-defined center
+        epsf_height = max_height * self.oversampling[0] + 1
+        epsf_width = max_width * self.oversampling[1] + 1
+
+        # Ensure odd dimensions for centered origin
+        if epsf_height % 2 == 0:
+            epsf_height += 1
+        if epsf_width % 2 == 0:
+            epsf_width += 1
+
+        return (epsf_height, epsf_width)
+
+    def compute_epsf_origin(self, epsf_shape):
+        """
+        Compute the origin (center) coordinates for an ePSF.
+
+        Parameters
+        ----------
+        epsf_shape : tuple
+            The (height, width) shape of the ePSF.
+
+        Returns
+        -------
+        origin : tuple
+            The (x, y) origin coordinates in the ePSF coordinate system.
+        """
+        height, width = epsf_shape
+        origin_x = (width - 1) / 2.0
+        origin_y = (height - 1) / 2.0
+        return (origin_x, origin_y)
 
 
 @dataclass
@@ -432,6 +532,8 @@ class EPSFBuilder:
             raise ValueError(msg)
         self.oversampling = as_pair('oversampling', oversampling,
                                     lower_bound=(0, 1))
+        # Initialize coordinate transformer for consistent transformations
+        self.coord_transformer = CoordinateTransformer(self.oversampling)
         self._norm_radius = norm_radius
         if shape is not None:
             self.shape = as_pair('shape', shape, lower_bound=(0, 1))
@@ -548,29 +650,19 @@ class EPSFBuilder:
         oversampling = self.oversampling
         shape = self.shape
 
-        # Define the ePSF shape
+        # Define the ePSF shape using coordinate transformer
         if shape is not None:
             shape = as_pair('shape', shape, lower_bound=(0, 1), check_odd=True)
         else:
-            # Stars class should have odd-sized dimensions, and thus we
-            # get the oversampled shape as oversampling * len + 1; if
-            # len=25, then newlen=101, for example.
-            x_shape = (np.ceil(stars._max_shape[1]) * oversampling[1]
-                       + 1).astype(int)
-            y_shape = (np.ceil(stars._max_shape[0]) * oversampling[0]
-                       + 1).astype(int)
-
-            shape = np.array((y_shape, x_shape))
-
-        # Verify odd sizes of shape (ensure center pixel exists)
-        shape = [(i + 1) if i % 2 == 0 else i for i in shape]
+            # Use coordinate transformer to compute shape from star dimensions
+            star_shapes = [star.shape for star in stars]
+            shape = self.coord_transformer.compute_epsf_shape(star_shapes)
 
         # Initialize with zeros
         data = np.zeros(shape, dtype=float)
 
-        # Set origin as center of data array in (x, y) order
-        # This establishes the coordinate system for the ImagePSF
-        origin_xy = ((data.shape[1] - 1) / 2.0, (data.shape[0] - 1) / 2.0)
+        # Use coordinate transformer to compute origin
+        origin_xy = self.coord_transformer.compute_epsf_origin(shape)
 
         epsf = ImagePSF(data=data, origin=origin_xy, oversampling=oversampling,
                         fill_value=0.0)
@@ -607,27 +699,14 @@ class EPSFBuilder:
         # from the normalized star at the location of the star in the
         # undersampled grid.
 
-        x = star._xidx_centered
-        y = star._yidx_centered
-
-        # stardata = (star._data_values_normalized
-        #            - epsf.evaluate(x=x, y=y, flux=1.0, x_0=0.0, y_0=0.0))
-
         stardata = (star._data_values_normalized
                     - epsf.evaluate(x=star._xidx_centered,
                                     y=star._yidx_centered,
                                     flux=1.0, x_0=0.0, y_0=0.0))
 
-        # For ImagePSF, we need to map to the oversampled ePSF grid
-        # Star coordinates are in undersampled units relative to center
-        # We need to apply oversampling and add the ePSF center offset
-        x = epsf.oversampling[1] * star._xidx_centered
-        y = epsf.oversampling[0] * star._yidx_centered
-
-        # ePSF center in oversampled coordinates (should match ePSF.origin)
-        epsf_xcenter, epsf_ycenter = epsf.origin
-        xidx = py2intround(x + epsf_xcenter)
-        yidx = py2intround(y + epsf_ycenter)
+        # Use coordinate transformer to map to the oversampled ePSF grid
+        xidx, yidx = self.coord_transformer.star_to_epsf_coords(
+            star._xidx_centered, star._yidx_centered, epsf.origin)
 
         epsf_shape = epsf.data.shape
         resampled_img = np.full(epsf_shape, np.nan)
@@ -973,10 +1052,9 @@ class EPSFBuilder:
         # Apply recentering to the smoothed data
         recentered_data = self._recenter_epsf(temp_epsf)
 
-        # Create the final ePSF with recentered data
-        # For ImagePSF, origin should be in oversampled pixel units
-        final_origin = ((recentered_data.shape[1] - 1) / 2.0,
-                        (recentered_data.shape[0] - 1) / 2.0)
+        # Create the final ePSF with recentered data using coord transformer
+        final_origin = self.coord_transformer.compute_epsf_origin(
+            recentered_data.shape)
 
         return ImagePSF(data=recentered_data,
                         origin=final_origin,
