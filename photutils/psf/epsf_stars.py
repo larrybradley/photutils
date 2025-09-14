@@ -1004,9 +1004,17 @@ def _create_weights_cutout(uncertainty_info, data_mask, slices):
                 uncertainty_cutout = (
                     uncertainty_info['uncertainty']
                     .represent_as(StdDevUncertainty).array[slices])
-            weights_cutout = np.where(uncertainty_cutout > 0,
-                                      1.0 / uncertainty_cutout,
-                                      0.0)
+            # First compute weights, then check for non-finite values
+            weights_cutout = 1.0 / uncertainty_cutout
+
+    # Check for non-finite weights and warn if found
+    if not np.all(np.isfinite(weights_cutout)):
+        warnings.warn('One or more weight values is not finite. Please '
+                      'check the input uncertainty values in the input '
+                      'NDData object.', AstropyUserWarning)
+        # Set non-finite weights to 0
+        weights_cutout = np.where(np.isfinite(weights_cutout),
+                                  weights_cutout, 0.0)
 
     # Apply mask if present
     if data_mask is not None:
