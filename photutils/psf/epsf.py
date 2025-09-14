@@ -6,7 +6,7 @@ and King (2000; PASP 112, 1360) and Anderson (2016; WFC3 ISR 2016-12).
 
 import copy
 import warnings
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 
 import numpy as np
@@ -816,11 +816,6 @@ class EPSFFitter:
         Note: Parallel processing has overhead from inter-process
         communication and may not always be faster for small datasets.
 
-    parallel_backend : {'threads', 'processes'}, optional
-        Backend for parallel processing. 'processes' (default) uses
-        ProcessPoolExecutor for CPU-bound work, 'threads' uses
-        ThreadPoolExecutor for I/O-bound work. Only relevant when n_jobs > 1.
-
     **fitter_kwargs : dict, optional
         Any additional keyword arguments (except ``x``, ``y``, ``z``, or
         ``weights``) to be passed directly to the ``__call__()`` method
@@ -828,7 +823,6 @@ class EPSFFitter:
     """
 
     def __init__(self, *, fitter=None, fit_boxsize=5, n_jobs=1,
-                 parallel_backend='processes',
                  **fitter_kwargs):
 
         if fitter is None:
@@ -845,13 +839,14 @@ class EPSFFitter:
         if n_jobs < 1:
             msg = 'n_jobs must be >= 1 or -1'
             raise ValueError(msg)
-        if parallel_backend not in ['threads', 'processes']:
-            msg = ("parallel_backend must be 'threads' or "
-                   "'processes'")
-            raise ValueError(msg)
 
         self.n_jobs = n_jobs
-        self.parallel_backend = parallel_backend
+
+        # Check for unsupported parameters
+        if 'parallel_backend' in fitter_kwargs:
+            msg = ('parallel_backend parameter is no longer supported. '
+                   'EPSFFitter now uses ProcessPoolExecutor only.')
+            raise TypeError(msg)
 
         # remove any fitter keyword arguments that we need to set
         remove_kwargs = ['x', 'y', 'z', 'weights']
@@ -963,13 +958,8 @@ class EPSFFitter:
             for star in epsf_stars
         ]
 
-        # Execute parallel processing
-        if self.parallel_backend == 'processes':
-            executor_class = ProcessPoolExecutor
-        else:
-            executor_class = ThreadPoolExecutor
-
-        with executor_class(max_workers=self.n_jobs) as executor:
+        # Execute parallel processing using ProcessPoolExecutor
+        with ProcessPoolExecutor(max_workers=self.n_jobs) as executor:
             parallel_results = list(executor.map(_fit_star_worker,
                                                  worker_args))
 
