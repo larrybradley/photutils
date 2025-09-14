@@ -170,41 +170,101 @@ class EPSFValidator:
         """
         Validate that ePSF shape is compatible with star dimensions.
 
+        Performs comprehensive validation of shape compatibility between
+        requested ePSF shape and star cutout dimensions, accounting for
+        oversampling factors and providing detailed diagnostics.
+
         Parameters
         ----------
         stars : EPSFStars
             The input stars.
         oversampling : tuple
-            The oversampling factors.
+            The oversampling factors (y, x).
         shape : tuple, optional
-            Requested ePSF shape.
+            Requested ePSF shape (height, width).
 
         Raises
         ------
         ValueError
             If shape is incompatible with stars and oversampling.
+            Error messages include suggested minimum shapes and
+            detailed diagnostic information.
         """
         if not stars:
             msg = ('Cannot validate shape compatibility with empty star list. '
-                   'Please provide at least one star.')
+                   'Please provide at least one star for ePSF building.')
             raise ValueError(msg)
 
-        # Get maximum star dimensions
-        max_height = max(star.shape[0] for star in stars)
-        max_width = max(star.shape[1] for star in stars)
+        # Collect star dimension statistics
+        star_heights = [star.shape[0] for star in stars]
+        star_widths = [star.shape[1] for star in stars]
+        max_height = max(star_heights)
+        max_width = max(star_widths)
+        min_height = min(star_heights)
+        min_width = min(star_widths)
 
-        # Compute minimum required ePSF shape
+        # Check for extremely small stars that may cause issues
+        min_star_size = 3  # Minimum reasonable star cutout size
+        problematic_stars = []
+        for i, star in enumerate(stars):
+            if min(star.shape) < min_star_size:
+                problematic_stars.append(f"Star {i}: {star.shape}")
+
+        if problematic_stars:
+            msg = (f"Found {len(problematic_stars)} star(s) with very small "
+                   f"dimensions (< {min_star_size}x{min_star_size}): "
+                   f"{', '.join(problematic_stars)}. Consider using larger "
+                   'star cutouts for better ePSF quality.')
+            raise ValueError(msg)
+
+        # Compute minimum required ePSF shape with proper padding
+        # The +1 ensures odd dimensions for proper centering
         min_epsf_height = max_height * oversampling[0] + 1
         min_epsf_width = max_width * oversampling[1] + 1
 
-        if (shape is not None and (shape[0] < min_epsf_height
-                                   or shape[1] < min_epsf_width)):
-            msg = (f"Requested ePSF shape {shape} is too small for "
-                   f"star dimensions. Minimum required shape is "
-                   f"({min_epsf_height}, {min_epsf_width}) based on "
-                   f"max star shape ({max_height}, {max_width}) and "
-                   f"oversampling {oversampling}")
-            raise ValueError(msg)
+        # Add extra validation for reasonable oversampling ratios
+        if oversampling[0] > 10 or oversampling[1] > 10:
+            msg = (f"Oversampling factors {oversampling} are unusually large. "
+                   f"This will create very large ePSF shapes. Consider using "
+                   f"smaller oversampling factors (typically 1-5) for "
+                   f"computational efficiency.")
+            # This is a warning rather than an error - allow it but inform user
+            import warnings
+            warnings.warn(msg, UserWarning)
+
+        # Validate requested shape if provided
+        if shape is not None:
+            if not isinstance(shape, (tuple, list)) or len(shape) != 2:
+                shape_len = len(shape) if hasattr(shape, '__len__') else '?'
+                msg = (f"Shape must be a 2-element tuple or list, got "
+                       f"{type(shape)} with {shape_len} elements")
+                raise ValueError(msg)
+
+            if shape[0] < min_epsf_height or shape[1] < min_epsf_width:
+                # Provide detailed diagnostic information
+                msg = (f"Requested ePSF shape {shape} is incompatible with "
+                       f"star dimensions and oversampling.\n\n"
+                       f"Diagnostic Information:\n"
+                       f"  Star size range: {min_height}-{max_height} x "
+                       f"{min_width}-{max_width} pixels\n"
+                       f"  Oversampling factors: {oversampling}\n"
+                       f"  Minimum required ePSF shape: "
+                       f"({min_epsf_height}, {min_epsf_width})\n"
+                       f"  Requested shape: {shape}\n\n"
+                       f"Solution: Use shape >= "
+                       f"({min_epsf_height}, {min_epsf_width}) "
+                       f"or reduce oversampling factors.")
+                raise ValueError(msg)
+
+            # Check for odd dimensions (recommended for proper centering)
+            if shape[0] % 2 == 0 or shape[1] % 2 == 0:
+                msg = (f"Requested ePSF shape {shape} has even dimensions. "
+                       f"Odd dimensions are recommended for proper PSF "
+                       f"centering. Consider using "
+                       f"({shape[0] + shape[0] % 2}, "
+                       f"{shape[1] + shape[1] % 2}) instead.")
+                import warnings
+                warnings.warn(msg, UserWarning)
 
     @staticmethod
     def validate_stars(stars, context=''):
