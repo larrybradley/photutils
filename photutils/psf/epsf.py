@@ -234,9 +234,9 @@ class EPSFValidator:
 
         # Validate requested shape if provided
         if shape is not None:
-            if not isinstance(shape, (tuple, list)) or len(shape) != 2:
+            if not hasattr(shape, '__len__') or len(shape) != 2:
                 shape_len = len(shape) if hasattr(shape, '__len__') else '?'
-                msg = (f"Shape must be a 2-element tuple or list, got "
+                msg = (f"Shape must be a 2-element sequence, got "
                        f"{type(shape)} with {shape_len} elements")
                 raise ValueError(msg)
 
