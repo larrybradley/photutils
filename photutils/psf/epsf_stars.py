@@ -64,32 +64,85 @@ class EPSFStar:
     def __init__(self, data, *, weights=None, cutout_center=None,
                  origin=(0, 0), wcs_large=None, id_label=None):
 
+        # Validate input data
+        if data is None:
+            msg = 'Input data cannot be None'
+            raise ValueError(msg)
+
         self._data = np.asanyarray(data)
+
+        # Validate data dimensionality and shape
+        if self._data.ndim != 2:
+            msg = f'Input data must be 2-dimensional, got {self._data.ndim}D'
+            raise ValueError(msg)
+
+        if self._data.size == 0:
+            msg = 'Input data cannot be empty'
+            raise ValueError(msg)
+
+        if any(dim <= 0 for dim in self._data.shape):
+            msg = (f'Input data shape {self._data.shape} contains '
+                   'non-positive dimensions')
+            raise ValueError(msg)
+
         self.shape = self._data.shape
 
+        # Validate and process weights
         if weights is not None:
-            if weights.shape != data.shape:
-                msg = ('weights must have the same shape as the input '
-                       'data array')
+            weights = np.asanyarray(weights)
+            if weights.shape != self._data.shape:
+                msg = (f'Weights shape {weights.shape} must match data shape '
+                       f'{self._data.shape}')
                 raise ValueError(msg)
-            self.weights = np.asanyarray(weights, dtype=float).copy()
+
+            # Check for valid weight values
+            if not np.all(np.isfinite(weights)):
+                warnings.warn('Non-finite weight values detected. These will '
+                              'be set to zero.', AstropyUserWarning)
+                weights = np.where(np.isfinite(weights), weights, 0.0)
+
+            self.weights = weights.astype(float, copy=True)
         else:
             self.weights = np.ones_like(self._data, dtype=float)
 
+        # Create initial mask from weights
         self.mask = (self.weights <= 0.0)
 
-        # mask out invalid image data
-        invalid_data = np.logical_not(np.isfinite(self._data))
-        if np.any(invalid_data):
+        # Mask out invalid image data and provide informative warning
+        invalid_data = ~np.isfinite(self._data)
+        n_invalid = np.sum(invalid_data)
+        if n_invalid > 0:
             self.weights[invalid_data] = 0.0
             self.mask[invalid_data] = True
+            if n_invalid > self._data.size * 0.1:  # More than 10% invalid
+                pct_invalid = 100 * n_invalid / self._data.size
+                warnings.warn(f'{n_invalid} out of {self._data.size} pixels '
+                              f'({pct_invalid:.1f}%) contain '
+                              'invalid data and will be masked.',
+                              AstropyUserWarning)
 
-        self._cutout_center = cutout_center
-        self.origin = np.asarray(origin)
+        # Validate origin
+        origin = np.asarray(origin)
+        if origin.shape != (2,):
+            msg = f'Origin must have exactly 2 elements, got {len(origin)}'
+            raise ValueError(msg)
+        if not np.all(np.isfinite(origin)):
+            msg = 'Origin coordinates must be finite'
+            raise ValueError(msg)
+        self.origin = origin.astype(int)
+
         self.wcs_large = wcs_large
         self.id_label = id_label
 
-        self.flux = self.estimate_flux()
+        # Set cutout_center (triggers validation via setter)
+        self.cutout_center = cutout_center
+
+        # Estimate flux - this may fail if all data is masked
+        try:
+            self.flux = self.estimate_flux()
+        except Exception as e:
+            msg = f'Failed to estimate flux: {e}'
+            raise RuntimeError(msg) from e
 
         self._excluded_from_fit = False
         self._fitinfo = None
@@ -120,10 +173,31 @@ class EPSFStar:
     def cutout_center(self, value):
         if value is None:
             value = ((self.shape[1] - 1) / 2.0, (self.shape[0] - 1) / 2.0)
-        elif len(value) != 2:
-            msg = ('The "cutout_center" attribute must have two elements '
-                   'in (x, y) form.')
-            raise ValueError(msg)
+        else:
+            # Convert to array-like for validation
+            value = np.asarray(value)
+
+            # Validate shape
+            if value.shape != (2,):
+                msg = (f'The "cutout_center" attribute must have exactly 2 '
+                       f'elements in (x, y) form, got shape {value.shape}')
+                raise ValueError(msg)
+
+            # Validate finite values
+            if not np.all(np.isfinite(value)):
+                msg = 'All cutout_center coordinates must be finite'
+                raise ValueError(msg)
+
+            # Validate bounds (should be within the cutout image)
+            x, y = value
+            if not (0 <= x < self.shape[1]):
+                warnings.warn(f'x-coordinate {x} is outside the cutout '
+                              f'bounds [0, {self.shape[1]})',
+                              AstropyUserWarning)
+            if not (0 <= y < self.shape[0]):
+                warnings.warn(f'y-coordinate {y} is outside the cutout '
+                              f'bounds [0, {self.shape[0]})',
+                              AstropyUserWarning)
 
         self._cutout_center = np.asarray(value)
 
@@ -610,22 +684,46 @@ def extract_stars(data, catalogs, *, size=(11, 11)):
     stars : `EPSFStars` instance
         A `EPSFStars` instance containing the extracted stars.
     """
+    # Input validation and type checking
     if isinstance(data, NDData):
         data = [data]
+    elif not isinstance(data, list):
+        msg = 'data must be a single NDData object or list of NDData objects'
+        raise TypeError(msg)
 
     if isinstance(catalogs, Table):
         catalogs = [catalogs]
+    elif not isinstance(catalogs, list):
+        msg = ('catalogs must be a single Table object or list of '
+               'Table objects')
+        raise TypeError(msg)
 
-    for img in data:
+    # Validate NDData objects
+    for i, img in enumerate(data):
         if not isinstance(img, NDData):
-            msg = 'data must be a single NDData or list of NDData objects'
+            msg = (f'All data elements must be NDData objects. '
+                   f'Element {i} is {type(img)}')
             raise TypeError(msg)
+        if img.data is None:
+            msg = f'NDData object at index {i} has no data array'
+            raise ValueError(msg)
+        if img.data.ndim != 2:
+            msg = (f'All NDData objects must contain 2D data. '
+                   f'Object at index {i} has {img.data.ndim}D data')
+            raise ValueError(msg)
 
-    for cat in catalogs:
+    # Validate Table objects
+    for i, cat in enumerate(catalogs):
         if not isinstance(cat, Table):
-            msg = 'catalogs must be a single Table or list of Table objects'
+            msg = (f'All catalog elements must be Table objects. '
+                   f'Element {i} is {type(cat)}')
             raise TypeError(msg)
+        if len(cat) == 0:
+            warnings.warn(f'Catalog at index {i} is empty. No stars will '
+                          'be extracted from this catalog.',
+                          AstropyUserWarning)
 
+    # Validate coordinate system consistency
     if len(catalogs) == 1 and len(data) > 1:
         if 'skycoord' not in catalogs[0].colnames:
             msg = ('When inputting a single catalog with multiple NDData '
@@ -637,12 +735,23 @@ def extract_stars(data, catalogs, *, size=(11, 11)):
                    'objects, each NDData object must have a wcs attribute.')
             raise ValueError(msg)
     else:
-        for cat in catalogs:
-            if 'x' not in cat.colnames or 'y' not in cat.colnames:
-                if 'skycoord' not in cat.colnames:
-                    msg = ('When inputting multiple catalogs, each one '
-                           'must have a "x" and "y" column or a '
-                           '"skycoord" column.')
+        for i, cat in enumerate(catalogs):
+            has_xy = 'x' in cat.colnames and 'y' in cat.colnames
+            has_skycoord = 'skycoord' in cat.colnames
+
+            if not has_xy and not has_skycoord:
+                msg = (f'Catalog at index {i} must have either '
+                       '"x" and "y" columns or a "skycoord" column.')
+                raise ValueError(msg)
+
+            # If only skycoord is available, ensure WCS is present
+            if has_skycoord and not has_xy:
+                data_idx = i if len(data) == len(catalogs) else 0
+                if (data_idx < len(data)
+                        and data[data_idx].wcs is None):
+                    msg = (f'When catalog at index {i} contains only skycoord '
+                           f'positions, the corresponding NDData object must '
+                           'have a wcs attribute.')
                     raise ValueError(msg)
 
                 if any(img.wcs is None for img in data):
