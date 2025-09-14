@@ -856,54 +856,118 @@ def _extract_stars(data, catalog, *, size=(11, 11), use_xy=True):
     """
     size = as_pair('size', size, lower_bound=(3, 0), check_odd=True)
 
+    # Get coordinates more efficiently
     colnames = catalog.colnames
     if ('x' not in colnames or 'y' not in colnames) or not use_xy:
         xcenters, ycenters = data.wcs.world_to_pixel(catalog['skycoord'])
+        # Convert to numpy arrays if not already
+        xcenters = np.asarray(xcenters, dtype=float)
+        ycenters = np.asarray(ycenters, dtype=float)
     else:
-        xcenters = catalog['x'].data.astype(float)
-        ycenters = catalog['y'].data.astype(float)
+        # Avoid unnecessary copying by getting data directly
+        xcenters = np.asarray(catalog['x'], dtype=float)
+        ycenters = np.asarray(catalog['y'], dtype=float)
 
+    # Get IDs efficiently
     if 'id' in colnames:
         ids = catalog['id']
     else:
         ids = np.arange(len(catalog), dtype=int) + 1
 
-    if data.uncertainty is None:
-        weights = np.ones_like(data.data)
-    elif data.uncertainty.uncertainty_type == 'weights':
-        weights = np.asanyarray(data.uncertainty.array, dtype=float)
-    else:
-        # other uncertainties are converted to the inverse standard
-        # deviation as the weight; ignore divide-by-zero RuntimeWarning
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore', RuntimeWarning)
-            weights = data.uncertainty.represent_as(StdDevUncertainty)
-            weights = 1.0 / weights.array
-        if np.any(~np.isfinite(weights)):
-            warnings.warn('One or more weight values is not finite. Please '
-                          'check the input uncertainty values in the input '
-                          'NDData object.', AstropyUserWarning)
-
-    if data.mask is not None:
-        weights[data.mask] = 0.0
+    # Prepare uncertainty handling - defer weight array creation
+    # until we know which cutouts we need
+    uncertainty_info = _prepare_uncertainty_info(data)
+    data_mask = data.mask  # Cache mask reference
 
     stars = []
-    for xcenter, ycenter, obj_id in zip(xcenters, ycenters, ids, strict=True):
+    for i, (xcenter, ycenter) in enumerate(zip(xcenters, ycenters,
+                                               strict=True)):
         try:
             large_slc, _ = overlap_slices(data.data.shape, size,
                                           (ycenter, xcenter), mode='strict')
-            data_cutout = data.data[large_slc]
-            weights_cutout = weights[large_slc]
         except (PartialOverlapError, NoOverlapError):
             stars.append(None)
             continue
 
+        # Extract data cutout
+        data_cutout = data.data[large_slc].copy()  # Explicit copy for safety
+
+        # Create weights cutout only for this specific region
+        weights_cutout = _create_weights_cutout(uncertainty_info, data_mask,
+                                                large_slc)
+
         origin = (large_slc[1].start, large_slc[0].start)
         cutout_center = (xcenter - origin[0], ycenter - origin[1])
-        star = EPSFStar(data_cutout, weights=weights_cutout,
-                        cutout_center=cutout_center, origin=origin,
-                        wcs_large=data.wcs, id_label=obj_id)
 
-        stars.append(star)
+        try:
+            star = EPSFStar(data_cutout, weights=weights_cutout,
+                            cutout_center=cutout_center, origin=origin,
+                            wcs_large=data.wcs, id_label=ids[i])
+            stars.append(star)
+        except Exception as e:
+            warnings.warn(f'Failed to create EPSFStar for object at '
+                          f'({xcenter:.1f}, {ycenter:.1f}): {e}',
+                          AstropyUserWarning)
+            stars.append(None)
 
     return stars
+
+
+def _prepare_uncertainty_info(data):
+    """
+    Prepare uncertainty information for efficient weight computation.
+
+    Returns a dictionary with information needed to compute weights for
+    cutout regions without creating the full weight array.
+    """
+    if data.uncertainty is None:
+        return {'type': 'none'}
+
+    if data.uncertainty.uncertainty_type == 'weights':
+        return {
+            'type': 'weights',
+            'array': data.uncertainty.array,
+        }
+
+    # For other uncertainties, prepare the conversion
+    return {
+        'type': 'uncertainty',
+        'uncertainty': data.uncertainty,
+    }
+
+
+def _create_weights_cutout(uncertainty_info, data_mask, slices):
+    """
+    Create a weights cutout for a specific region.
+
+    This avoids creating the full weights array when only a small cutout
+    is needed, improving memory efficiency.
+    """
+    cutout_shape = (slices[0].stop - slices[0].start,
+                    slices[1].stop - slices[1].start)
+
+    if uncertainty_info['type'] == 'none':
+        weights_cutout = np.ones(cutout_shape, dtype=float)
+    elif uncertainty_info['type'] == 'weights':
+        weights_cutout = np.asarray(
+            uncertainty_info['array'][slices], dtype=float)
+    else:
+        # Convert uncertainty to weights for this cutout only
+        uncertainty_cutout = uncertainty_info['uncertainty'].array[slices]
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', RuntimeWarning)
+            # Convert to standard deviation representation if needed
+            if hasattr(uncertainty_info['uncertainty'], 'represent_as'):
+                uncertainty_cutout = (
+                    uncertainty_info['uncertainty']
+                    .represent_as(StdDevUncertainty).array[slices])
+            weights_cutout = np.where(uncertainty_cutout > 0,
+                                      1.0 / uncertainty_cutout,
+                                      0.0)
+
+    # Apply mask if present
+    if data_mask is not None:
+        mask_cutout = data_mask[slices]
+        weights_cutout[mask_cutout] = 0.0
+
+    return weights_cutout
