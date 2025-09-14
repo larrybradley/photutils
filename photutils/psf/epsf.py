@@ -27,7 +27,217 @@ from photutils.utils._stats import nanmedian
 from photutils.utils.cutouts import _overlap_slices as overlap_slices
 
 __all__ = ['CoordinateTransformer', 'EPSFBuildResult', 'EPSFBuilder',
-           'EPSFFitter']
+           'EPSFFitter', 'EPSFValidator']
+
+
+class EPSFValidator:
+    """
+    Comprehensive validation for ePSF building parameters and data.
+
+    This class centralizes all validation logic with context-aware error
+    messages, making it easier to understand and debug ePSF building
+    issues.
+    """
+
+    @staticmethod
+    def validate_oversampling(oversampling, context=''):
+        """
+        Validate oversampling parameters.
+
+        Parameters
+        ----------
+        oversampling : int or tuple
+            The oversampling factor(s).
+        context : str, optional
+            Additional context for error messages.
+
+        Raises
+        ------
+        ValueError
+            If oversampling is invalid.
+        """
+        try:
+            oversampling = as_pair('oversampling', oversampling,
+                                   lower_bound=(0, 1))
+        except Exception as e:
+            if context:
+                msg = f"{context}: Invalid oversampling parameter - {e}"
+            else:
+                msg = f"Invalid oversampling parameter - {e}"
+            raise ValueError(msg) from None
+        else:
+            if any(x < 1 for x in oversampling):
+                msg = (f"Oversampling factors must be >= 1, got "
+                       f"{oversampling}")
+                if context:
+                    msg = f"{context}: {msg}"
+                raise ValueError(msg)
+            return oversampling
+
+    @staticmethod
+    def validate_shape_compatibility(stars, oversampling, shape=None):
+        """
+        Validate that ePSF shape is compatible with star dimensions.
+
+        Parameters
+        ----------
+        stars : EPSFStars
+            The input stars.
+        oversampling : tuple
+            The oversampling factors.
+        shape : tuple, optional
+            Requested ePSF shape.
+
+        Raises
+        ------
+        ValueError
+            If shape is incompatible with stars and oversampling.
+        """
+        if not stars:
+            msg = ('Cannot validate shape compatibility with empty star list. '
+                   'Please provide at least one star.')
+            raise ValueError(msg)
+
+        # Get maximum star dimensions
+        max_height = max(star.shape[0] for star in stars)
+        max_width = max(star.shape[1] for star in stars)
+
+        # Compute minimum required ePSF shape
+        min_epsf_height = max_height * oversampling[0] + 1
+        min_epsf_width = max_width * oversampling[1] + 1
+
+        if (shape is not None and (shape[0] < min_epsf_height
+                                   or shape[1] < min_epsf_width)):
+            msg = (f"Requested ePSF shape {shape} is too small for "
+                   f"star dimensions. Minimum required shape is "
+                   f"({min_epsf_height}, {min_epsf_width}) based on "
+                   f"max star shape ({max_height}, {max_width}) and "
+                   f"oversampling {oversampling}")
+            raise ValueError(msg)
+
+    @staticmethod
+    def validate_stars(stars, context=''):
+        """
+        Validate EPSFStars object and individual star data.
+
+        Parameters
+        ----------
+        stars : EPSFStars
+            The stars to validate.
+        context : str, optional
+            Additional context for error messages.
+
+        Raises
+        ------
+        ValueError, TypeError
+            If stars are invalid.
+        """
+        # Check basic type and structure
+        if not hasattr(stars, '__len__') or len(stars) == 0:
+            msg = 'EPSFStars object must contain at least one star'
+            if context:
+                msg = f"{context}: {msg}"
+            raise ValueError(msg)
+
+        # Validate individual stars
+        invalid_stars = []
+        for i, star in enumerate(stars):
+            try:
+                # Check for valid data
+                if not hasattr(star, 'data') or star.data is None:
+                    invalid_stars.append((i, 'missing data'))
+                    continue
+
+                # Check for finite values
+                if not np.any(np.isfinite(star.data)):
+                    invalid_stars.append((i, 'no finite data values'))
+                    continue
+
+                # Check for reasonable dimensions
+                if min(star.shape) < 3:
+                    invalid_stars.append((i, f"too small ({star.shape})"))
+                    continue
+
+                # Check for center coordinates
+                if not hasattr(star, 'cutout_center'):
+                    invalid_stars.append((i, 'missing cutout_center'))
+                    continue
+
+            except Exception as e:
+                invalid_stars.append((i, f"validation error: {e}"))
+
+        if invalid_stars:
+            error_details = [f"Star {i}: {issue}"
+                             for i, issue in invalid_stars[:5]]
+            if len(invalid_stars) > 5:
+                error_details.append(f"... and {len(invalid_stars) - 5} more")
+
+            msg = (f"Found {len(invalid_stars)} invalid stars out of "
+                   f"{len(stars)} total:\n" + '\n'.join(error_details))
+            if context:
+                msg = f"{context}: {msg}"
+            raise ValueError(msg)
+
+    @staticmethod
+    def validate_center_accuracy(center_accuracy):
+        """
+        Validate center accuracy parameter.
+
+        Parameters
+        ----------
+        center_accuracy : float
+            The center accuracy threshold.
+
+        Raises
+        ------
+        ValueError
+            If center accuracy is invalid.
+        """
+        if not isinstance(center_accuracy, (int, float)):
+            msg = (f"center_accuracy must be a number, got "
+                   f"{type(center_accuracy)}")
+            raise TypeError(msg)
+
+        if center_accuracy <= 0.0:
+            msg = ('center_accuracy must be positive, got '
+                   f"{center_accuracy}. Typical values are 1e-3 to 1e-4.")
+            raise ValueError(msg)
+
+        if center_accuracy > 1.0:
+            msg = (f"center_accuracy {center_accuracy} seems unusually large. "
+                   'Values > 1.0 may prevent convergence. '
+                   'Typical values are 1e-3 to 1e-4.')
+            raise ValueError(msg)
+
+    @staticmethod
+    def validate_maxiters(maxiters):
+        """
+        Validate maximum iterations parameter.
+
+        Parameters
+        ----------
+        maxiters : int
+            The maximum number of iterations.
+
+        Raises
+        ------
+        ValueError, TypeError
+            If maxiters is invalid.
+        """
+        if not isinstance(maxiters, int):
+            msg = f"maxiters must be an integer, got {type(maxiters)}"
+            raise TypeError(msg)
+
+        if maxiters <= 0:
+            msg = ('maxiters must be positive, got '
+                   f"{maxiters}. Typical values are 10-50.")
+            raise ValueError(msg)
+
+        if maxiters > 1000:
+            msg = (f"maxiters {maxiters} seems unusually large. "
+                   'Values > 1000 may indicate convergence issues. '
+                   'Consider checking your data and parameters.')
+            raise ValueError(msg)
 
 
 class CoordinateTransformer:
@@ -527,11 +737,9 @@ class EPSFBuilder:
                  recentering_boxsize=(5, 5), center_accuracy=1.0e-3,
                  sigma_clip=SIGMA_CLIP):
 
-        if oversampling is None:
-            msg = "'oversampling' must be specified"
-            raise ValueError(msg)
-        self.oversampling = as_pair('oversampling', oversampling,
-                                    lower_bound=(0, 1))
+        # Validate and store oversampling using the validator
+        self.oversampling = EPSFValidator.validate_oversampling(
+            oversampling, 'EPSFBuilder initialization')
         # Initialize coordinate transformer for consistent transformations
         self.coord_transformer = CoordinateTransformer(self.oversampling)
         self._norm_radius = norm_radius
@@ -554,15 +762,12 @@ class EPSFBuilder:
             raise TypeError(msg)
         self.fitter = fitter
 
-        if center_accuracy <= 0.0:
-            msg = 'center_accuracy must be a positive number'
-            raise ValueError(msg)
+        # Validate center accuracy using the validator
+        EPSFValidator.validate_center_accuracy(center_accuracy)
         self.center_accuracy_sq = center_accuracy**2
 
-        maxiters = int(maxiters)
-        if maxiters <= 0:
-            msg = 'maxiters must be a positive number'
-            raise ValueError(msg)
+        # Validate maxiters using the validator
+        EPSFValidator.validate_maxiters(maxiters)
         self.maxiters = maxiters
 
         self.progress_bar = progress_bar
@@ -1081,7 +1286,10 @@ class EPSFBuilder:
         centers : `~numpy.ndarray`
             Initial star center positions.
         """
-        # Input validation happens in build_epsf method signature
+        # Comprehensive validation using EPSFValidator
+        EPSFValidator.validate_stars(stars, 'ePSF building')
+        EPSFValidator.validate_shape_compatibility(stars, self.oversampling,
+                                                   self.shape)
 
         fit_failed = np.zeros(stars.n_stars, dtype=bool)
         centers = stars.cutout_center_flat
