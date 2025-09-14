@@ -6,6 +6,7 @@ and King (2000; PASP 112, 1360) and Anderson (2016; WFC3 ISR 2016-12).
 
 import copy
 import warnings
+from dataclasses import dataclass
 
 import numpy as np
 from astropy.modeling.fitting import TRFLSQFitter
@@ -25,7 +26,111 @@ from photutils.utils._round import py2intround
 from photutils.utils._stats import nanmedian
 from photutils.utils.cutouts import _overlap_slices as overlap_slices
 
-__all__ = ['EPSFBuilder', 'EPSFFitter']
+__all__ = ['EPSFBuildResult', 'EPSFBuilder', 'EPSFFitter']
+
+
+@dataclass
+class EPSFBuildResult:
+    """
+    Container for ePSF building results.
+
+    This class provides structured access to the results of the ePSF
+    building process, including convergence information and diagnostic
+    data that can help users understand and validate the building process.
+
+    Attributes
+    ----------
+    epsf : `ImagePSF` object
+        The final constructed ePSF model.
+
+    fitted_stars : `EPSFStars` object
+        The input stars with updated centers and fluxes derived from
+        fitting the final ePSF.
+
+    iterations : int
+        The number of iterations performed during the building process.
+        This will be <= maxiters specified in EPSFBuilder.
+
+    converged : bool
+        Whether the building process converged based on the center
+        accuracy criterion. True if star centers moved less than
+        the specified accuracy between the final iterations.
+
+    final_center_accuracy : float
+        The maximum center displacement in the final iteration, in pixels.
+        This indicates how much the star centers changed in the last
+        iteration and can be used to assess convergence quality.
+
+    n_excluded_stars : int
+        The number of individual stars (including those from linked stars)
+        that were excluded from fitting due to repeated fit failures.
+
+    excluded_star_indices : list
+        Indices of stars that were excluded from fitting during the
+        building process. These correspond to positions in the flattened
+        star list (stars.all_stars).
+
+    Notes
+    -----
+    This result object maintains backward compatibility by implementing
+    tuple unpacking, so existing code like:
+
+        epsf, stars = epsf_builder(stars)
+
+    will continue to work unchanged. The additional information is
+    available as attributes for users who want more detailed results.
+
+    Examples
+    --------
+    >>> from photutils.psf import EPSFBuilder
+    >>> result = epsf_builder(stars)
+    >>> print(f"Converged after {result.iterations} iterations")
+    >>> print(f"Final accuracy: {result.final_center_accuracy:.6f} pixels")
+    >>> if result.n_excluded_stars > 0:
+    ...     print(f"Excluded {result.n_excluded_stars} stars")
+    """
+
+    epsf: 'ImagePSF'
+    fitted_stars: 'EPSFStars'
+    iterations: int
+    converged: bool
+    final_center_accuracy: float
+    n_excluded_stars: int
+    excluded_star_indices: list
+
+    def __iter__(self):
+        """
+        Allow tuple unpacking for backward compatibility.
+
+        Returns
+        -------
+        iterator
+            An iterator that yields (epsf, fitted_stars) for compatibility
+            with existing code that expects a 2-tuple.
+        """
+        return iter((self.epsf, self.fitted_stars))
+
+    def __getitem__(self, index):
+        """
+        Allow indexing for backward compatibility.
+
+        Parameters
+        ----------
+        index : int
+            Index to access (0 for epsf, 1 for fitted_stars).
+
+        Returns
+        -------
+        value
+            The ePSF (index 0) or fitted stars (index 1).
+        """
+        if index == 0:
+            return self.epsf
+        if index == 1:
+            return self.fitted_stars
+
+        msg = 'EPSFBuildResult index must be 0 (epsf) or 1 (fitted_stars)'
+        raise IndexError(msg)
 
 
 SIGMA_CLIP = SigmaClipSentinelDefault(sigma=3.0, maxiters=10)
@@ -1023,9 +1128,11 @@ class EPSFBuilder:
 
         return legacy_epsf, stars, fit_failed
 
-    def _finalize_build(self, legacy_epsf, stars, pbar, iter_num):
+    def _finalize_build(self, legacy_epsf, stars, pbar, iter_num,
+                        converged, final_center_accuracy,
+                        excluded_star_indices):
         """
-        Finalize the ePSF building process.
+        Finalize the ePSF building process and create result object.
 
         Parameters
         ----------
@@ -1037,13 +1144,17 @@ class EPSFBuilder:
             Progress bar instance.
         iter_num : int
             Number of completed iterations.
+        converged : bool
+            Whether the building process converged.
+        final_center_accuracy : float
+            Final center accuracy achieved.
+        excluded_star_indices : list
+            Indices of excluded stars.
 
         Returns
         -------
-        epsf : `ImagePSF` object
-            Final ePSF model.
-        stars : `EPSFStars` object
-            Final fitted stars.
+        result : `EPSFBuildResult`
+            Structured result containing ePSF, stars, and build diagnostics.
         """
         # Handle progress bar completion
         if pbar is not None:
@@ -1059,7 +1170,16 @@ class EPSFBuilder:
                         oversampling=legacy_epsf.oversampling,
                         fill_value=legacy_epsf.fill_value)
 
-        return epsf, stars
+        # Create structured result
+        return EPSFBuildResult(
+            epsf=epsf,
+            fitted_stars=stars,
+            iterations=iter_num,
+            converged=converged,
+            final_center_accuracy=final_center_accuracy,
+            n_excluded_stars=len(excluded_star_indices),
+            excluded_star_indices=excluded_star_indices,
+        )
 
     def build_epsf(self, stars, *, init_epsf=None):
         """
@@ -1076,12 +1196,22 @@ class EPSFBuilder:
 
         Returns
         -------
-        epsf : `ImagePSF` object
-            The constructed ePSF.
+        result : `EPSFBuildResult` or tuple
+            The ePSF building results. Returns an `EPSFBuildResult` object
+            with detailed information about the building process. For
+            backward compatibility, the result can be unpacked as a tuple:
+            ``(epsf, fitted_stars) = epsf_builder(stars)``.
 
-        fitted_stars : `EPSFStars` object
-            The input stars with updated centers and fluxes derived
-            from fitting the output ``epsf``.
+        Notes
+        -----
+        The structured result object contains:
+        - epsf: The final constructed ePSF
+        - fitted_stars: Stars with updated centers/fluxes
+        - iterations: Number of iterations performed
+        - converged: Whether convergence was achieved
+        - final_center_accuracy: Final center movement accuracy
+        - n_excluded_stars: Number of stars excluded due to fit failures
+        - excluded_star_indices: Indices of excluded stars
         """
         # Initialize variables and validate inputs
         legacy_epsf, fit_failed, centers = self._validate_and_initialize_build(
@@ -1090,9 +1220,11 @@ class EPSFBuilder:
         # Setup progress tracking
         pbar = self._setup_progress_bar()
 
-        # Initialize iteration variables
+        # Initialize iteration variables and tracking
         iter_num = 0
         center_dist_sq = self.center_accuracy_sq + 1.0
+        converged = False
+        excluded_star_indices = []
 
         # Main iteration loop
         while (iter_num < self.maxiters and not np.all(fit_failed)
@@ -1104,6 +1236,13 @@ class EPSFBuilder:
             legacy_epsf, stars, fit_failed = self._process_iteration(
                 stars, legacy_epsf, iter_num)
 
+            # Track newly excluded stars
+            if iter_num > 3 and np.any(fit_failed):
+                new_excluded = fit_failed.nonzero()[0]
+                for idx in new_excluded:
+                    if idx not in excluded_star_indices:
+                        excluded_star_indices.append(idx)
+
             # Check convergence
             converged, center_dist_sq, centers = self._check_convergence(
                 stars, centers, fit_failed)
@@ -1112,5 +1251,11 @@ class EPSFBuilder:
             if pbar is not None:
                 pbar.update()
 
-        # Finalize and return results
-        return self._finalize_build(legacy_epsf, stars, pbar, iter_num)
+        # Determine final convergence status and accuracy
+        final_converged = np.max(center_dist_sq) < self.center_accuracy_sq
+        final_center_accuracy = np.max(center_dist_sq) ** 0.5
+
+        # Finalize and return structured results
+        return self._finalize_build(legacy_epsf, stars, pbar, iter_num,
+                                    final_converged, final_center_accuracy,
+                                    excluded_star_indices)
