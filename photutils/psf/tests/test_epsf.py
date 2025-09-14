@@ -4,6 +4,7 @@ Tests for the epsf module.
 """
 
 import itertools
+import warnings
 
 import numpy as np
 import pytest
@@ -139,11 +140,18 @@ class TestEPSFBuild:
                               epsf_test_data['init_stars'],
                               size=size)
 
-        epsf_builder = EPSFBuilder(oversampling=oversampling, maxiters=8,
-                                   progress_bar=True, norm_radius=25,
-                                   recentering_maxiters=5,
-                                   fitter=EPSFFitter(fit_boxsize=31),
-                                   smoothing_kernel='quadratic')
+        # Create EPSFFitter with deprecation warning
+        with pytest.warns(AstropyUserWarning,
+                          match='EPSFFitter is deprecated'):
+            epsf_fitter = EPSFFitter(fit_boxsize=31)
+
+        with pytest.warns(AstropyUserWarning,
+                          match='Passing an EPSFFitter instance.*deprecated'):
+            epsf_builder = EPSFBuilder(oversampling=oversampling, maxiters=8,
+                                       progress_bar=True, norm_radius=25,
+                                       recentering_maxiters=5,
+                                       fitter=epsf_fitter,
+                                       smoothing_kernel='quadratic')
 
         # With a boxsize larger than the cutout we expect the fitting to
         # fail for all stars, due to star._fit_error_status
@@ -153,19 +161,34 @@ class TestEPSFBuild:
                 pytest.warns(AstropyUserWarning, match=match2)):
             epsf_builder(stars)
 
-    def test_epsf_build_invalid_fitter(self):
+    def test_epsf_build_fitter_types(self):
         """
-        Test that the input fitter is an EPSFFitter instance.
+        Test that EPSFBuilder accepts astropy fitters and EPSFFitter
+        instances.
         """
-        match = 'fitter must be an EPSFFitter instance'
-        with pytest.raises(TypeError, match=match):
-            EPSFBuilder(fitter=EPSFFitter, maxiters=3)
+        # Test with astropy fitter (should work without error)
+        builder1 = EPSFBuilder(fitter=TRFLSQFitter(), maxiters=3)
+        assert isinstance(builder1.fitter, EPSFFitter)
 
-        with pytest.raises(TypeError, match=match):
-            EPSFBuilder(fitter=TRFLSQFitter(), maxiters=3)
+        # Test with EPSFFitter instance (should work with deprecation warning)
+        with pytest.warns(AstropyUserWarning,
+                          match='EPSFFitter is deprecated'):
+            epsf_fitter = EPSFFitter()
 
-        with pytest.raises(TypeError, match=match):
-            EPSFBuilder(fitter=TRFLSQFitter, maxiters=3)
+        with pytest.warns(AstropyUserWarning,
+                          match='Passing an EPSFFitter instance.*deprecated'):
+            builder2 = EPSFBuilder(fitter=epsf_fitter, maxiters=3)
+        assert isinstance(builder2.fitter, EPSFFitter)
+
+        # Test with invalid fitter type (should fail)
+        with pytest.raises(TypeError,
+                           match='fitter must be an astropy fitter instance'):
+            EPSFBuilder(fitter='invalid_fitter', maxiters=3)
+
+        # Test with fitter class instead of instance (will fail later)
+        # This should at least not fail during construction
+        builder3 = EPSFBuilder(fitter=TRFLSQFitter, maxiters=3)
+        assert isinstance(builder3.fitter, EPSFFitter)
 
 
 def test_epsfbuilder_inputs():
@@ -195,6 +218,56 @@ def test_epsfbuilder_inputs():
 
     # valid inputs
     EPSFBuilder(sigma_clip=SigmaClip(sigma=2.5, cenfunc='mean', maxiters=2))
+
+
+def test_epsfbuilder_new_api():
+    """
+    Test new EPSFBuilder API with fit_shape and fitter_maxiters
+    parameters.
+    """
+    from astropy.modeling.fitting import LevMarLSQFitter
+
+    # Test with astropy fitter and new parameters
+    builder1 = EPSFBuilder(fitter=TRFLSQFitter(), fit_shape=7,
+                           fitter_maxiters=50, maxiters=3)
+    assert builder1.fit_shape == 7
+    assert builder1.fitter_maxiters == 50
+    assert isinstance(builder1.fitter, EPSFFitter)
+    # Check that the internal EPSFFitter has the right fit_boxsize
+    np.testing.assert_array_equal(builder1.fitter.fit_boxsize, (7, 7))
+
+    # Test with tuple fit_shape
+    builder2 = EPSFBuilder(fitter=LevMarLSQFitter(), fit_shape=(5, 7),
+                           fitter_maxiters=200, maxiters=3)
+    assert builder2.fit_shape == (5, 7)
+    assert builder2.fitter_maxiters == 200
+    np.testing.assert_array_equal(builder2.fitter.fit_boxsize, (5, 7))
+
+    # Test with None fit_shape (should use default)
+    builder3 = EPSFBuilder(fit_shape=None, maxiters=3)
+    assert builder3.fit_shape is None
+    assert builder3.fitter.fit_boxsize is None
+
+    # Test defaults
+    builder4 = EPSFBuilder(maxiters=3)
+    assert builder4.fit_shape == 5  # default value
+    assert builder4.fitter_maxiters == 100  # default value
+
+
+def test_epsfbuilder_deprecation_warnings():
+    """
+    Test that deprecation warnings are properly issued.
+    """
+    # Test EPSFFitter creation triggers deprecation warning
+    with pytest.warns(AstropyUserWarning,
+                      match='EPSFFitter is deprecated'):
+        epsf_fitter = EPSFFitter()
+
+    # Test passing EPSFFitter to EPSFBuilder triggers deprecation warning
+    with pytest.warns(AstropyUserWarning,
+                      match='Passing an EPSFFitter instance.*deprecated'):
+        builder = EPSFBuilder(fitter=epsf_fitter, maxiters=3)
+    assert isinstance(builder.fitter, EPSFFitter)
 
 
 @pytest.mark.parametrize('oversamp', [3, 4])
@@ -360,8 +433,10 @@ class TestEPSFFitterParallel:
         # Allow for numerical differences but should be very close
         for f_seq, f_par in zip(fluxes_seq, fluxes_par, strict=False):
             if np.isfinite(f_seq) and np.isfinite(f_par):
-                rel_diff = abs(f_seq - f_par) / (abs(f_seq) + abs(f_par) + 1e-10)
-                assert rel_diff < 1e-6, f"Flux difference too large: {rel_diff}"
+                rel_diff = (abs(f_seq - f_par)
+                            / (abs(f_seq) + abs(f_par) + 1e-10))
+                assert rel_diff < 1e-6, (f"Flux difference too large: "
+                                         f"{rel_diff}")
 
     def test_parallel_with_empty_stars(self):
         """
@@ -429,7 +504,7 @@ class TestEPSFFitterParallel:
 
         # Worker should handle errors and return something (not crash)
         try:
-            result = _fit_star_worker(invalid_args)
+            _fit_star_worker(invalid_args)
             # If it doesn't crash, that's good error handling
             assert True
         except Exception:
@@ -441,7 +516,8 @@ class TestEPSFFitterParallel:
         Test parallel processing with LinkedEPSFStar objects.
         """
 
-        # This is a more complex test that would need actual LinkedEPSFStar objects
+        # This is a more complex test that would need actual
+        # LinkedEPSFStar objects
         # For now, just test that the code path exists
         fitter = EPSFFitter(n_jobs=2)
         assert hasattr(fitter, '_fit_stars_parallel')
@@ -532,9 +608,6 @@ class TestEPSFOptimizations:
             # If it completes without numerical errors, the improvements work
             assert epsf is not None
         except (ValueError, RuntimeError):
-            # Some cases may still fail, but shouldn't crash with numerical errors
+            # Some cases may still fail, but shouldn't crash with
+            # numerical errors
             pytest.skip('Numerical case too challenging for test')
-
-
-# Import warnings for the new tests
-import warnings
