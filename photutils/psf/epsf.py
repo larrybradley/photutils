@@ -376,31 +376,74 @@ class EPSFBuilder:
 
     def _create_initial_epsf(self, stars):
         """
-        Create an initial `ImagePSF` object.
+        Create an initial `ImagePSF` object with zero data.
 
-        The initial ePSF data are all zeros.
+        This method initializes the ePSF building process by creating
+        a blank ImagePSF model with the appropriate dimensions and
+        coordinate system. The initial ePSF data are all zeros and
+        will be populated through the iterative building process.
 
-        If ``shape`` is not specified, the shape of the ePSF data array
-        is determined from the shape of the input ``stars`` and the
-        oversampling factor. If the size is even along any axis, it will
-        be made odd by adding one. The output ePSF will always have odd
-        sizes along both axes to ensure a central pixel.
+        Shape Determination Algorithm
+        -----------------------------
+        1. If shape is explicitly provided, use it (ensuring odd dimensions)
+        2. Otherwise, determine shape from input stars and oversampling:
+           - Take the maximum star cutout dimensions
+           - Apply oversampling factor: new_size = old_size * oversampling + 1
+           - Ensure resulting dimensions are odd (add 1 if even)
+
+        The +1 ensures that oversampled arrays have a well-defined center
+        pixel, which is crucial for PSF modeling and fitting.
+
+        Coordinate System Setup
+        -----------------------
+        The method establishes the coordinate system for the ImagePSF:
+
+        - Origin: Set to the geometric center of the data array
+        - For an NxM array, origin = ((M-1)/2, (N-1)/2) in (x, y) order
+        - This ensures the PSF center aligns with the array center
+        - The coordinate system is consistent with ImagePSF expectations
 
         Parameters
         ----------
         stars : `EPSFStars` object
-            The stars used to build the ePSF.
+            The stars used to build the ePSF. The method uses:
+            - stars._max_shape: Maximum dimensions among all star cutouts
+            - This ensures the ePSF is large enough to contain all stars
 
         Returns
         -------
-        epsf : `_LegacyEPSFModel`
-            The initial ePSF model.
+        epsf : `ImagePSF` object
+            The initial ePSF model with:
+            - data: Zero-filled array of appropriate dimensions
+            - origin: Set to the array center in (x, y) order
+            - oversampling: Copied from the EPSFBuilder configuration
+            - fill_value: Set to 0.0 for regions outside the PSF
+            - _norm_radius: Preserved for backward compatibility
+
+        Notes
+        -----
+        The initial ePSF has zero flux and data values. These will be
+        populated through the iterative building process as residuals
+        from individual stars are combined.
+
+        The method ensures that:
+        - Array dimensions are always odd (ensuring a center pixel)
+        - The coordinate system is properly established
+        - All necessary attributes are set for downstream processing
+
+        Examples
+        --------
+        For stars with maximum shape (25, 25) and oversampling=4:
+        - x_shape = 25 * 4 + 1 = 101
+        - y_shape = 25 * 4 + 1 = 101
+        - Final shape: (101, 101)
+        - Origin: (50.0, 50.0)
         """
         norm_radius = self._norm_radius
         oversampling = self.oversampling
         shape = self.shape
 
-        # define the ePSF shape
+        # Define the ePSF shape
         if shape is not None:
             shape = as_pair('shape', shape, lower_bound=(0, 1), check_odd=True)
         else:
@@ -414,23 +457,19 @@ class EPSFBuilder:
 
             shape = np.array((y_shape, x_shape))
 
-        # verify odd sizes of shape
+        # Verify odd sizes of shape (ensure center pixel exists)
         shape = [(i + 1) if i % 2 == 0 else i for i in shape]
 
+        # Initialize with zeros
         data = np.zeros(shape, dtype=float)
 
-        # ePSF origin should be in the undersampled pixel units, not the
-        # oversampled grid units. The middle, fractional (as we wish for
-        # the center of the pixel, so the center should be at (v.5, w.5)
-        # detector pixels) value is simply the average of the two values
-        # at the extremes.
-
-        # origin as center of data array in (x, y) order
+        # Set origin as center of data array in (x, y) order
+        # This establishes the coordinate system for the ImagePSF
         origin_xy = ((data.shape[1] - 1) / 2.0, (data.shape[0] - 1) / 2.0)
 
         epsf = ImagePSF(data=data, origin=origin_xy, oversampling=oversampling,
                         fill_value=0.0)
-        # preserve norm_radius for backward compatibility
+        # Preserve norm_radius for backward compatibility
         epsf._norm_radius = norm_radius
         return epsf
 
@@ -642,42 +681,85 @@ class EPSFBuilder:
                        _box_size=(5, 5), _maxiters=20,
                        _center_accuracy=1.0e-4):
         """
-        Calculate the center of the ePSF data and shift the data so the
-        ePSF center is at the center of the ePSF data array.
+        Recenter the ePSF data by shifting the peak to the array center.
+
+        This method implements a discrete pixel shifting algorithm that
+        finds the brightest pixel in the ePSF and shifts the entire
+        array so that this peak is centered. The shifting is done using
+        array slicing to avoid interpolation artifacts that could
+        introduce noise or degrade the PSF quality.
+
+        Algorithm Overview
+        ------------------
+        1. Find the coordinates of the maximum pixel value (peak)
+        2. Calculate the target center position (geometric center of array)
+        3. Compute the integer shift needed to center the peak
+        4. Create a new array and copy shifted data using array slicing
+        5. Handle edge cases where data would extend beyond array bounds
+
+        The algorithm uses discrete pixel shifts rather than sub-pixel
+        interpolation to preserve the original data values and avoid
+        introducing artifacts. This is particularly important for PSF
+        building where preserving the exact flux distribution is critical.
+
+        Coordinate System
+        -----------------
+        The method works in array index coordinates:
+        - (0, 0) is the top-left corner of the array
+        - Positive shifts move the data right (x) and down (y)
+        - The target center is at ((width-1)/2, (height-1)/2)
 
         Parameters
         ----------
         epsf : `_LegacyEPSFModel` object
-            The ePSF model.
+            The ePSF model containing the data to be recentered.
+            Only the .data attribute is used for recentering.
 
-        centroid_func : callable, optional
+        _centroid_func : callable, optional
             A callable object (e.g., function or class) that is used
-            to calculate the centroid of a 2D array. The callable must
-            accept a 2D `~numpy.ndarray`, have a ``mask`` keyword
-            and optionally an ``error`` keyword. The callable object
-            must return a tuple of two 1D `~numpy.ndarray` variables,
-            representing the x and y centroids.
+            to calculate the centroid of a 2D array. Currently not used
+            in the simplified implementation, but kept for API compatibility.
+            The callable must accept a 2D `~numpy.ndarray`, have a ``mask``
+            keyword and optionally an ``error`` keyword.
 
-        box_size : float or tuple of two floats, optional
+        _box_size : float or tuple of two floats, optional
             The size (in pixels) of the box used to calculate the
-            centroid of the ePSF during each build iteration. If a
-            single integer number is provided, then a square box will
-            be used. If two values are provided, then they must be in
-            ``(ny, nx)`` order. ``box_size`` must have odd values and be
-            greater than or equal to 3 for both axes.
+            centroid. Currently not used in the simplified implementation,
+            but kept for API compatibility. If used, values must be odd
+            and >= 3 for both axes.
 
-        maxiters : int, optional
+        _maxiters : int, optional
             The maximum number of recentering iterations to perform.
+            Currently not used in the simplified implementation.
 
-        center_accuracy : float, optional
-            The desired accuracy for the centers of stars. The building
-            iterations will stop if the center of the ePSF changes by
-            less than ``center_accuracy`` pixels between iterations.
+        _center_accuracy : float, optional
+            The desired accuracy for the centers. Currently not used
+            in the simplified implementation.
 
         Returns
         -------
         result : 2D `~numpy.ndarray`
-            The recentered ePSF data.
+            The recentered ePSF data array with the same shape as input.
+            Pixels that would be shifted outside the array bounds are
+            lost (set to zero). The total flux is preserved for the
+            data that remains within the array.
+
+        Notes
+        -----
+        This method preserves the total flux while ensuring the peak
+        is at the geometric center of the array. Pixels that would be
+        shifted outside the array bounds are lost (set to zero), which
+        may result in a small flux loss if the shift is large.
+
+        The method assumes the ePSF has a single dominant peak. For
+        complex PSFs with multiple peaks, the behavior may not be
+        optimal.
+
+        Examples
+        --------
+        If the peak is at pixel (12, 15) in a 25x25 array, and the
+        target center is (12, 12), the algorithm will shift the entire
+        array up by 3 pixels, placing the peak at the center.
         """
         epsf_data = epsf.data
 
