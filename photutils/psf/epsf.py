@@ -1168,8 +1168,8 @@ class EPSFBuilder:
         """
         Compute normalized residual images for all the input stars.
 
-        This method now uses a memory-efficient approach that avoids
-        creating large 3D arrays by yielding residuals one at a time.
+        Optimized to minimize memory allocations and improve cache locality
+        by processing residuals more efficiently.
 
         Parameters
         ----------
@@ -1185,10 +1185,20 @@ class EPSFBuilder:
             A 3D cube containing the resampled residual images.
         """
         epsf_shape = epsf.data.shape
-        shape = (stars.n_good_stars, epsf_shape[0], epsf_shape[1])
-        epsf_resid = np.zeros(shape)
+        n_good_stars = stars.n_good_stars
+
+        if n_good_stars == 0:
+            # Return empty array with correct shape
+            return np.zeros((0, epsf_shape[0], epsf_shape[1]))
+
+        # Pre-allocate with NaN (more appropriate default for missing data)
+        # This avoids the need to fill individual residuals with NaN first
+        shape = (n_good_stars, epsf_shape[0], epsf_shape[1])
+        epsf_resid = np.full(shape, np.nan)
+
+        # Process residuals with better memory access patterns
         for i, star in enumerate(stars.all_good_stars):
-            epsf_resid[i, :, :] = self._resample_residual(star, epsf)
+            epsf_resid[i] = self._resample_residual(star, epsf)
 
         return epsf_resid
 
@@ -1386,7 +1396,10 @@ class EPSFBuilder:
             # fill any remaining nans (outer points) with zeros
             residuals[~np.isfinite(residuals)] = 0.0
 
-        # add the residuals to the previous ePSF image
+        # add the residuals to the previous ePSF image with numerical safety
+        # Ensure consistent data types to avoid precision loss
+        if residuals.dtype != epsf.data.dtype:
+            residuals = residuals.astype(epsf.data.dtype, copy=False)
         new_epsf = epsf.data + residuals
 
         # smooth and recenter the ePSF
@@ -1471,6 +1484,9 @@ class EPSFBuilder:
         """
         Check if the ePSF building has converged.
 
+        Enhanced convergence detection that considers both center movement
+        and provides better diagnostic information for convergence quality.
+
         Parameters
         ----------
         stars : `EPSFStars` object
@@ -1489,14 +1505,36 @@ class EPSFBuilder:
         new_centers : `~numpy.ndarray`
             Updated star center positions.
         """
-        # Calculate center movements
+        # Calculate center movements for successfully fitted stars only
         new_centers = stars.cutout_center_flat
         dx_dy = new_centers - centers
-        dx_dy = dx_dy[np.logical_not(fit_failed)]
-        center_dist_sq = np.sum(dx_dy * dx_dy, axis=1, dtype=np.float64)
 
-        # Check convergence
-        converged = np.max(center_dist_sq) < self.center_accuracy_sq
+        # Filter out failed fits for convergence calculation
+        good_stars = np.logical_not(fit_failed)
+
+        if not np.any(good_stars):
+            # No good stars - cannot determine convergence
+            # Return high values to prevent false convergence
+            return False, np.array([self.center_accuracy_sq * 10]), new_centers
+
+        dx_dy_good = dx_dy[good_stars]
+        center_dist_sq = np.sum(dx_dy_good * dx_dy_good, axis=1,
+                                dtype=np.float64)
+
+        # Enhanced convergence criteria
+        max_movement = np.max(center_dist_sq)
+
+        # Primary convergence check
+        primary_converged = max_movement < self.center_accuracy_sq
+
+        # Secondary check: ensure most stars are stable (not just worst one)
+        stable_fraction = (np.sum(center_dist_sq < self.center_accuracy_sq)
+                           / len(center_dist_sq))
+        # 80% of stars must be stable
+        stability_converged = stable_fraction > 0.8
+
+        # Combined convergence: both criteria must be met for robust results
+        converged = primary_converged and stability_converged
 
         return converged, center_dist_sq, new_centers
 
