@@ -696,14 +696,15 @@ class EPSFBuilder:
         ypeak, xpeak = np.unravel_index(np.nanargmax(epsf_data),
                                         epsf_data.shape)
 
-        # Get intended center based on ImagePSF origin (in oversampled coords)
-        origin_x, origin_y = epsf.origin
-        xcenter_target = round(origin_x)
-        ycenter_target = round(origin_y)
+        # Get intended center based on array dimensions
+        # For ImagePSF, the center should be at the center of the array
+        height, width = epsf_data.shape
+        xcenter_target = (width - 1) / 2.0
+        ycenter_target = (height - 1) / 2.0
 
         # Compute shift needed (positive means shift right/down)
-        shift_x = xcenter_target - xpeak
-        shift_y = ycenter_target - ypeak
+        shift_x = round(xcenter_target - xpeak)
+        shift_y = round(ycenter_target - ypeak)
 
         # If no shift needed, return original data
         if shift_x == 0 and shift_y == 0:
@@ -811,7 +812,7 @@ class EPSFBuilder:
         # For ImagePSF, origin should be in oversampled pixel units
         final_origin = ((recentered_data.shape[1] - 1) / 2.0,
                         (recentered_data.shape[0] - 1) / 2.0)
-        
+
         return ImagePSF(data=recentered_data,
                         origin=final_origin,
                         oversampling=self.oversampling,
