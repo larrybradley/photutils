@@ -104,10 +104,6 @@ class EPSFFitter:
             msg = 'The input epsf must be an ImagePSF'
             raise TypeError(msg)
 
-        # epsf = _LegacyEPSFModel(epsf.data, flux=epsf.flux, x_0=epsf.x_0,
-        #                         y_0=epsf.y_0, oversampling=epsf.oversampling,
-        #                         fill_value=epsf.fill_value)
-
         # make a copy of the input ePSF
         # (copy only parameters, not the data)
         epsf = epsf.copy()
@@ -428,12 +424,6 @@ class EPSFBuilder:
         # the center of the pixel, so the center should be at (v.5, w.5)
         # detector pixels) value is simply the average of the two values
         # at the extremes.
-        xcenter = stars._max_shape[1] / 2.0
-        ycenter = stars._max_shape[0] / 2.0
-
-        # return _LegacyEPSFModel(data=data, origin=(xcenter, ycenter),
-        #                         oversampling=oversampling,
-        #                         norm_radius=norm_radius)
 
         # origin as center of data array in (x, y) order
         origin_xy = ((data.shape[1] - 1) / 2.0, (data.shape[0] - 1) / 2.0)
@@ -443,7 +433,6 @@ class EPSFBuilder:
         # preserve norm_radius for backward compatibility
         epsf._norm_radius = norm_radius
         return epsf
-
 
     def _resample_residual(self, star, epsf):
         """
@@ -477,7 +466,7 @@ class EPSFBuilder:
         x = star._xidx_centered
         y = star._yidx_centered
 
-        #stardata = (star._data_values_normalized
+        # stardata = (star._data_values_normalized
         #            - epsf.evaluate(x=x, y=y, flux=1.0, x_0=0.0, y_0=0.0))
 
         stardata = (star._data_values_normalized
@@ -594,8 +583,9 @@ class EPSFBuilder:
 
         return convolve(epsf_data, kernel)
 
-    def _recenter_epsf(self, epsf, centroid_func=centroid_com,
-                       box_size=(5, 5), maxiters=20, center_accuracy=1.0e-4):
+    def _recenter_epsf(self, epsf, _centroid_func=centroid_com,
+                       _box_size=(5, 5), _maxiters=20,
+                       _center_accuracy=1.0e-4):
         """
         Calculate the center of the ePSF data and shift the data so the
         ePSF center is at the center of the ePSF data array.
@@ -635,62 +625,6 @@ class EPSFBuilder:
             The recentered ePSF data.
         """
         epsf_data = epsf.data
-
-        # epsf = _LegacyEPSFModel(data=epsf._data, origin=epsf.origin,
-        #                         oversampling=epsf.oversampling,
-        #                         norm_radius=epsf._norm_radius, normalize=False)
-
-        # xcenter, ycenter = epsf.origin
-
-        # y, x = np.indices(epsf._data.shape, dtype=float)
-        # x /= epsf.oversampling[1]
-        # y /= epsf.oversampling[0]
-
-        # dx_total, dy_total = 0, 0
-        # iter_num = 0
-        # center_accuracy_sq = center_accuracy**2
-        # center_dist_sq = center_accuracy_sq + 1.0e6
-        # center_dist_sq_prev = center_dist_sq + 1
-        # while (iter_num < maxiters and center_dist_sq >= center_accuracy_sq):
-        #     iter_num += 1
-
-        #     # Anderson & King (2000) recentering function depends
-        #     # on specific pixels, and thus does not need a cutout
-        #     slices_large, _ = overlap_slices(epsf_data.shape, box_size,
-        #                                      (ycenter * self.oversampling[0],
-        #                                       xcenter * self.oversampling[1]))
-        #     epsf_cutout = epsf_data[slices_large]
-        #     mask = ~np.isfinite(epsf_cutout)
-
-        #     # find a new center position
-        #     xcenter_new, ycenter_new = centroid_func(epsf_cutout,
-        #                                              mask=mask)
-        #     xcenter_new /= self.oversampling[1]
-        #     ycenter_new /= self.oversampling[0]
-
-        #     xcenter_new += slices_large[1].start / self.oversampling[1]
-        #     ycenter_new += slices_large[0].start / self.oversampling[0]
-
-        #     # Calculate the shift; dx = i - x_star so if dx was positively
-        #     # incremented then x_star was negatively incremented for a given i.
-        #     # We will therefore actually subsequently subtract dx from xcenter
-        #     # (or x_star).
-        #     dx = xcenter_new - xcenter
-        #     dy = ycenter_new - ycenter
-
-        #     center_dist_sq = dx**2 + dy**2
-
-        #     if center_dist_sq >= center_dist_sq_prev:  # don't shift
-        #         break
-        #     center_dist_sq_prev = center_dist_sq
-
-        #     dx_total += dx
-        #     dy_total += dy
-
-        #     epsf_data = epsf.evaluate(x=x, y=y, flux=1.0,
-        #                               x_0=xcenter - dx_total,
-        #                               y_0=ycenter - dy_total)
-
 
         # Find current peak location in array indices
         ypeak, xpeak = np.unravel_index(np.nanargmax(epsf_data),
@@ -803,10 +737,7 @@ class EPSFBuilder:
                              fill_value=0.0)
 
         # Apply recentering to the smoothed data
-        recentered_data = self._recenter_epsf(
-            temp_epsf, centroid_func=self.recentering_func,
-            box_size=self.recentering_boxsize,
-            maxiters=self.recentering_maxiters)
+        recentered_data = self._recenter_epsf(temp_epsf)
 
         # Create the final ePSF with recentered data
         # For ImagePSF, origin should be in oversampled pixel units
