@@ -936,8 +936,8 @@ class EPSFBuilder:
             # create an initial ePSF (array of zeros)
             epsf = self._create_initial_epsf(stars)
         else:
-            # improve the input ePSF
-            epsf = copy.deepcopy(epsf)
+            # improve the input ePSF (shallow copy suffices for data mod)
+            epsf = copy.copy(epsf)
 
         # compute a 3D stack of 2D residual images
         residuals = self._compute_residual_median(stars, epsf)
