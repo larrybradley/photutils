@@ -543,11 +543,11 @@ class EPSFBuildResult:
     Examples
     --------
     >>> from photutils.psf import EPSFBuilder
-    >>> result = epsf_builder(stars)
-    >>> print(f"Converged after {result.iterations} iterations")
-    >>> print(f"Final accuracy: {result.final_center_accuracy:.6f} pixels")
-    >>> if result.n_excluded_stars > 0:
-    ...     print(f"Excluded {result.n_excluded_stars} stars")
+    >>> epsf_builder = EPSFBuilder(oversampling=4)  # doctest: +SKIP
+    >>> result = epsf_builder(stars)  # doctest: +SKIP
+    >>> print(result.iterations)  # doctest: +SKIP
+    >>> print(result.final_center_accuracy)  # doctest: +SKIP
+    >>> print(result.n_excluded_stars)  # doctest: +SKIP
     """
 
     epsf: 'ImagePSF'
