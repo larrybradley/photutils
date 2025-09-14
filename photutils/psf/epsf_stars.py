@@ -166,16 +166,33 @@ class EPSFStar:
         flux : float
             The estimated star's flux.
         """
-        if np.any(self.mask):
+        if not np.any(self.mask):
+            # No masked pixels, direct sum is fastest
+            return float(np.sum(self.data))
+
+        # Handle masked data with optimized interpolation strategy
+        try:
+            # Try cubic interpolation first
             data_interp = _interpolate_missing_data(self.data, method='cubic',
                                                     mask=self.mask)
-            data_interp = _interpolate_missing_data(data_interp,
+
+            # Check if cubic interpolation filled all masked pixels
+            if not np.any(np.isnan(data_interp[self.mask])):
+                # Cubic interpolation succeeded completely
+                flux = np.sum(data_interp, dtype=float)
+            else:
+                # Some pixels still need nearest-neighbor interpolation
+                data_interp = _interpolate_missing_data(data_interp,
+                                                        method='nearest',
+                                                        mask=self.mask)
+                flux = np.sum(data_interp, dtype=float)
+
+        except Exception:
+            # Fallback: if cubic interpolation fails, use only nearest-neighbor
+            data_interp = _interpolate_missing_data(self.data,
                                                     method='nearest',
                                                     mask=self.mask)
             flux = np.sum(data_interp, dtype=float)
-
-        else:
-            flux = np.sum(self.data, dtype=float)
 
         return flux
 
