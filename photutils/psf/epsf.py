@@ -6,7 +6,6 @@ and King (2000; PASP 112, 1360) and Anderson (2016; WFC3 ISR 2016-12).
 
 import copy
 import warnings
-from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 
 import numpy as np
@@ -686,109 +685,6 @@ class ProgressReporter:
             self._pbar.close()
 
 
-def _fit_star_worker(args):
-    """
-    Worker function for parallel star fitting.
-
-    This function is designed to minimize pickling overhead by accepting
-    a minimal set of arguments needed for star fitting.
-    """
-    import copy
-    import warnings
-
-    import numpy as np
-    from astropy.nddata.utils import NoOverlapError, PartialOverlapError
-    from astropy.utils.exceptions import AstropyUserWarning
-
-    from photutils.utils.cutouts import _overlap_slices as overlap_slices
-
-    (epsf, star, fitter_class, fitter_kwargs,
-     fitter_has_fit_info, fit_boxsize) = args
-
-    # Recreate the fitter (needed because astropy fitters aren't picklable)
-    if fitter_class is None:
-        from astropy.modeling.fitting import TRFLSQFitter
-        fitter = TRFLSQFitter()
-    else:
-        fitter = fitter_class()
-
-    # Use the same logic as EPSFFitter._fit_star
-    epsf_copy = epsf.copy()
-
-    # Handle fit_boxsize the same way as the original method
-    if fit_boxsize is not None:
-        try:
-            xcenter, ycenter = star.cutout_center
-            large_slc, _ = overlap_slices(star.shape, fit_boxsize,
-                                          (ycenter, xcenter),
-                                          mode='strict')
-        except (PartialOverlapError, NoOverlapError):
-            warnings.warn(f'The star at ({star.center[0]}, '
-                          f'{star.center[1]}) cannot be fit because '
-                          'its fitting region extends beyond the star '
-                          'cutout image.', AstropyUserWarning)
-
-            star_copy = copy.deepcopy(star)
-            star_copy._fit_error_status = 1
-            return star_copy
-
-        # Extract the data and weights for fitting
-        data = star.data[large_slc]
-        weights = star.weights[large_slc] if star.weights is not None else None
-
-        # Define the origin of the fitting region
-        x0 = large_slc[1].start
-        y0 = large_slc[0].start
-    else:
-        # Use the entire cutout image
-        data = star.data
-        weights = star.weights
-
-        # Define the origin of the fitting region
-        x0 = 0
-        y0 = 0
-
-    # Define positions in the undersampled grid
-    yy, xx = np.indices(data.shape, dtype=float)
-    xx = xx + x0 - star.cutout_center[0]
-    yy = yy + y0 - star.cutout_center[1]
-
-    # Fit the model
-    try:
-        fitted_model = fitter(epsf_copy, xx, yy, data, weights=weights,
-                              **fitter_kwargs)
-    except TypeError:
-        # fitter doesn't support weights
-        fitted_model = fitter(model=epsf_copy, x=xx, y=yy, z=data,
-                              **fitter_kwargs)
-    except Exception:
-        # Handle other fitting errors
-        star_copy = copy.deepcopy(star)
-        star_copy._fit_error_status = 2
-        return star_copy
-
-    fit_error_status = 0
-    if fitter_has_fit_info:
-        fit_info = copy.copy(fitter.fit_info)
-        if 'ierr' in fit_info and fit_info['ierr'] not in [1, 2, 3, 4]:
-            fit_error_status = 2  # fit solution was not found
-    else:
-        fit_info = None
-
-    # Compute the star's fitted position
-    x_center = star.cutout_center[0] + fitted_model.x_0.value
-    y_center = star.cutout_center[1] + fitted_model.y_0.value
-
-    # Create fitted star copy
-    star_copy = copy.deepcopy(star)
-    star_copy.cutout_center = (x_center, y_center)
-    star_copy.flux = fitted_model.flux.value
-    star_copy._fit_info = fit_info
-    star_copy._fit_error_status = fit_error_status
-
-    return star_copy
-
-
 class EPSFFitter:
     """
     Class to fit an ePSF model to one or more stars.
@@ -814,21 +710,13 @@ class EPSFFitter:
         must have odd values and be greater than or equal to 3 for both
         axes. If `None`, the fitter will use the entire star image.
 
-    n_jobs : int, optional
-        Number of parallel jobs for star fitting. If 1 (default),
-        sequential processing is used. If > 1, parallel processing
-        using concurrent.futures. If -1, use all available CPU cores.
-        Note: Parallel processing has overhead from inter-process
-        communication and may not always be faster for small datasets.
-
     **fitter_kwargs : dict, optional
         Any additional keyword arguments (except ``x``, ``y``, ``z``, or
         ``weights``) to be passed directly to the ``__call__()`` method
         of the input ``fitter``.
     """
 
-    def __init__(self, *, fitter=None, fit_boxsize=5, n_jobs=1,
-                 **fitter_kwargs):
+    def __init__(self, *, fitter=None, fit_boxsize=5, **fitter_kwargs):
 
         warnings.warn(
             'EPSFFitter is deprecated and will be removed in a future '
@@ -844,22 +732,6 @@ class EPSFFitter:
                                        lower_bound=(3, 0), check_odd=True)
         else:
             self.fit_boxsize = None
-
-        # Validate parallel processing parameters
-        if n_jobs == -1:
-            import os
-            n_jobs = os.cpu_count()
-        if n_jobs < 1:
-            msg = 'n_jobs must be >= 1 or -1'
-            raise ValueError(msg)
-
-        self.n_jobs = n_jobs
-
-        # Check for unsupported parameters
-        if 'parallel_backend' in fitter_kwargs:
-            msg = ('parallel_backend parameter is no longer supported. '
-                   'EPSFFitter now uses ProcessPoolExecutor only.')
-            raise TypeError(msg)
 
         # remove any fitter keyword arguments that we need to set
         remove_kwargs = ['x', 'y', 'z', 'weights']
@@ -902,101 +774,35 @@ class EPSFFitter:
         # (copy only parameters, not the data)
         epsf = epsf.copy()
 
-        # perform the fit (sequential or parallel)
-        if self.n_jobs == 1:
-            # Sequential processing (original logic)
-            fitted_stars = []
-            for star in stars:
-                if isinstance(star, EPSFStar):
-                    fitted_star = self._fit_star(epsf, star, self.fitter,
-                                                 self.fitter_kwargs,
-                                                 self.fitter_has_fit_info,
-                                                 self.fit_boxsize)
-
-                elif isinstance(star, LinkedEPSFStar):
-                    fitted_star = []
-                    for linked_star in star:
-                        fitted_star.append(
-                            self._fit_star(epsf, linked_star, self.fitter,
-                                           self.fitter_kwargs,
-                                           self.fitter_has_fit_info,
-                                           self.fit_boxsize))
-
-                    fitted_star = LinkedEPSFStar(fitted_star)
-                    fitted_star.constrain_centers()
-
-                else:
-                    msg = ('stars must contain only EPSFStar and/or '
-                           'LinkedEPSFStar objects')
-                    raise TypeError(msg)
-
-                fitted_stars.append(fitted_star)
-
-        else:
-            # Parallel processing
-            fitted_stars = self._fit_stars_parallel(epsf, stars)
-
-        return EPSFStars(fitted_stars)
-
-    def _fit_stars_parallel(self, epsf, stars):
-        """
-        Fit ePSF to stars using parallel processing.
-        """
-        # Prepare arguments for parallel processing
-        epsf_stars = []
-        linked_star_indices = []
-
-        for i, star in enumerate(stars):
+        # perform the fit
+        fitted_stars = []
+        for star in stars:
             if isinstance(star, EPSFStar):
-                epsf_stars.append(star)
-                linked_star_indices.append(None)
+                fitted_star = self._fit_star(epsf, star, self.fitter,
+                                             self.fitter_kwargs,
+                                             self.fitter_has_fit_info,
+                                             self.fit_boxsize)
 
             elif isinstance(star, LinkedEPSFStar):
-                # For LinkedEPSFStar, process each linked star individually
-                epsf_stars.extend(star)
-                linked_star_indices.append((i, len(star)))
+                fitted_star = []
+                for linked_star in star:
+                    fitted_star.append(
+                        self._fit_star(epsf, linked_star, self.fitter,
+                                       self.fitter_kwargs,
+                                       self.fitter_has_fit_info,
+                                       self.fit_boxsize))
+
+                fitted_star = LinkedEPSFStar(fitted_star)
+                fitted_star.constrain_centers()
 
             else:
                 msg = ('stars must contain only EPSFStar and/or '
                        'LinkedEPSFStar objects')
                 raise TypeError(msg)
 
-        # Prepare worker arguments
-        # Note: We can't pickle the fitter directly, so we pass the class
-        fitter_class = type(self.fitter) if self.fitter is not None else None
-        worker_args = [
-            (epsf, star, fitter_class, self.fitter_kwargs,
-             self.fitter_has_fit_info, self.fit_boxsize)
-            for star in epsf_stars
-        ]
+            fitted_stars.append(fitted_star)
 
-        # Execute parallel processing using ProcessPoolExecutor
-        with ProcessPoolExecutor(max_workers=self.n_jobs) as executor:
-            parallel_results = list(executor.map(_fit_star_worker,
-                                                 worker_args))
-
-        # Reconstruct original star structure
-        fitted_stars = []
-        result_idx = 0
-
-        for star in stars:
-            if isinstance(star, EPSFStar):
-                fitted_stars.append(parallel_results[result_idx])
-                result_idx += 1
-
-            elif isinstance(star, LinkedEPSFStar):
-                # Reconstruct LinkedEPSFStar from individual results
-                num_linked = len(star)
-                linked_fitted = []
-                for _ in range(num_linked):
-                    linked_fitted.append(parallel_results[result_idx])
-                    result_idx += 1
-
-                fitted_star = LinkedEPSFStar(linked_fitted)
-                fitted_star.constrain_centers()
-                fitted_stars.append(fitted_star)
-
-        return fitted_stars
+        return EPSFStars(fitted_stars)
 
     def _fit_star(self, epsf, star, fitter, fitter_kwargs,
                   fitter_has_fit_info, fit_boxsize):
