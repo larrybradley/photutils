@@ -485,11 +485,14 @@ class EPSFBuilder:
                                     y=star._yidx_centered,
                                     flux=1.0, x_0=0.0, y_0=0.0))
 
+        # For ImagePSF, we need to map to the oversampled ePSF grid
+        # Star coordinates are in undersampled units relative to center
+        # We need to apply oversampling and add the ePSF center offset
         x = epsf.oversampling[1] * star._xidx_centered
         y = epsf.oversampling[0] * star._yidx_centered
 
-        epsf_xcenter, epsf_ycenter = (int((epsf.data.shape[1] - 1) / 2),
-                                      int((epsf.data.shape[0] - 1) / 2))
+        # ePSF center in oversampled coordinates (should match ePSF.origin)
+        epsf_xcenter, epsf_ycenter = epsf.origin
         xidx = py2intround(x + epsf_xcenter)
         yidx = py2intround(y + epsf_ycenter)
 
@@ -690,44 +693,44 @@ class EPSFBuilder:
 
 
         # Find current peak location in array indices
-        ypeak, xpeak = np.unravel_index(np.nanargmax(epsf_data), epsf_data.shape)
+        ypeak, xpeak = np.unravel_index(np.nanargmax(epsf_data),
+                                        epsf_data.shape)
 
-        # Get intended center based on ImagePSF origin
-        # origin is in (x, y) order; convert to array indices
+        # Get intended center based on ImagePSF origin (in oversampled coords)
         origin_x, origin_y = epsf.origin
-        xcenter = origin_x
-        ycenter = origin_y
+        xcenter_target = round(origin_x)
+        ycenter_target = round(origin_y)
 
-        # Compute shift in array index units
-        shift_x = xcenter - xpeak
-        shift_y = ycenter - ypeak
+        # Compute shift needed (positive means shift right/down)
+        shift_x = xcenter_target - xpeak
+        shift_y = ycenter_target - ypeak
 
-        # Define the extraction region
-        try:
-            slices_large, slices_small = overlap_slices(
-                epsf_data.shape, box_size,
-                position=(int(ycenter), int(xcenter)),
-            )
-        except NoOverlapError:
-            raise NoOverlapError(
-                'Cannot recenter ePSF: computed recentering shift places '
-                'the recentering box completely outside the ePSF array. '
-                'This may indicate a mismatch between ImagePSF.origin and '
-                'the data array center.',
-            )
+        # If no shift needed, return original data
+        if shift_x == 0 and shift_y == 0:
+            return epsf_data
 
-        # Create a new array with shifted data
+        # Create shifted array
         recentered_data = np.zeros_like(epsf_data)
-        recentered_data[slices_large] = epsf_data[slices_small]
 
-        # Update epsf data in place
-        epsf = epsf.copy()
-        epsf.data = recentered_data
-        return epsf
+        # Calculate the regions to copy
+        # Source region (from original data)
+        src_y_start = max(0, -shift_y)
+        src_y_end = min(epsf_data.shape[0], epsf_data.shape[0] - shift_y)
+        src_x_start = max(0, -shift_x)
+        src_x_end = min(epsf_data.shape[1], epsf_data.shape[1] - shift_x)
 
+        # Destination region (in new data)
+        dst_y_start = max(0, shift_y)
+        dst_y_end = dst_y_start + (src_y_end - src_y_start)
+        dst_x_start = max(0, shift_x)
+        dst_x_end = dst_x_start + (src_x_end - src_x_start)
 
+        # Copy the shifted data
+        recentered_data[dst_y_start:dst_y_end,
+                        dst_x_start:dst_x_end] = (
+            epsf_data[src_y_start:src_y_end, src_x_start:src_x_end])
 
-        return epsf_data
+        return recentered_data
 
     def _build_epsf_step(self, stars, epsf=None):
         """
@@ -783,43 +786,36 @@ class EPSFBuilder:
         new_epsf = epsf.data + residuals
 
         # smooth and recenter the ePSF
-        new_epsf = self._smooth_epsf(new_epsf)
+        smoothed_data = self._smooth_epsf(new_epsf)
 
+        # Create an intermediate ePSF for recentering operations
+        # Use the current epsf's origin if it exists, otherwise compute center
+        if hasattr(epsf, 'origin') and epsf.origin is not None:
+            origin = epsf.origin
+        else:
+            origin = ((epsf.data.shape[1] - 1) / 2.0,
+                      (epsf.data.shape[0] - 1) / 2.0)
 
-        epsf = ImagePSF(data=epsf.data,
-                        origin=((epsf.data.shape[1] - 1) / 2.0,
-                                (epsf.data.shape[0] - 1) / 2.0),
-                        oversampling=self.oversampling,
-                        fill_value=0.0)
-        #epsf._norm_radius = self.norm_radius
+        temp_epsf = ImagePSF(data=smoothed_data,
+                             origin=origin,
+                             oversampling=self.oversampling,
+                             fill_value=0.0)
 
-
-#        epsf = _LegacyEPSFModel(data=new_epsf, origin=epsf.origin,
-#                                oversampling=epsf.oversampling,
-#                                norm_radius=epsf._norm_radius, normalize=False)
-
-        epsf._data = self._recenter_epsf(
-            epsf, centroid_func=self.recentering_func,
+        # Apply recentering to the smoothed data
+        recentered_data = self._recenter_epsf(
+            temp_epsf, centroid_func=self.recentering_func,
             box_size=self.recentering_boxsize,
             maxiters=self.recentering_maxiters)
 
-        # Return the new ePSF object, but with undersampled grid pixel
-        # coordinates.
-        xcenter = (epsf.data.shape[1] - 1) / 2.0 / epsf.oversampling[1]
-        ycenter = (epsf.data.shape[0] - 1) / 2.0 / epsf.oversampling[0]
-
-
-        new_epsf = ImagePSF(data=new_epsf.data,
-                            origin=((new_epsf.data.shape[1] - 1) / 2.0,
-                                    (new_epsf.data.shape[0] - 1) / 2.0),
-                            oversampling=self.oversampling,
-                            fill_value=0.0)
-        # new_epsf._norm_radius = self.norm_radius
-
-
-#        return _LegacyEPSFModel(data=epsf._data, origin=(xcenter, ycenter),
-#                                oversampling=epsf.oversampling,
-#                                norm_radius=epsf._norm_radius)
+        # Create the final ePSF with recentered data
+        # For ImagePSF, origin should be in oversampled pixel units
+        final_origin = ((recentered_data.shape[1] - 1) / 2.0,
+                        (recentered_data.shape[0] - 1) / 2.0)
+        
+        return ImagePSF(data=recentered_data,
+                        origin=final_origin,
+                        oversampling=self.oversampling,
+                        fill_value=0.0)
 
     def build_epsf(self, stars, *, init_epsf=None):
         """
