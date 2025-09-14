@@ -536,6 +536,95 @@ class EPSFBuildResult:
 SIGMA_CLIP = SigmaClipSentinelDefault(sigma=3.0, maxiters=10)
 
 
+class ProgressReporter:
+    """
+    Utility class for managing progress reporting during ePSF building.
+
+    This class encapsulates all progress bar functionality, providing a clean
+    interface for setting up, updating, and finalizing progress reporting
+    during the iterative ePSF building process.
+
+    Parameters
+    ----------
+    enabled : bool
+        Whether progress reporting is enabled.
+
+    maxiters : int
+        Maximum number of iterations for progress tracking.
+
+    Attributes
+    ----------
+    enabled : bool
+        Whether progress reporting is active.
+
+    maxiters : int
+        Maximum iterations for progress bar setup.
+
+    _pbar : progress bar or None
+        The underlying progress bar instance.
+    """
+
+    def __init__(self, enabled, maxiters):
+        self.enabled = enabled
+        self.maxiters = maxiters
+        self._pbar = None
+
+    def setup(self):
+        """
+        Initialize the progress bar for ePSF building.
+
+        Sets up the progress bar with appropriate description and maximum
+        iterations if progress reporting is enabled.
+
+        Returns
+        -------
+        self : ProgressReporter
+            Returns self for method chaining.
+        """
+        if not self.enabled:
+            self._pbar = None
+            return self
+
+        desc = f'EPSFBuilder ({self.maxiters} maxiters)'
+        self._pbar = add_progress_bar(total=self.maxiters,
+                                      desc=desc)  # pragma: no cover
+        return self
+
+    def update(self):
+        """
+        Update the progress bar by one iteration.
+
+        Only updates if progress reporting is enabled and progress bar
+        is initialized.
+        """
+        if self._pbar is not None:
+            self._pbar.update()
+
+    def write_convergence_message(self, iteration):
+        """
+        Write convergence message to progress bar.
+
+        Parameters
+        ----------
+        iteration : int
+            The iteration number at which convergence occurred.
+        """
+        if self._pbar is not None:
+            self._pbar.write(f'EPSFBuilder converged after {iteration} '
+                             f'iterations (of {self.maxiters} maximum '
+                             'iterations)')
+
+    def close(self):
+        """
+        Close and finalize the progress bar.
+
+        Should be called when ePSF building is complete, regardless of
+        convergence status.
+        """
+        if self._pbar is not None:
+            self._pbar.close()
+
+
 class EPSFFitter:
     """
     Class to fit an ePSF model to one or more stars.
@@ -1351,21 +1440,16 @@ class EPSFBuilder:
 
         return legacy_epsf, fit_failed, centers
 
-    def _setup_progress_bar(self):
+    def _setup_progress_reporter(self):
         """
-        Setup progress bar for ePSF building iterations.
+        Setup progress reporter for ePSF building iterations.
 
         Returns
         -------
-        pbar : progress bar object or None
-            Progress bar instance if enabled, None otherwise.
+        reporter : ProgressReporter
+            Configured progress reporter instance.
         """
-        if not self.progress_bar:
-            return None
-
-        desc = f'EPSFBuilder ({self.maxiters} maxiters)'
-        return add_progress_bar(total=self.maxiters,
-                                desc=desc)  # pragma: no cover
+        return ProgressReporter(self.progress_bar, self.maxiters).setup()
 
     def _check_convergence(self, stars, centers, fit_failed):
         """
@@ -1460,7 +1544,7 @@ class EPSFBuilder:
 
         return legacy_epsf, stars, fit_failed
 
-    def _finalize_build(self, legacy_epsf, stars, pbar, iter_num,
+    def _finalize_build(self, legacy_epsf, stars, progress_reporter, iter_num,
                         converged, final_center_accuracy,
                         excluded_star_indices):
         """
@@ -1472,8 +1556,8 @@ class EPSFBuilder:
             Final legacy ePSF model.
         stars : `EPSFStars` object
             Final fitted stars.
-        pbar : progress bar object or None
-            Progress bar instance.
+        progress_reporter : `ProgressReporter`
+            Progress reporter instance for handling completion messages.
         iter_num : int
             Number of completed iterations.
         converged : bool
@@ -1488,13 +1572,10 @@ class EPSFBuilder:
         result : `EPSFBuildResult`
             Structured result containing ePSF, stars, and build diagnostics.
         """
-        # Handle progress bar completion
-        if pbar is not None:
-            if iter_num < self.maxiters:
-                pbar.write(f'EPSFBuilder converged after {iter_num} '
-                           f'iterations (of {self.maxiters} maximum '
-                           'iterations)')
-            pbar.close()
+        # Handle progress reporting completion
+        if iter_num < self.maxiters:
+            progress_reporter.write_convergence_message(iter_num)
+        progress_reporter.close()
 
         # Convert legacy ePSF back to ImagePSF
         epsf = ImagePSF(data=legacy_epsf.data, flux=legacy_epsf.flux,
@@ -1550,7 +1631,7 @@ class EPSFBuilder:
             stars, init_epsf)
 
         # Setup progress tracking
-        pbar = self._setup_progress_bar()
+        progress_reporter = self._setup_progress_reporter()
 
         # Initialize iteration variables and tracking
         iter_num = 0
@@ -1580,14 +1661,14 @@ class EPSFBuilder:
                 stars, centers, fit_failed)
 
             # Update progress bar
-            if pbar is not None:
-                pbar.update()
+            progress_reporter.update()
 
         # Determine final convergence status and accuracy
         final_converged = np.max(center_dist_sq) < self.center_accuracy_sq
         final_center_accuracy = np.max(center_dist_sq) ** 0.5
 
         # Finalize and return structured results
-        return self._finalize_build(legacy_epsf, stars, pbar, iter_num,
-                                    final_converged, final_center_accuracy,
+        return self._finalize_build(legacy_epsf, stars, progress_reporter,
+                                    iter_num, final_converged,
+                                    final_center_accuracy,
                                     excluded_star_indices)
