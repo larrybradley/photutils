@@ -10,12 +10,14 @@ from astropy.modeling.fitting import TRFLSQFitter
 from astropy.modeling.models import Const2D, Gaussian2D, Moffat2D
 from astropy.nddata import NDData
 from astropy.table import Table
+from astropy.utils.exceptions import AstropyDeprecationWarning
 from numpy.testing import assert_allclose, assert_equal
+from scipy.integrate import dblquad
 
 from photutils import datasets
 from photutils.detection import find_peaks
-from photutils.psf import (EPSFBuilder, extract_stars, grid_from_epsfs,
-                           make_psf_model)
+from photutils.psf import (EPSFBuilder, PRFAdapter, extract_stars,
+                           grid_from_epsfs, make_psf_model)
 from photutils.psf.model_helpers import _integrate_model, _InverseShift
 
 
@@ -184,115 +186,6 @@ def test_make_psf_model_offset():
     assert moffat(10, 0) == psfmod1(10, 0) == psfmod2(10, 0) == 1.0
 
 
-@pytest.mark.remote_data
-class TestGridFromEPSFs:
-    """
-    Tests for `photutils.psf.utils.grid_from_epsfs`.
-    """
-
-    def setup_class(self, cutout_size=25):
-        # make a set of 4 EPSF models
-
-        self.cutout_size = cutout_size
-
-        # make simulated image
-        hdu = datasets.load_simulated_hst_star_image()
-        data = hdu.data
-
-        # break up the image into four quadrants
-        q1 = data[0:500, 0:500]
-        q2 = data[0:500, 500:1000]
-        q3 = data[500:1000, 0:500]
-        q4 = data[500:1000, 500:1000]
-
-        # select some starts from each quadrant to use to build the epsf
-        quad_stars = {'q1': {'data': q1, 'fiducial': (0., 0.), 'epsf': None},
-                      'q2': {'data': q2, 'fiducial': (1000., 1000.),
-                             'epsf': None},
-                      'q3': {'data': q3, 'fiducial': (1000., 0.),
-                             'epsf': None},
-                      'q4': {'data': q4, 'fiducial': (0., 1000.),
-                             'epsf': None}}
-
-        for q in ['q1', 'q2', 'q3', 'q4']:
-            quad_data = quad_stars[q]['data']
-            peaks_tbl = find_peaks(quad_data, threshold=500.)
-
-            # filter out sources near edge
-            size = cutout_size
-            hsize = (size - 1) / 2
-            x = peaks_tbl['x_peak']
-            y = peaks_tbl['y_peak']
-            mask = ((x > hsize) & (x < (quad_data.shape[1] - 1 - hsize))
-                    & (y > hsize) & (y < (quad_data.shape[0] - 1 - hsize)))
-
-            stars_tbl = Table()
-            stars_tbl['x'] = peaks_tbl['x_peak'][mask]
-            stars_tbl['y'] = peaks_tbl['y_peak'][mask]
-
-            stars = extract_stars(NDData(quad_data), stars_tbl,
-                                  size=cutout_size)
-
-            epsf_builder = EPSFBuilder(oversampling=4, maxiters=3,
-                                       progress_bar=False)
-            epsf, _ = epsf_builder(stars)
-
-            # set x_0, y_0 to fiducial point
-            epsf.y_0 = quad_stars[q]['fiducial'][0]
-            epsf.x_0 = quad_stars[q]['fiducial'][1]
-
-            quad_stars[q]['epsf'] = epsf
-
-        self.epsfs = [val['epsf'] for val in quad_stars.values()]
-        self.grid_xypos = [val['fiducial'] for val in quad_stars.values()]
-
-    def test_basic_test_grid_from_epsfs(self):
-        psf_grid = grid_from_epsfs(self.epsfs)
-
-        assert np.all(psf_grid.oversampling == self.epsfs[0].oversampling)
-        assert psf_grid.data.shape == (4, psf_grid.oversampling[0] * 25 + 1,
-                                       psf_grid.oversampling[1] * 25 + 1)
-
-    def test_grid_xypos(self):
-        """
-        Test both options for setting PSF locations.
-        """
-        # default option x_0 and y_0s on input EPSFs
-        psf_grid = grid_from_epsfs(self.epsfs)
-
-        assert psf_grid.meta['grid_xypos'] == [(0.0, 0.0), (1000.0, 1000.0),
-                                               (0.0, 1000.0), (1000.0, 0.0)]
-
-        # or pass in a list
-        grid_xypos = [(250.0, 250.0), (750.0, 750.0),
-                      (250.0, 750.0), (750.0, 250.0)]
-
-        psf_grid = grid_from_epsfs(self.epsfs, grid_xypos=grid_xypos)
-        assert psf_grid.meta['grid_xypos'] == grid_xypos
-
-    def test_meta(self):
-        """
-        Test the option for setting 'meta'.
-        """
-        keys = ['grid_xypos', 'oversampling', 'fill_value']
-
-        # when 'meta' isn't provided, there should be just three keys
-        psf_grid = grid_from_epsfs(self.epsfs)
-        for key in keys:
-            assert key in psf_grid.meta
-
-        # when meta is provided, those new keys should exist and anything
-        # in the list above should be overwritten
-        meta = {'grid_xypos': 0.0, 'oversampling': 0.0,
-                'fill_value': -999, 'extra_key': 'extra'}
-        psf_grid = grid_from_epsfs(self.epsfs, meta=meta)
-        for key in [*keys, 'extra_key']:
-            assert key in psf_grid.meta
-        assert psf_grid.meta['grid_xypos'].sort() == self.grid_xypos.sort()
-        assert_equal(psf_grid.meta['oversampling'], [4, 4])
-        assert psf_grid.meta['fill_value'] == 0.0
-
-
 class TestGridFromEPSFsComprehensive:
     """
     Comprehensive tests for grid_from_epsfs without remote data.
@@ -345,30 +238,34 @@ class TestGridFromEPSFsComprehensive:
     def test_four_epsfs_with_positions(self):
         """
         Test with four EPSFs using x_0, y_0 from EPSFs.
+
+        Uses rectangular grid positions: (0,0), (1,0), (0,1), (1,1).
         """
         epsf1 = self._make_mock_epsf(x_0=0.0, y_0=0.0)
-        epsf2 = self._make_mock_epsf(x_0=10.0, y_0=10.0)
-        epsf3 = self._make_mock_epsf(x_0=20.0, y_0=0.0)
-        epsf4 = self._make_mock_epsf(x_0=30.0, y_0=10.0)
+        epsf2 = self._make_mock_epsf(x_0=1.0, y_0=0.0)
+        epsf3 = self._make_mock_epsf(x_0=0.0, y_0=1.0)
+        epsf4 = self._make_mock_epsf(x_0=1.0, y_0=1.0)
 
         result = grid_from_epsfs([epsf1, epsf2, epsf3, epsf4])
 
         assert result.data.shape == (4, 25, 25)
-        expected_positions = [(0.0, 0.0), (10.0, 10.0),
-                              (20.0, 0.0), (30.0, 10.0)]
+        expected_positions = [(0.0, 0.0), (1.0, 0.0),
+                              (0.0, 1.0), (1.0, 1.0)]
         assert result.meta['grid_xypos'] == expected_positions
 
     def test_custom_grid_xypos(self):
         """
         Test with custom grid_xypos parameter.
+
+        Uses rectangular grid positions forming a 2x2 grid.
         """
         epsf1 = self._make_mock_epsf()
         epsf2 = self._make_mock_epsf()
         epsf3 = self._make_mock_epsf()
         epsf4 = self._make_mock_epsf()
 
-        custom_positions = [(100.0, 200.0), (300.0, 400.0),
-                            (500.0, 600.0), (700.0, 800.0)]
+        custom_positions = [(100.0, 200.0), (300.0, 200.0),
+                            (100.0, 400.0), (300.0, 400.0)]
         result = grid_from_epsfs([epsf1, epsf2, epsf3, epsf4],
                                  grid_xypos=custom_positions)
 
@@ -433,19 +330,39 @@ class TestGridFromEPSFsComprehensive:
 
     def test_inconsistent_data_dimensions(self):
         """
-        Test error when EPSFs have different data dimensions.
+        Test error when EPSFs have different oversampling values.
         """
         epsf1 = self._make_mock_epsf(data_shape=(25, 25))
 
-        # Create ImagePSF with different shape but still 2D
+        # Create ImagePSF with different oversampling
         from photutils.psf import ImagePSF
         data_2d_diff = np.ones((10, 10))
-        epsf2 = ImagePSF(data_2d_diff)
+        # Use different oversampling to trigger the oversampling error
+        epsf2 = ImagePSF(data_2d_diff, oversampling=(2, 2))
 
-        # This should not raise an error - they have same dimensions (2D)
-        # But different shapes are allowed
-        result = grid_from_epsfs([epsf1, epsf2])
-        assert result.data.shape[0] == 2  # 2 EPSFs
+        # This should raise an error due to different oversampling values
+        with pytest.raises(ValueError, match='same value for oversampling'):
+            grid_from_epsfs([epsf1, epsf2])
+
+    def test_inconsistent_data_shapes(self):
+        """
+        Test error when EPSFs have different data shapes.
+        """
+        from photutils.psf import ImagePSF
+
+        # Create EPSFs with same oversampling but different shapes
+        data1 = np.ones((10, 10))
+        data2 = np.ones((15, 15))
+
+        # Use consistent origin to avoid origin error before shape check
+        origin = (0, 0)
+        epsf1 = ImagePSF(data1, oversampling=(1, 1), origin=origin)
+        epsf2 = ImagePSF(data2, oversampling=(1, 1), origin=origin)
+
+        # This should raise an error due to different array shapes
+        with pytest.raises(ValueError,
+                           match='all input arrays must have the same shape'):
+            grid_from_epsfs([epsf1, epsf2])
 
     def test_inconsistent_flux(self):
         """
@@ -475,13 +392,14 @@ class TestGridFromEPSFsComprehensive:
 
     def test_consistent_origin_ok(self):
         """
-        Test that consistent origins work fine.
+        Test that consistent origins work fine with rectangular grid
+        positions.
         """
         origin = (12.0, 12.0)
         epsf1 = self._make_mock_epsf(x_0=0.0, y_0=0.0, origin=origin)
-        epsf2 = self._make_mock_epsf(x_0=10.0, y_0=10.0, origin=origin)
-        epsf3 = self._make_mock_epsf(x_0=20.0, y_0=0.0, origin=origin)
-        epsf4 = self._make_mock_epsf(x_0=30.0, y_0=10.0, origin=origin)
+        epsf2 = self._make_mock_epsf(x_0=1.0, y_0=0.0, origin=origin)
+        epsf3 = self._make_mock_epsf(x_0=0.0, y_0=1.0, origin=origin)
+        epsf4 = self._make_mock_epsf(x_0=1.0, y_0=1.0, origin=origin)
 
         # Should not raise an error
         result = grid_from_epsfs([epsf1, epsf2, epsf3, epsf4])
@@ -515,13 +433,14 @@ class TestGridFromEPSFsComprehensive:
 
     def test_consistent_units_ok(self):
         """
-        Test that consistent units work fine.
+        Test that consistent units work fine with rectangular grid
+        positions.
         """
         unit = u.count
-        epsf1 = self._make_mock_epsf(data_unit=unit)
-        epsf2 = self._make_mock_epsf(data_unit=unit)
-        epsf3 = self._make_mock_epsf(data_unit=unit)
-        epsf4 = self._make_mock_epsf(data_unit=unit)
+        epsf1 = self._make_mock_epsf(x_0=0.0, y_0=0.0, data_unit=unit)
+        epsf2 = self._make_mock_epsf(x_0=1.0, y_0=0.0, data_unit=unit)
+        epsf3 = self._make_mock_epsf(x_0=0.0, y_0=1.0, data_unit=unit)
+        epsf4 = self._make_mock_epsf(x_0=1.0, y_0=1.0, data_unit=unit)
 
         # Should not raise an error
         result = grid_from_epsfs([epsf1, epsf2, epsf3, epsf4])
@@ -529,12 +448,12 @@ class TestGridFromEPSFsComprehensive:
 
     def test_meta_handling(self):
         """
-        Test metadata handling.
+        Test metadata handling with rectangular grid positions.
         """
         epsf1 = self._make_mock_epsf(x_0=0.0, y_0=0.0)
-        epsf2 = self._make_mock_epsf(x_0=10.0, y_0=10.0)
-        epsf3 = self._make_mock_epsf(x_0=20.0, y_0=0.0)
-        epsf4 = self._make_mock_epsf(x_0=30.0, y_0=10.0)
+        epsf2 = self._make_mock_epsf(x_0=1.0, y_0=0.0)
+        epsf3 = self._make_mock_epsf(x_0=0.0, y_0=1.0)
+        epsf4 = self._make_mock_epsf(x_0=1.0, y_0=1.0)
 
         # Test with custom meta
         custom_meta = {'my_key': 'my_value',
@@ -546,8 +465,8 @@ class TestGridFromEPSFsComprehensive:
         assert result.meta['my_key'] == 'my_value'
 
         # Check that required keys are overridden
-        expected_positions = [(0.0, 0.0), (10.0, 10.0),
-                              (20.0, 0.0), (30.0, 10.0)]
+        expected_positions = [(0.0, 0.0), (1.0, 0.0),
+                              (0.0, 1.0), (1.0, 1.0)]
         assert result.meta['grid_xypos'] == expected_positions
         assert np.array_equal(result.meta['oversampling'], [4, 4])
         assert result.meta['fill_value'] == 0.0
@@ -566,7 +485,8 @@ class TestGridFromEPSFsComprehensive:
 
     def test_data_stacking(self):
         """
-        Test that data is correctly stacked.
+        Test that data is correctly stacked with rectangular grid
+        positions.
         """
         # Create EPSFs with identifiable data patterns
         data1 = np.ones((10, 10))
@@ -576,9 +496,9 @@ class TestGridFromEPSFsComprehensive:
 
         from photutils.psf import ImagePSF
         epsf1 = ImagePSF(data1, x_0=0.0, y_0=0.0)
-        epsf2 = ImagePSF(data2, x_0=10.0, y_0=0.0)
-        epsf3 = ImagePSF(data3, x_0=20.0, y_0=0.0)
-        epsf4 = ImagePSF(data4, x_0=30.0, y_0=0.0)
+        epsf2 = ImagePSF(data2, x_0=1.0, y_0=0.0)
+        epsf3 = ImagePSF(data3, x_0=0.0, y_0=1.0)
+        epsf4 = ImagePSF(data4, x_0=1.0, y_0=1.0)
 
         result = grid_from_epsfs([epsf1, epsf2, epsf3, epsf4])
 
@@ -590,7 +510,7 @@ class TestGridFromEPSFsComprehensive:
 
     def test_different_data_shapes_with_consistent_origins(self):
         """
-        Test EPSFs with different data shapes but consistent origins.
+        Test EPSFs with different data shapes fail during stacking.
         """
         from photutils.psf import ImagePSF
 
@@ -599,14 +519,12 @@ class TestGridFromEPSFsComprehensive:
         data2 = np.ones((12, 18))
 
         epsf1 = ImagePSF(data1, x_0=0.0, y_0=0.0, origin=origin)
-        epsf2 = ImagePSF(data2, x_0=10.0, y_0=10.0, origin=origin)
+        epsf2 = ImagePSF(data2, x_0=1.0, y_0=0.0, origin=origin)
 
-        result = grid_from_epsfs([epsf1, epsf2])
-
-        # Should succeed and stack correctly
-        assert result.data.shape[0] == 2
-        assert np.array_equal(result.data[0], data1)
-        assert np.array_equal(result.data[1], data2)
+        # This should raise an error due to different array shapes
+        with pytest.raises(ValueError,
+                           match='all input arrays must have the same shape'):
+            grid_from_epsfs([epsf1, epsf2])
 
     def test_origin_not_checked_with_custom_grid_xypos(self):
         """
@@ -617,8 +535,8 @@ class TestGridFromEPSFsComprehensive:
         epsf3 = self._make_mock_epsf(origin=(30, 30))
         epsf4 = self._make_mock_epsf(origin=(40, 40))
 
-        custom_positions = [(0.0, 0.0), (50.0, 50.0),
-                            (100.0, 100.0), (150.0, 150.0)]
+        custom_positions = [(0.0, 0.0), (1.0, 0.0),
+                            (0.0, 1.0), (1.0, 1.0)]
 
         # Should not raise an error when using custom grid_xypos
         result = grid_from_epsfs([epsf1, epsf2, epsf3, epsf4],
