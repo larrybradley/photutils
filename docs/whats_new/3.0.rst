@@ -47,6 +47,39 @@ IDs::
     >>> groups = SourceGroups(x, y, group_ids)
 
 
+Improved Handling of Non-Finite Local Background Values
+========================================================
+
+:class:`~photutils.psf.PSFPhotometry` and
+:class:`~photutils.psf.IterativePSFPhotometry` now gracefully handle
+non-finite (NaN or inf) local background values instead of raising an
+error. This situation can occur when the local background estimator
+encounters problematic regions, such as:
+
+* Sources near image edges where the background annulus extends beyond
+  the image
+* Fully masked regions within the background annulus
+* User-provided ``init_params`` containing non-finite local background
+  values
+
+When a non-finite local background value is encountered:
+
+1. The actual non-finite value is preserved and reported in the output
+   table's ``local_bkg`` column
+2. The value is not subtracted from the data before PSF fitting
+3. A new flag (bit 512, ``NON_FINITE_LOCALBKG``) is set in the
+   ``flags`` column to indicate the issue
+
+This allows users to identify and handle problematic sources
+appropriately while still obtaining PSF fitting results where possible.
+The ``NON_FINITE_LOCALBKG`` flag can be accessed via the
+:data:`~photutils.psf.PSF_FLAGS` object::
+
+    >>> from photutils.psf import PSF_FLAGS
+    >>> print(PSF_FLAGS.NON_FINITE_LOCALBKG)
+    512
+
+
 Removed Deprecations
 ====================
 

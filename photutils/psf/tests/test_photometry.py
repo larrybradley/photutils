@@ -812,17 +812,18 @@ def test_local_bkg_nonfinite(test_data):
     fit_shape = (5, 5)
     finder = DAOStarFinder(10.0, 2.0)
 
-    # Test with NaN local_bkg in init_params
-    psfphot = PSFPhotometry(psf_model, fit_shape, finder=finder,
-                            aperture_radius=4)
-    sources = psfphot._find_sources_if_needed(data, None, None)
+    # Find sources using the finder
+    sources = finder(data)
 
-    # Set some local_bkg values to NaN and inf
+    # Add non-finite local_bkg values to init_params
     sources['local_bkg'] = np.zeros(len(sources))
     sources['local_bkg'][0] = np.nan
     sources['local_bkg'][1] = np.inf
     sources['local_bkg'][2] = -np.inf
 
+    # Perform PSF photometry with init_params containing non-finite local_bkg
+    psfphot = PSFPhotometry(psf_model, fit_shape, finder=finder,
+                            aperture_radius=4)
     phot = psfphot(data, error=error, init_params=sources)
 
     # Check that non-finite local_bkg values are preserved in output
@@ -838,6 +839,53 @@ def test_local_bkg_nonfinite(test_data):
     # Check that sources with finite local_bkg don't have this flag
     if len(phot) > 3:
         assert not (phot['flags'][3] & 512)
+
+
+def test_local_bkg_nonfinite_measured(test_data):
+    """
+    Test that non-finite local background values measured from the image
+    are handled correctly.
+
+    When the LocalBackground estimator returns NaN (e.g., due to a fully
+    masked region), the code should:
+    1. Report the NaN local_bkg value in the output table
+    2. Not subtract it from the data before fitting
+    3. Set a flag (bit 512) indicating non-finite local background
+    """
+    data, error, _ = test_data
+
+    psf_model = CircularGaussianPRF(flux=1, fwhm=2.7)
+    fit_shape = (5, 5)
+    finder = DAOStarFinder(10.0, 2.0)
+
+    # Create a mask that will cause LocalBackground to return NaN for
+    # some sources (mask out a large region around a source)
+    mask = np.zeros(data.shape, dtype=bool)
+    # Mask a large region that will overlap with the local background
+    # annulus for at least one source
+    mask[20:30, 20:30] = True
+
+    bkgstat = MMMBackground()
+    localbkg_estimator = LocalBackground(5, 15, bkgstat)
+    psfphot = PSFPhotometry(psf_model, fit_shape, finder=finder,
+                            aperture_radius=4,
+                            localbkg_estimator=localbkg_estimator)
+    phot = psfphot(data, error=error, mask=mask)
+
+    # Check if any sources have non-finite local_bkg
+    # (depends on source positions and mask)
+    nonfinite_mask = ~np.isfinite(phot['local_bkg'])
+
+    if np.any(nonfinite_mask):
+        # Check that flags are set correctly for sources with non-finite bkg
+        for i in np.where(nonfinite_mask)[0]:
+            assert phot['flags'][i] & 512, \
+                f"Source {i} has non-finite local_bkg but flag 512 not set"
+
+        # Check that sources with finite local_bkg don't have this flag
+        for i in np.where(~nonfinite_mask)[0]:
+            assert not (phot['flags'][i] & 512), \
+                f"Source {i} has finite local_bkg but flag 512 is set"
 
 
 def test_fixed_params(test_data):

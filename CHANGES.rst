@@ -24,6 +24,15 @@ New Features
 Bug Fixes
 ^^^^^^^^^
 
+- ``photutils.psf``
+
+  - ``PSFPhotometry`` and ``IterativePSFPhotometry`` now handle
+    non-finite (NaN or inf) local background values instead of raising
+    an error. When a non-finite local background value is encountered,
+    it is reported in the output table but not subtracted from the data
+    before fitting, and a new flag (bit 512, ``NON_FINITE_LOCALBKG``)
+    is set to indicate the issue. [#????]
+
 API Changes
 ^^^^^^^^^^^
 
