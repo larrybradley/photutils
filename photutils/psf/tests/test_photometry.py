@@ -2003,3 +2003,31 @@ def test_qfit_cfit_with_different_errors(test_data):
     assert_allclose(phot_small_error['cfit'], phot_no_error['cfit'])
     assert_allclose(phot_large_error['qfit'], phot_no_error['qfit'])
     assert_allclose(phot_large_error['cfit'], phot_no_error['cfit'])
+
+
+def test_residual_nonfinite_localbkg(test_data):
+    data, error, sources = test_data
+
+    psf_model = CircularGaussianPRF(flux=1, fwhm=2.7)
+    fit_shape = (5, 5)
+    finder = DAOStarFinder(10.0, 2.0)
+
+    # Find sources using the finder
+    sources = finder(data)
+
+    # Add non-finite local_bkg values to init_params
+    sources['local_bkg'] = np.zeros(len(sources))
+    sources['local_bkg'][0] = np.nan
+    sources['local_bkg'][1] = np.inf
+    sources['local_bkg'][2] = -np.inf
+    sources['xcentroid'][-1] = 1000
+    sources['ycentroid'][-1] = 1000
+
+    # Perform PSF photometry with init_params containing non-finite local_bkg
+    psfphot = PSFPhotometry(psf_model, fit_shape, finder=finder,
+                            aperture_radius=4)
+    psfphot(data, error=error, init_params=sources)
+
+    residual_img = psfphot.make_residual_image(data, include_localbkg=True)
+    assert residual_img.shape == data.shape
+    assert np.all(np.isfinite(residual_img))

@@ -1689,10 +1689,27 @@ class PSFPhotometry:
         """
         A helper property that creates a _ModelImageRenderer instance.
         """
+        # Get filtered model params (removes non-finite fitted values)
+        model_params = self.results_to_model_params()
+
+        # Filter local_bkg to match the filtered model_params
+        # Build the same mask used in _results_to_model_params
+        tbl = QTable()
+        for col_name in self.results.colnames:
+            if col_name == 'id' or '_fit' in col_name:
+                alias = col_name.replace('_fit', '')
+                model_param_name = self._param_mapper.alias_to_model_param.get(
+                    alias, alias)
+                tbl[model_param_name] = self.results[col_name]
+
+        # Apply the same filtering
+        keep = np.all([np.isfinite(tbl[col]) for col in tbl.colnames], axis=0)
+        local_bkg = self.results['local_bkg'][keep]
+
         return _ModelImageRenderer(
             psf_model=self.psf_model,
-            model_params=self.results_to_model_params(),
-            local_bkg=self.init_params['local_bkg'],
+            model_params=model_params,
+            local_bkg=local_bkg,
             progress_bar=self.progress_bar,
         )
 

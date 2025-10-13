@@ -609,7 +609,9 @@ class IterativePSFPhotometry:
                 fm_tbl = result_obj.results_to_model_params()
                 if fm_tbl is not None:
                     all_fit_params.append(fm_tbl)
-                    all_local_bkgs.append(result_obj.init_params['local_bkg'])
+                    # Filter local_bkg to match filtered results
+                    local_bkg_filtered = self._filter_local_bkg(result_obj)
+                    all_local_bkgs.append(local_bkg_filtered)
 
             fit_params = vstack(all_fit_params) if all_fit_params else None
             local_bkgs = list(chain.from_iterable(all_local_bkgs))
@@ -618,7 +620,8 @@ class IterativePSFPhotometry:
             # in 'all' mode: only the final iteration contains all sources
             final_result = self.fit_results[-1]
             fit_params = final_result.results_to_model_params()
-            local_bkgs = final_result.init_params['local_bkg']
+            # Filter local_bkg to match filtered results
+            local_bkgs = self._filter_local_bkg(final_result)
 
         else:  # pragma: no cover
             # should never happen due to the mode validation in __init__
@@ -631,6 +634,30 @@ class IterativePSFPhotometry:
             local_bkg=local_bkgs,
             progress_bar=progress_bar,
         )
+
+    @staticmethod
+    def _filter_local_bkg(result_obj):
+        """
+        Filter local_bkg to match the filtering done in
+        results_to_model_params.
+
+        This applies the same non-finite filtering to local_bkg that is
+        applied to the fitted parameters.
+        """
+        # Build the same table used in _results_to_model_params
+        tbl = QTable()
+        for col_name in result_obj.results.colnames:
+            if col_name == 'id' or '_fit' in col_name:
+                alias = col_name.replace('_fit', '')
+                mapper = result_obj._param_mapper
+                model_param_name = mapper.alias_to_model_param.get(
+                    alias, alias)
+                tbl[model_param_name] = result_obj.results[col_name]
+
+        # Apply the same filtering
+        keep = np.all([np.isfinite(tbl[col]) for col in tbl.colnames],
+                      axis=0)
+        return result_obj.results['local_bkg'][keep]
 
     def make_model_image(self, shape, *, psf_shape=None,
                          include_localbkg=False):
