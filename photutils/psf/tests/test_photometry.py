@@ -366,6 +366,81 @@ def test_model_residual_image(test_data):
     assert resid2[y, x] < -9
 
 
+def test_model_residual_image_nonfinite_localbkg(test_data):
+    """
+    Test that make_model_image and make_residual_image handle non-finite
+    local background values correctly.
+
+    When include_localbkg=True and the local_bkg is non-finite (NaN or
+    inf), the non-finite value should be treated as 0 and not included
+    in the model or residual images.
+    """
+    data, error, _ = test_data
+
+    psf_model = CircularGaussianPRF(flux=1, fwhm=2.7)
+    fit_shape = (5, 5)
+    finder = DAOStarFinder(10.0, 2.0)
+
+    # Find sources and manually set some local_bkg values to non-finite
+    sources = finder(data)
+    sources['local_bkg'] = np.zeros(len(sources))
+    sources['local_bkg'][0] = np.nan
+    sources['local_bkg'][1] = np.inf
+    if len(sources) > 2:
+        sources['local_bkg'][2] = -np.inf
+
+    # Perform PSF photometry with non-finite local_bkg
+    psfphot = PSFPhotometry(psf_model, fit_shape, finder=finder,
+                            aperture_radius=4)
+    phot = psfphot(data, error=error, init_params=sources)
+
+    psf_shape = (15, 15)
+
+    # Test make_model_image with include_localbkg=True
+    model_with_bkg = psfphot.make_model_image(data.shape, psf_shape=psf_shape,
+                                              include_localbkg=True)
+    model_without_bkg = psfphot.make_model_image(
+        data.shape, psf_shape=psf_shape, include_localbkg=False)
+
+    # The model images should be finite everywhere
+    assert np.all(np.isfinite(model_with_bkg))
+    assert np.all(np.isfinite(model_without_bkg))
+
+    # For sources with non-finite local_bkg, the model with and without
+    # local_bkg should be identical (since non-finite is treated as 0)
+    # Check this by comparing the models at source positions
+    for i in range(min(3, len(phot))):
+        if not np.isfinite(phot['local_bkg'][i]):
+            x_fit = int(phot['x_fit'][i])
+            y_fit = int(phot['y_fit'][i])
+            # At the source center, both models should be similar
+            # (within numerical precision)
+            diff = np.abs(model_with_bkg[y_fit, x_fit]
+                          - model_without_bkg[y_fit, x_fit])
+            assert diff < 0.1
+
+    # Test make_residual_image with include_localbkg=True
+    resid_with_bkg = psfphot.make_residual_image(data, psf_shape=psf_shape,
+                                                 include_localbkg=True)
+    resid_without_bkg = psfphot.make_residual_image(
+        data, psf_shape=psf_shape, include_localbkg=False)
+
+    # The residual images should be finite everywhere
+    assert np.all(np.isfinite(resid_with_bkg))
+    assert np.all(np.isfinite(resid_without_bkg))
+
+    # For sources with non-finite local_bkg, the residuals should be
+    # similar since the non-finite background is treated as 0
+    for i in range(min(3, len(phot))):
+        if not np.isfinite(phot['local_bkg'][i]):
+            x_fit = int(phot['x_fit'][i])
+            y_fit = int(phot['y_fit'][i])
+            # Residuals should be similar for non-finite local_bkg sources
+            diff = np.abs(resid_with_bkg[y_fit, x_fit]
+                          - resid_without_bkg[y_fit, x_fit])
+            assert diff < 0.1
+
+
 @pytest.mark.parametrize('fit_stddev', [False, True])
 def test_psf_photometry_compound_psfmodel(test_data, fit_stddev):
     """
