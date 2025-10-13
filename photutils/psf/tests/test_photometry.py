@@ -170,15 +170,6 @@ def test_invalid_inputs():
     with pytest.warns(AstropyUserWarning, match=match):
         _ = psfphot2(data, mask=mask, init_params=init_params)
 
-    match = 'init_params local_bkg column contains non-finite values'
-    tbl = Table()
-    init_params['x_init'] = [1, 2]
-    init_params['y_init'] = [1, 2]
-    init_params['local_bkg'] = [0.1, np.inf]
-    data = np.ones((11, 11))
-    with pytest.raises(ValueError, match=match):
-        _ = psfphot(data, init_params=init_params)
-
     data = np.ones((11, 11))
     tbl = Table()
     tbl['x'] = [1, 2]
@@ -804,6 +795,49 @@ def test_local_bkg(test_data):
                             localbkg_estimator=localbkg_estimator)
     phot = psfphot(data, error=error)
     assert np.count_nonzero(phot['local_bkg']) == len(sources)
+
+
+def test_local_bkg_nonfinite(test_data):
+    """
+    Test that non-finite local background values are handled correctly.
+
+    When local_bkg is NaN or inf, the code should:
+    1. Report the actual local_bkg value in the output table
+    2. Not subtract it from the data before fitting
+    3. Set a flag indicating non-finite local background
+    """
+    data, error, _ = test_data
+
+    psf_model = CircularGaussianPRF(flux=1, fwhm=2.7)
+    fit_shape = (5, 5)
+    finder = DAOStarFinder(10.0, 2.0)
+
+    # Test with NaN local_bkg in init_params
+    psfphot = PSFPhotometry(psf_model, fit_shape, finder=finder,
+                            aperture_radius=4)
+    sources = psfphot._find_sources_if_needed(data, None, None)
+
+    # Set some local_bkg values to NaN and inf
+    sources['local_bkg'] = np.zeros(len(sources))
+    sources['local_bkg'][0] = np.nan
+    sources['local_bkg'][1] = np.inf
+    sources['local_bkg'][2] = -np.inf
+
+    phot = psfphot(data, error=error, init_params=sources)
+
+    # Check that non-finite local_bkg values are preserved in output
+    assert np.isnan(phot['local_bkg'][0])
+    assert np.isinf(phot['local_bkg'][1])
+    assert np.isinf(phot['local_bkg'][2])
+
+    # Check that flags are set correctly (bit 512 for non-finite local_bkg)
+    assert phot['flags'][0] & 512
+    assert phot['flags'][1] & 512
+    assert phot['flags'][2] & 512
+
+    # Check that sources with finite local_bkg don't have this flag
+    if len(phot) > 3:
+        assert not (phot['flags'][3] & 512)
 
 
 def test_fixed_params(test_data):
