@@ -13,14 +13,14 @@ from astropy.table import QTable, vstack
 from astropy.utils import lazyproperty
 
 from photutils.psf.photometry import PSFPhotometry
-from photutils.psf.utils import ModelImageMixin, _create_call_docstring
+from photutils.psf.utils import ModelImageGenerator, _create_call_docstring
 from photutils.utils._repr import make_repr
 from photutils.utils.exceptions import NoDetectionsWarning
 
 __all__ = ['IterativePSFPhotometry']
 
 
-class IterativePSFPhotometry(ModelImageMixin):
+class IterativePSFPhotometry:
     """
     Class to iteratively perform PSF photometry.
 
@@ -271,7 +271,7 @@ class IterativePSFPhotometry(ModelImageMixin):
         """
         self.fit_results = []
         self.results = None
-        self.__dict__.pop('_model_image_params', None)  # lazyproperty
+        self.__dict__.pop('_model_image_generator', None)  # lazyproperty
 
     def __repr__(self):
         params = ('psf_model', 'fit_shape', 'finder', 'grouper', 'fitter',
@@ -593,10 +593,9 @@ class IterativePSFPhotometry(ModelImageMixin):
             self.results, self._psfphot._param_mapper, reset_id=True)
 
     @lazyproperty
-    def _model_image_params(self):
+    def _model_image_generator(self):
         """
-        A helper property that provides the necessary parameters to
-        ModelImageMixin.
+        A helper property that creates a ModelImageGenerator instance.
         """
         psf_model = self._psfphot.psf_model
         progress_bar = self._psfphot.progress_bar
@@ -625,11 +624,12 @@ class IterativePSFPhotometry(ModelImageMixin):
             msg = f'Invalid mode "{self.mode}"'
             raise ValueError(msg)
 
-        return {'psf_model': psf_model,
-                'model_params': fit_params,
-                'local_bkg': local_bkgs,
-                'progress_bar': progress_bar,
-                }
+        return ModelImageGenerator(
+            psf_model=psf_model,
+            model_params=fit_params,
+            local_bkg=local_bkgs,
+            progress_bar=progress_bar,
+        )
 
     def make_model_image(self, shape, *, psf_shape=None,
                          include_localbkg=False):
@@ -639,8 +639,8 @@ class IterativePSFPhotometry(ModelImageMixin):
                    'IterativePSFPhotometry instance first.')
             raise ValueError(msg)
 
-        return ModelImageMixin.make_model_image(
-            self, shape, psf_shape=psf_shape,
+        return self._model_image_generator.make_model_image(
+            shape, psf_shape=psf_shape,
             include_localbkg=include_localbkg)
 
     def make_residual_image(self, data, *, psf_shape=None,
@@ -651,5 +651,5 @@ class IterativePSFPhotometry(ModelImageMixin):
                    'IterativePSFPhotometry instance first.')
             raise ValueError(msg)
 
-        return ModelImageMixin.make_residual_image(
-            self, data, psf_shape=psf_shape, include_localbkg=include_localbkg)
+        return self._model_image_generator.make_residual_image(
+            data, psf_shape=psf_shape, include_localbkg=include_localbkg)

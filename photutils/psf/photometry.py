@@ -20,7 +20,7 @@ from astropy.utils.exceptions import AstropyUserWarning
 from photutils.background import LocalBackground
 from photutils.psf._components import (PSFDataProcessor, PSFFitter,
                                        PSFResultsAssembler)
-from photutils.psf.utils import (ModelImageMixin, _create_call_docstring,
+from photutils.psf.utils import (ModelImageGenerator, _create_call_docstring,
                                  _get_psf_model_main_params, _make_mask,
                                  _validate_psf_model)
 from photutils.utils._parameters import as_pair
@@ -209,7 +209,7 @@ class _PSFParameterMapper:
         return table
 
 
-class PSFPhotometry(ModelImageMixin):
+class PSFPhotometry:
     """
     Class to perform PSF photometry.
 
@@ -447,7 +447,7 @@ class PSFPhotometry(ModelImageMixin):
         }
 
         # remove cached properties
-        self.__dict__.pop('_model_image_params', None)
+        self.__dict__.pop('_model_image_generator', None)
 
     def _initialize_source_state_storage(self, n_sources):
         """
@@ -1684,16 +1684,16 @@ class PSFPhotometry(ModelImageMixin):
                                              reset_id=True)
 
     @lazyproperty
-    def _model_image_params(self):
+    def _model_image_generator(self):
         """
-        A helper property that provides the necessary parameters to
-        ModelImageMixin.
+        A helper property that creates a ModelImageGenerator instance.
         """
-        return {'psf_model': self.psf_model,
-                'model_params': self.results_to_model_params(),
-                'local_bkg': self.init_params['local_bkg'],
-                'progress_bar': self.progress_bar,
-                }
+        return ModelImageGenerator(
+            psf_model=self.psf_model,
+            model_params=self.results_to_model_params(),
+            local_bkg=self.init_params['local_bkg'],
+            progress_bar=self.progress_bar,
+        )
 
     def make_model_image(self, shape, *, psf_shape=None,
                          include_localbkg=False):
@@ -1702,8 +1702,8 @@ class PSFPhotometry(ModelImageMixin):
                    'instance first.')
             raise ValueError(msg)
 
-        return ModelImageMixin.make_model_image(
-            self, shape, psf_shape=psf_shape,
+        return self._model_image_generator.make_model_image(
+            shape, psf_shape=psf_shape,
             include_localbkg=include_localbkg)
 
     def make_residual_image(self, data, *, psf_shape=None,
@@ -1713,5 +1713,5 @@ class PSFPhotometry(ModelImageMixin):
                    'instance first.')
             raise ValueError(msg)
 
-        return ModelImageMixin.make_residual_image(
-            self, data, psf_shape=psf_shape, include_localbkg=include_localbkg)
+        return self._model_image_generator.make_residual_image(
+            data, psf_shape=psf_shape, include_localbkg=include_localbkg)

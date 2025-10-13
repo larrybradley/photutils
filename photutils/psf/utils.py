@@ -20,14 +20,56 @@ from photutils.psf.functional_models import CircularGaussianPRF
 from photutils.utils import CutoutImage
 from photutils.utils._parameters import as_pair
 
-__all__ = ['ModelImageMixin', 'fit_2dgaussian', 'fit_fwhm']
+__all__ = ['ModelImageGenerator', 'fit_2dgaussian', 'fit_fwhm']
 
 
-class ModelImageMixin:
+class ModelImageGenerator:
     """
-    Mixin class to provide methods to calculate model images and
-    residuals.
+    Helper class to generate model and residual images from PSF
+    photometry results.
+
+    This class provides methods to create model images and residual
+    images from fitted PSF models and optional local background values.
+
+    Parameters
+    ----------
+    psf_model : 2D `astropy.modeling.Model`
+        The PSF model used to fit the sources.
+
+    model_params : `~astropy.table.QTable`
+        A table containing the model parameters for each source. The
+        table must contain columns for the x, y, and flux parameters
+        corresponding to the PSF model parameter names.
+
+    local_bkg : array-like
+        The local background values for each source. Must have the same
+        length as the number of rows in ``model_params``.
+
+    progress_bar : bool, optional
+        Whether to show a progress bar during the rendering of the model
+        image. Default is False.
     """
+
+    def __init__(self, psf_model, model_params, local_bkg, progress_bar=False):
+        self.psf_model = psf_model
+        self.model_params = model_params
+        # Preserve Quantity arrays, otherwise convert to ndarray
+        # Check if it's already a Quantity
+        if isinstance(local_bkg, Quantity):
+            self.local_bkg = local_bkg
+        # Check if it's a list/iterable that might contain Quantities
+        elif (hasattr(local_bkg, '__iter__')
+              and not isinstance(local_bkg, (str, np.ndarray))):
+            # Try to preserve Quantity if elements are Quantities
+            try:
+                # This will work if elements are compatible Quantities
+                self.local_bkg = Quantity(local_bkg)
+            except (TypeError, ValueError):
+                # Fall back to regular array
+                self.local_bkg = np.asarray(local_bkg)
+        else:
+            self.local_bkg = np.asarray(local_bkg)
+        self.progress_bar = progress_bar
 
     def make_model_image(self, shape, *, psf_shape=None,
                          include_localbkg=False):
@@ -63,64 +105,41 @@ class ModelImageMixin:
         array : 2D `~numpy.ndarray`
             The rendered image from the fit PSF models. This image will
             not have any units.
-
-        Notes
-        -----
-        Classes that inherit from this mixin class must have a
-        `_model_image_params` attribute that is a `dict` containing the
-        following items:
-
-        * 'psf_model': 2D `astropy.modeling.Model` instance
-          The PSF model used to fit the sources.
-        * 'fitted_models_table': `~astropy.table.QTable`
-          The fit parameters for the PSF model.
-        * 'local_bkg': `~numpy.ndarray`
-          The local background values for each source.
-        * 'progress_bar': bool
-          Whether to show a progress bar during the rendering of the
-          model image.
-
-        If the `_model_image_params` attribute is not set, then a
-        `ValueError` will be raised.
-
-        Raises
-        ------
-        ValueError
-            If the `_model_image_params` attribute is not set.
         """
-        image_params = getattr(self, '_model_image_params', None)
-        if image_params is None:
-            msg = ('The `_model_image_params` attribute must be set '
-                   'in the class that inherits from ModelImageMixin.')
-            raise ValueError(msg)
-
-        psf_model = image_params.get('psf_model')
-        model_params = image_params.get('model_params')
-        local_bkgs = image_params.get('local_bkg')
-        progress_bar = image_params.get('progress_bar', False)
+        model_params = self.model_params
 
         if include_localbkg:
             # add local_bkg, but set non-finite values to 0 to avoid
             # corrupting the model image
             model_params = model_params.copy()
-            local_bkgs_clean = local_bkgs.copy()
-            # Replace non-finite values with 0
-            nonfinite_mask = ~np.isfinite(local_bkgs_clean)
-            if np.any(nonfinite_mask):
-                local_bkgs_clean[nonfinite_mask] = 0
+            if isinstance(self.local_bkg, Quantity):
+                # Handle Quantity arrays
+                local_bkgs_clean = self.local_bkg.copy()
+                # Replace non-finite values with 0 (with same unit)
+                nonfinite_mask = ~np.isfinite(local_bkgs_clean.value)
+                if np.any(nonfinite_mask):
+                    zero_val = 0 * local_bkgs_clean.unit
+                    local_bkgs_clean[nonfinite_mask] = zero_val
+            else:
+                # Handle regular arrays
+                local_bkgs_clean = self.local_bkg.copy()
+                # Replace non-finite values with 0
+                nonfinite_mask = ~np.isfinite(local_bkgs_clean)
+                if np.any(nonfinite_mask):
+                    local_bkgs_clean[nonfinite_mask] = 0
             model_params['local_bkg'] = local_bkgs_clean
 
         try:
-            x_name = psf_model.x_name
-            y_name = psf_model.y_name
+            x_name = self.psf_model.x_name
+            y_name = self.psf_model.y_name
         except AttributeError:
             x_name = 'x_0'
             y_name = 'y_0'
 
-        return _make_model_image(shape, psf_model, model_params,
+        return _make_model_image(shape, self.psf_model, model_params,
                                  model_shape=psf_shape,
                                  x_name=x_name, y_name=y_name,
-                                 progress_bar=progress_bar)
+                                 progress_bar=self.progress_bar)
 
     def make_residual_image(self, data, *, psf_shape=None,
                             include_localbkg=False):

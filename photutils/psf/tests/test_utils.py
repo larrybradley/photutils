@@ -12,7 +12,8 @@ from astropy.utils.exceptions import AstropyUserWarning
 from numpy.testing import assert_allclose
 
 from photutils.psf import CircularGaussianPRF, make_psf_model_image
-from photutils.psf.utils import (_get_psf_model_main_params,
+from photutils.psf.utils import (ModelImageGenerator,
+                                 _get_psf_model_main_params,
                                  _interpolate_missing_data,
                                  _validate_psf_model, fit_2dgaussian, fit_fwhm)
 
@@ -186,3 +187,147 @@ def test_get_psf_model_main_params():
     params = _get_psf_model_main_params(model)
     assert len(params) == 3
     assert params == set_params
+
+
+class TestModelImageGenerator:
+    """
+    Tests for the ModelImageGenerator class.
+    """
+
+    def setup_class(self):
+        """
+        Set up test data.
+        """
+        # Create a simple PSF model and parameters
+        self.psf_model = CircularGaussianPRF(fwhm=3.0)
+        self.shape = (50, 50)
+
+        # Create model parameters table
+        self.model_params = QTable()
+        self.model_params['x_0'] = [15.0, 35.0]
+        self.model_params['y_0'] = [20.0, 30.0]
+        self.model_params['flux'] = [100.0, 150.0]
+
+        # Create local background values
+        self.local_bkg = np.array([5.0, 8.0])
+
+    def test_initialization(self):
+        """
+        Test ModelImageGenerator initialization.
+        """
+        gen = ModelImageGenerator(
+            self.psf_model,
+            self.model_params,
+            self.local_bkg,
+            progress_bar=False,
+        )
+        assert gen.psf_model == self.psf_model
+        assert gen.model_params is self.model_params
+        assert_allclose(gen.local_bkg, self.local_bkg)
+        assert gen.progress_bar is False
+
+    def test_make_model_image(self):
+        """
+        Test model image generation without local background.
+        """
+        gen = ModelImageGenerator(
+            self.psf_model,
+            self.model_params,
+            self.local_bkg,
+        )
+        model_image = gen.make_model_image(self.shape)
+        assert model_image.shape == self.shape
+        assert np.all(np.isfinite(model_image))
+        assert np.sum(model_image) > 0
+
+    def test_make_model_image_with_localbkg(self):
+        """
+        Test model image generation with local background.
+        """
+        gen = ModelImageGenerator(
+            self.psf_model,
+            self.model_params,
+            self.local_bkg,
+        )
+        model_image = gen.make_model_image(self.shape, include_localbkg=True)
+        assert model_image.shape == self.shape
+        assert np.all(np.isfinite(model_image))
+        # With local background, the image should have higher values
+        model_image_no_bkg = gen.make_model_image(
+            self.shape, include_localbkg=False)
+        assert np.sum(model_image) > np.sum(model_image_no_bkg)
+
+    def test_make_model_image_nonfinite_localbkg(self):
+        """
+        Test model image with non-finite local background values.
+        """
+        # Create local background with NaN and inf
+        local_bkg_bad = np.array([np.nan, np.inf])
+        gen = ModelImageGenerator(
+            self.psf_model,
+            self.model_params,
+            local_bkg_bad,
+        )
+        # Should not raise an error and should treat non-finite as zero
+        model_image = gen.make_model_image(self.shape, include_localbkg=True)
+        assert model_image.shape == self.shape
+        assert np.all(np.isfinite(model_image))
+
+        # Should be same as without local background
+        model_image_no_bkg = gen.make_model_image(
+            self.shape, include_localbkg=False)
+        assert_allclose(model_image, model_image_no_bkg)
+
+    def test_make_residual_image(self):
+        """
+        Test residual image generation.
+        """
+        gen = ModelImageGenerator(
+            self.psf_model,
+            self.model_params,
+            self.local_bkg,
+        )
+        # Create a data array
+        data = np.ones(self.shape) * 10.0
+        residual = gen.make_residual_image(data)
+        assert residual.shape == self.shape
+        assert np.all(np.isfinite(residual))
+
+    def test_make_residual_image_with_localbkg(self):
+        """
+        Test residual image with local background.
+        """
+        gen = ModelImageGenerator(
+            self.psf_model,
+            self.model_params,
+            self.local_bkg,
+        )
+        data = np.ones(self.shape) * 10.0
+        residual_with_bkg = gen.make_residual_image(
+            data, include_localbkg=True)
+        residual_no_bkg = gen.make_residual_image(
+            data, include_localbkg=False)
+        assert residual_with_bkg.shape == self.shape
+        assert residual_no_bkg.shape == self.shape
+        assert np.all(np.isfinite(residual_with_bkg))
+        assert np.all(np.isfinite(residual_no_bkg))
+
+    def test_make_residual_image_nonfinite_localbkg(self):
+        """
+        Test residual image with non-finite local background.
+        """
+        local_bkg_bad = np.array([np.nan, np.inf])
+        gen = ModelImageGenerator(
+            self.psf_model,
+            self.model_params,
+            local_bkg_bad,
+        )
+        data = np.ones(self.shape) * 10.0
+        residual = gen.make_residual_image(data, include_localbkg=True)
+        assert residual.shape == self.shape
+        assert np.all(np.isfinite(residual))
+
+        # Should be same as without local background
+        residual_no_bkg = gen.make_residual_image(
+            data, include_localbkg=False)
+        assert_allclose(residual, residual_no_bkg)
