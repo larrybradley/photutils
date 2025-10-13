@@ -860,32 +860,22 @@ def test_local_bkg_nonfinite_measured(test_data):
 
     # Create a mask that will cause LocalBackground to return NaN for
     # some sources (mask out a large region around a source)
-    mask = np.zeros(data.shape, dtype=bool)
-    # Mask a large region that will overlap with the local background
-    # annulus for at least one source
-    mask[20:30, 20:30] = True
+    mask = np.ones(data.shape, dtype=bool)
+    mask[44:54, 58:68] = False  # around source at ~(63, 49)
+    mask[70:, :20] = False  # two sources
 
     bkgstat = MMMBackground()
-    localbkg_estimator = LocalBackground(5, 15, bkgstat)
+    localbkg_estimator = LocalBackground(10, 25, bkgstat)
     psfphot = PSFPhotometry(psf_model, fit_shape, finder=finder,
                             aperture_radius=4,
                             localbkg_estimator=localbkg_estimator)
     phot = psfphot(data, error=error, mask=mask)
 
-    # Check if any sources have non-finite local_bkg
-    # (depends on source positions and mask)
-    nonfinite_mask = ~np.isfinite(phot['local_bkg'])
-
-    if np.any(nonfinite_mask):
-        # Check that flags are set correctly for sources with non-finite bkg
-        for i in np.where(nonfinite_mask)[0]:
-            assert phot['flags'][i] & 512, \
-                f"Source {i} has non-finite local_bkg but flag 512 not set"
-
-        # Check that sources with finite local_bkg don't have this flag
-        for i in np.where(~nonfinite_mask)[0]:
-            assert not (phot['flags'][i] & 512), \
-                f"Source {i} has finite local_bkg but flag 512 is set"
+    assert_equal(phot['flags'], [512, 0, 0])
+    assert np.isnan(phot['local_bkg'][0])
+    assert np.all(np.isfinite(phot['local_bkg'][1:]))
+    assert np.all(phot['flux_fit'] > 0)
+    assert np.all(phot['flux_err'] > 0)
 
 
 def test_fixed_params(test_data):

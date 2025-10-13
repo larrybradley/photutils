@@ -54,13 +54,9 @@ Improved Handling of Non-Finite Local Background Values
 :class:`~photutils.psf.IterativePSFPhotometry` now gracefully handle
 non-finite (NaN or inf) local background values instead of raising an
 error. This situation can occur when the local background estimator
-encounters problematic regions, such as:
-
-* Sources near image edges where the background annulus extends beyond
-  the image
-* Fully masked regions within the background annulus
-* User-provided ``init_params`` containing non-finite local background
-  values
+encounters fully masked regions within the background annulus or
+when the user provides non-finite local background values via
+``init_params``.
 
 When a non-finite local background value is encountered:
 
@@ -72,12 +68,6 @@ When a non-finite local background value is encountered:
 
 This allows users to identify and handle problematic sources
 appropriately while still obtaining PSF fitting results where possible.
-The ``NON_FINITE_LOCALBKG`` flag can be accessed via the
-:data:`~photutils.psf.PSF_FLAGS` object::
-
-    >>> from photutils.psf import PSF_FLAGS
-    >>> print(PSF_FLAGS.NON_FINITE_LOCALBKG)
-    512
 
 
 Removed Deprecations
