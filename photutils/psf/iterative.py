@@ -12,8 +12,9 @@ from astropy.nddata import NDData
 from astropy.table import QTable, vstack
 from astropy.utils import lazyproperty
 
+from photutils.psf._components import _ModelImageRenderer
 from photutils.psf.photometry import PSFPhotometry
-from photutils.psf.utils import ModelImageGenerator, _create_call_docstring
+from photutils.psf.utils import _create_call_docstring
 from photutils.utils._repr import make_repr
 from photutils.utils.exceptions import NoDetectionsWarning
 
@@ -595,7 +596,7 @@ class IterativePSFPhotometry:
     @lazyproperty
     def _model_image_generator(self):
         """
-        A helper property that creates a ModelImageGenerator instance.
+        A helper property that creates a _ModelImageRenderer instance.
         """
         psf_model = self._psfphot.psf_model
         progress_bar = self._psfphot.progress_bar
@@ -624,7 +625,7 @@ class IterativePSFPhotometry:
             msg = f'Invalid mode "{self.mode}"'
             raise ValueError(msg)
 
-        return ModelImageGenerator(
+        return _ModelImageRenderer(
             psf_model=psf_model,
             model_params=fit_params,
             local_bkg=local_bkgs,

@@ -12,8 +12,8 @@ from astropy.utils.exceptions import AstropyUserWarning
 from numpy.testing import assert_allclose
 
 from photutils.psf import CircularGaussianPRF, make_psf_model_image
-from photutils.psf.utils import (ModelImageGenerator,
-                                 _get_psf_model_main_params,
+from photutils.psf._components import _ModelImageRenderer
+from photutils.psf.utils import (_get_psf_model_main_params,
                                  _interpolate_missing_data,
                                  _validate_psf_model, fit_2dgaussian, fit_fwhm)
 
@@ -189,9 +189,9 @@ def test_get_psf_model_main_params():
     assert params == set_params
 
 
-class TestModelImageGenerator:
+class TestModelImageRenderer:
     """
-    Tests for the ModelImageGenerator class.
+    Tests for the _ModelImageRenderer class.
     """
 
     def setup_class(self):
@@ -213,9 +213,9 @@ class TestModelImageGenerator:
 
     def test_initialization(self):
         """
-        Test ModelImageGenerator initialization.
+        Test _ModelImageRenderer initialization.
         """
-        gen = ModelImageGenerator(
+        gen = _ModelImageRenderer(
             self.psf_model,
             self.model_params,
             self.local_bkg,
@@ -230,7 +230,7 @@ class TestModelImageGenerator:
         """
         Test model image generation without local background.
         """
-        gen = ModelImageGenerator(
+        gen = _ModelImageRenderer(
             self.psf_model,
             self.model_params,
             self.local_bkg,
@@ -244,7 +244,7 @@ class TestModelImageGenerator:
         """
         Test model image generation with local background.
         """
-        gen = ModelImageGenerator(
+        gen = _ModelImageRenderer(
             self.psf_model,
             self.model_params,
             self.local_bkg,
@@ -263,7 +263,7 @@ class TestModelImageGenerator:
         """
         # Create local background with NaN and inf
         local_bkg_bad = np.array([np.nan, np.inf])
-        gen = ModelImageGenerator(
+        gen = _ModelImageRenderer(
             self.psf_model,
             self.model_params,
             local_bkg_bad,
@@ -282,7 +282,7 @@ class TestModelImageGenerator:
         """
         Test residual image generation.
         """
-        gen = ModelImageGenerator(
+        gen = _ModelImageRenderer(
             self.psf_model,
             self.model_params,
             self.local_bkg,
@@ -297,7 +297,7 @@ class TestModelImageGenerator:
         """
         Test residual image with local background.
         """
-        gen = ModelImageGenerator(
+        gen = _ModelImageRenderer(
             self.psf_model,
             self.model_params,
             self.local_bkg,
@@ -317,7 +317,7 @@ class TestModelImageGenerator:
         Test residual image with non-finite local background.
         """
         local_bkg_bad = np.array([np.nan, np.inf])
-        gen = ModelImageGenerator(
+        gen = _ModelImageRenderer(
             self.psf_model,
             self.model_params,
             local_bkg_bad,

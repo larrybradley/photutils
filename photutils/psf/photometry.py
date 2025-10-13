@@ -19,8 +19,9 @@ from astropy.utils.exceptions import AstropyUserWarning
 
 from photutils.background import LocalBackground
 from photutils.psf._components import (PSFDataProcessor, PSFFitter,
-                                       PSFResultsAssembler)
-from photutils.psf.utils import (ModelImageGenerator, _create_call_docstring,
+                                       PSFResultsAssembler,
+                                       _ModelImageRenderer)
+from photutils.psf.utils import (_create_call_docstring,
                                  _get_psf_model_main_params, _make_mask,
                                  _validate_psf_model)
 from photutils.utils._parameters import as_pair
@@ -1686,9 +1687,9 @@ class PSFPhotometry:
     @lazyproperty
     def _model_image_generator(self):
         """
-        A helper property that creates a ModelImageGenerator instance.
+        A helper property that creates a _ModelImageRenderer instance.
         """
-        return ModelImageGenerator(
+        return _ModelImageRenderer(
             psf_model=self.psf_model,
             model_params=self.results_to_model_params(),
             local_bkg=self.init_params['local_bkg'],
