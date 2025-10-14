@@ -1720,9 +1720,15 @@ class PSFPhotometry(ModelImageMixin):
         A helper property that provides the necessary parameters to
         ModelImageMixin.
         """
+        model_params = self.results_to_model_params(remove_invalid=False)
+        keep = np.all([np.isfinite(model_params[col])
+                       for col in model_params.colnames], axis=0)
+        model_params = model_params[keep]
+        local_bkg = self.init_params['local_bkg'][keep]
+
         return {'psf_model': self.psf_model,
-                'model_params': self.results_to_model_params(),
-                'local_bkg': self.init_params['local_bkg'],
+                'model_params': model_params,
+                'local_bkg': local_bkg,
                 'progress_bar': self.progress_bar,
                 }
 

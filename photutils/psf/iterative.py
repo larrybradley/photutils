@@ -625,30 +625,38 @@ class IterativePSFPhotometry(ModelImageMixin):
         if self.mode == 'new':
             # in 'new' mode: we stack the results from all iterations
             all_fit_params = []
-            all_local_bkgs = []
+            all_local_bkg = []
             for result_obj in self.fit_results:
-                fm_tbl = result_obj.results_to_model_params()
+                fm_tbl = result_obj.results_to_model_params(
+                    remove_invalid=False)
                 if fm_tbl is not None:
                     all_fit_params.append(fm_tbl)
-                    all_local_bkgs.append(result_obj.init_params['local_bkg'])
+                    all_local_bkg.append(result_obj.init_params['local_bkg'])
 
             fit_params = vstack(all_fit_params) if all_fit_params else None
-            local_bkgs = list(chain.from_iterable(all_local_bkgs))
+            local_bkg = np.array(list(chain.from_iterable(all_local_bkg)))
 
         elif self.mode == 'all':
             # in 'all' mode: only the final iteration contains all sources
             final_result = self.fit_results[-1]
-            fit_params = final_result.results_to_model_params()
-            local_bkgs = final_result.init_params['local_bkg']
+            fit_params = final_result.results_to_model_params(
+                remove_invalid=False)
+            local_bkg = final_result.init_params['local_bkg']
 
         else:  # pragma: no cover
             # should never happen due to the mode validation in __init__
             msg = f'Invalid mode "{self.mode}"'
             raise ValueError(msg)
 
+        # remove invalid sources
+        keep = np.all([np.isfinite(fit_params[col])
+                       for col in fit_params.colnames], axis=0)
+        model_params = fit_params[keep]
+        local_bkg = local_bkg[keep]
+
         return {'psf_model': psf_model,
                 'model_params': fit_params,
-                'local_bkg': local_bkgs,
+                'local_bkg': local_bkg,
                 'progress_bar': progress_bar,
                 }
 
