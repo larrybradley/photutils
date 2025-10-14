@@ -1547,7 +1547,8 @@ class PSFPhotometry(ModelImageMixin):
         return tbl
 
     @staticmethod
-    def _results_to_init_params(results_tbl, reset_id=True):
+    def _results_to_init_params(results_tbl, *, remove_invalid=True,
+                                reset_ids=True):
         """
         Create a table of the fitted model parameters from the results.
 
@@ -1555,23 +1556,23 @@ class PSFPhotometry(ModelImageMixin):
         initial parameters table. It can be used as the ``init_params``
         for subsequent `PSFPhotometry` fits.
 
-        Rows that contain non-finite fitted values are removed.
-
         This is a static helper method to allow it to be called by
-        IterativePSFPhotometry.
+        `~photutils.psf.IterativePSFPhotometry`.
 
         Parameters
         ----------
         results_tbl : `~astropy.table.QTable`
             The table of fit results from a previous `PSFPhotometry` run.
 
-        reset_id : bool, optional
+        remove_invalid : bool, optional
+            If `True`, rows that contain non-finite fitted values are
+            removed.
+
+        reset_ids : bool, optional
             If `True`, the 'id' column will be reset to a sequential
             numbering starting from 1. If `False`, the 'id' column will
-            be copied as is from `results_tbl`. This is useful only in
-            the the case where there are non-finite fitted values in the
-            table, which would otherwise result in a non-sequential 'id'
-            column.
+            remain unchanged from the results table. This option is
+            ignored if ``remove_invalid`` is `False`.
 
         Returns
         -------
@@ -1589,17 +1590,21 @@ class PSFPhotometry(ModelImageMixin):
                 tbl[init_name] = results_tbl[col_name]
 
         # remove rows that contain non-finite values
-        keep = np.all([np.isfinite(tbl[col]) for col in tbl.colnames], axis=0)
-        tbl = tbl[keep]
+        if remove_invalid:
+            keep = np.all([np.isfinite(tbl[col])
+                           for col in tbl.colnames], axis=0)
+            tbl = tbl[keep]
 
-        # reset the 'id' column to a sequential numbering starting from 1
-        if reset_id:
-            tbl['id'] = np.arange(1, len(tbl) + 1)
+            # reset the 'id' column to a sequential numbering starting
+            # from 1
+            if reset_ids:
+                tbl['id'] = np.arange(1, len(tbl) + 1)
 
         return tbl
 
     @staticmethod
-    def _results_to_model_params(results_tbl, param_mapper, reset_id=True):
+    def _results_to_model_params(results_tbl, param_mapper, *,
+                                 remove_invalid=True, reset_ids=True):
         """
         Create a table of the fitted model parameters from the results.
 
@@ -1607,10 +1612,8 @@ class PSFPhotometry(ModelImageMixin):
         names. It can also be used to reconstruct the fitted PSF models
         for visualization or further analysis.
 
-        Rows that contain non-finite fitted values are removed.
-
         This is a static helper method to allow it to be called by
-        IterativePSFPhotometry.
+        `~photutils.psf.IterativePSFPhotometry`.
 
         Parameters
         ----------
@@ -1618,17 +1621,19 @@ class PSFPhotometry(ModelImageMixin):
             The table of fit results from a previous `PSFPhotometry`
             run.
 
-        reset_id : bool, optional
-            If `True`, the 'id' column will be reset to a sequential
-            numbering starting from 1. If `False`, the 'id' column will
-            be copied as is from `results_tbl`. This is useful only in
-            the the case where there are non-finite fitted values in the
-            table, which would otherwise result in a non-sequential 'id'
-            column.
-
         param_mapper : `_PSFParameterMapper`
             The helper class that manages the mapping between PSF model
             parameter names and table column names.
+
+        remove_invalid : bool, optional
+            If `True`, rows that contain non-finite fitted values are
+            removed.
+
+        reset_ids : bool, optional
+            If `True`, the 'id' column will be reset to a sequential
+            numbering starting from 1. If `False`, the 'id' column will
+            remain unchanged from the results table. This option is
+            ignored if ``remove_invalid`` is `False`.
 
         Returns
         -------
@@ -1648,16 +1653,19 @@ class PSFPhotometry(ModelImageMixin):
                 tbl[model_param_name] = results_tbl[col_name]
 
         # remove rows that contain non-finite values
-        keep = np.all([np.isfinite(tbl[col]) for col in tbl.colnames], axis=0)
-        tbl = tbl[keep]
+        if remove_invalid:
+            keep = np.all([np.isfinite(tbl[col])
+                           for col in tbl.colnames], axis=0)
+            tbl = tbl[keep]
 
-        # reset the 'id' column to a sequential numbering starting from 1
-        if reset_id:
-            tbl['id'] = np.arange(1, len(tbl) + 1)
+            # reset the 'id' column to a sequential numbering starting
+            # from 1
+            if reset_ids:
+                tbl['id'] = np.arange(1, len(tbl) + 1)
 
         return tbl
 
-    def results_to_init_params(self):
+    def results_to_init_params(self, *, remove_invalid=True, reset_ids=True):
         """
         Create a table of the fitted model parameters from the results.
 
@@ -1665,11 +1673,23 @@ class PSFPhotometry(ModelImageMixin):
         initial parameters table. It can be used as the ``init_params``
         for subsequent `PSFPhotometry` fits.
 
-        Rows that contain non-finite fitted values are removed.
-        """
-        return self._results_to_init_params(self.results, reset_id=True)
+        Parameters
+        ----------
+        remove_invalid : bool, optional
+            If `True`, rows that contain non-finite fitted values are
+            removed.
 
-    def results_to_model_params(self):
+        reset_ids : bool, optional
+            If `True`, the 'id' column will be reset to a sequential
+            numbering starting from 1. If `False`, the 'id' column will
+            remain unchanged from the results table. This option is
+            ignored if ``remove_invalid`` is `False`.
+        """
+        return self._results_to_init_params(self.results,
+                                            remove_invalid=remove_invalid,
+                                            reset_ids=reset_ids)
+
+    def results_to_model_params(self, *, remove_invalid=True, reset_ids=True):
         """
         Create a table of the fitted model parameters from the results.
 
@@ -1677,11 +1697,22 @@ class PSFPhotometry(ModelImageMixin):
         names. It can also be used to reconstruct the fitted PSF models
         for visualization or further analysis.
 
-        Rows that contain non-finite fitted values are removed.
+        Parameters
+        ----------
+        remove_invalid : bool, optional
+            If `True`, rows that contain non-finite fitted values are
+            removed.
+
+        reset_ids : bool, optional
+            If `True`, the 'id' column will be reset to a sequential
+            numbering starting from 1. If `False`, the 'id' column will
+            remain unchanged from the results table. This option is
+            ignored if ``remove_invalid`` is `False`.
         """
         return self._results_to_model_params(self.results,
                                              self._param_mapper,
-                                             reset_id=True)
+                                             remove_invalid=remove_invalid,
+                                             reset_ids=reset_ids)
 
     @lazyproperty
     def _model_image_params(self):
