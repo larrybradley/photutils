@@ -441,6 +441,40 @@ def test_model_residual_image_nonfinite_localbkg(test_data):
             assert diff < 0.1
 
 
+def test_residual_image_localbkg_invalid_sources(test_data):
+    """
+    Test that make_residual_image handles sources with non-finite
+    local_bkg values and sources outside the image (invalid sources)
+    correctly.
+    """
+    data, error, _ = test_data
+
+    psf_model = CircularGaussianPRF(flux=1, fwhm=2.7)
+    fit_shape = (5, 5)
+    finder = DAOStarFinder(10.0, 2.0)
+
+    sources = finder(data)
+
+    # Add non-finite local_bkg values to init_params
+    sources['local_bkg'] = np.zeros(len(sources))
+    sources['local_bkg'][0] = np.nan
+    sources['local_bkg'][1] = np.inf
+    sources['local_bkg'][2] = -np.inf
+    # Add an invalid source outside the image
+    sources['xcentroid'][-3] = 1000
+    sources['ycentroid'][-3] = 1000
+
+    # Perform PSF photometry with init_params containing non-finite local_bkg
+    psfphot = PSFPhotometry(psf_model, fit_shape, finder=finder,
+                            aperture_radius=4)
+    psfphot(data, error=error, init_params=sources)
+
+    residual_img = psfphot.make_residual_image(data, include_localbkg=True)
+
+    assert residual_img.shape == data.shape
+    assert np.all(np.isfinite(residual_img))
+
+
 @pytest.mark.parametrize('fit_stddev', [False, True])
 def test_psf_photometry_compound_psfmodel(test_data, fit_stddev):
     """
