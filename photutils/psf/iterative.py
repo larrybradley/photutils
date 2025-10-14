@@ -7,6 +7,7 @@ import warnings
 from copy import deepcopy
 from itertools import chain
 
+import astropy.units as u
 import numpy as np
 from astropy.nddata import NDData
 from astropy.table import QTable, vstack
@@ -626,15 +627,22 @@ class IterativePSFPhotometry(ModelImageMixin):
             # in 'new' mode: we stack the results from all iterations
             all_fit_params = []
             all_local_bkg = []
+            local_bkg_unit = None
             for result_obj in self.fit_results:
                 fm_tbl = result_obj.results_to_model_params(
                     remove_invalid=False)
                 if fm_tbl is not None:
                     all_fit_params.append(fm_tbl)
-                    all_local_bkg.append(result_obj.init_params['local_bkg'])
+                    local_bkg = result_obj.init_params['local_bkg']
+                    if isinstance(local_bkg, u.Quantity):
+                        local_bkg_unit = local_bkg.unit
+                        local_bkg = local_bkg.value
+                    all_local_bkg.append(local_bkg)
 
             fit_params = vstack(all_fit_params) if all_fit_params else None
             local_bkg = np.array(list(chain.from_iterable(all_local_bkg)))
+            if local_bkg_unit is not None:
+                local_bkg <<= local_bkg_unit
 
         elif self.mode == 'all':
             # in 'all' mode: only the final iteration contains all sources
@@ -651,7 +659,7 @@ class IterativePSFPhotometry(ModelImageMixin):
         # remove invalid sources
         keep = np.all([np.isfinite(fit_params[col])
                        for col in fit_params.colnames], axis=0)
-        model_params = fit_params[keep]
+        fit_params = fit_params[keep]
         local_bkg = local_bkg[keep]
 
         return {'psf_model': psf_model,
