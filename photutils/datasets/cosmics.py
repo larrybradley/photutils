@@ -17,7 +17,8 @@ def make_cosmic_ray_image1(shape=(512, 512), num_cr=15,
     """
     Generates a 2D image containing synthetic trailed cosmic rays.
 
-    Parameters:
+    Parameters
+    ----------
         shape (tuple): The (height, width) of the output image.
         num_cr (int): Number of cosmic rays to generate.
         intensity_range (tuple): Min and Max brightness of the CRs.
@@ -25,7 +26,8 @@ def make_cosmic_ray_image1(shape=(512, 512), num_cr=15,
         width (float): The 'blur' or diffusion of the CR (typical range 0.4 - 1.0).
         seed (int/None): Seed for the random number generator for reproducibility.
 
-    Returns:
+    Returns
+    -------
         numpy.ndarray: A 2D array (float32) containing only the cosmic rays.
     """
     # Initialize the modern NumPy random generator
@@ -73,7 +75,7 @@ def draw_cosmic_ray(
     length,
     total_flux,
     sigma=0.5,
-    oversample=10
+    oversample=10,
 ):
     """
     Draw an anti-aliased cosmic ray track into a 2D image.
@@ -132,4 +134,3 @@ def draw_cosmic_ray(
         img[rmin:rmax, cmin:cmax] += flux * weights
 
     return img
-
