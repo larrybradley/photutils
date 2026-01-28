@@ -10,7 +10,7 @@ from functools import cached_property
 import numpy as np
 from astropy.modeling import Fittable2DModel, Parameter
 from astropy.utils.exceptions import AstropyDeprecationWarning
-from scipy.interpolate import RectBivariateSpline
+from scipy.interpolate import RectBivariateSpline, RegularGridInterpolator
 
 from photutils.psf._bispline import bispline_sum, bispline_sum_deriv
 from photutils.psf._bispline_inputs import ONE_PLANE, UNIT_WEIGHT, ZERO_WEIGHT
@@ -165,7 +165,7 @@ class ImagePSF(Fittable2DModel):
                     description=('Position of a feature in the image along '
                                  'the y axis'))
 
-    _interp_methods = ('cubic', 'bilinear')
+    _interp_methods = ('cubic', 'bilinear', 'pchip')
 
     def __init__(self, data, *, flux=flux.default, x_0=x_0.default,
                  y_0=y_0.default, origin=None, oversampling=1,
@@ -397,12 +397,17 @@ class ImagePSF(Fittable2DModel):
         The interpolating spline function.
 
         The interpolator is computed using
-        `~scipy.interpolate.RectBivariateSpline` with the input image
-        data. For ``interpolation='cubic'``, a 3rd-degree spline
-        (kx=3, ky=3) is used. For ``interpolation='bilinear'``, a
-        1st-degree spline (kx=1, ky=1) is used. The interpolator is
-        used to evaluate the model at arbitrary locations, including
-        fractional pixel positions.
+        `~scipy.interpolate.RectBivariateSpline` for cubic and bilinear
+        interpolation, or `~scipy.interpolate.RegularGridInterpolator`
+        for PCHIP interpolation. The interpolator is used to evaluate
+        the model at arbitrary locations, including fractional pixel
+        positions.
+
+        For ``interpolation='cubic'``, a 3rd-degree spline (kx=3, ky=3)
+        is used. For ``interpolation='bilinear'``, a 1st-degree spline
+        (kx=1, ky=1) is used. For ``interpolation='pchip'``, PCHIP
+        (Piecewise Cubic Hermite Interpolating Polynomial) interpolation
+        is used, which is shape-preserving and avoids overshoots.
 
         Notes
         -----
@@ -426,12 +431,36 @@ class ImagePSF(Fittable2DModel):
         """
         x = np.arange(self.data.shape[1])
         y = np.arange(self.data.shape[0])
-        # RectBivariateSpline expects the data to be in (x, y) axis order
-        if self.interpolation == 'cubic':
-            kx, ky = 3, 3
-        else:  # bilinear
-            kx, ky = 1, 1
-        return RectBivariateSpline(x, y, self.data.T, kx=kx, ky=ky, s=0)
+
+        if self.interpolation in ('cubic', 'bilinear'):
+            # RectBivariateSpline expects the data to be in (x, y) axis order
+            if self.interpolation == 'cubic':
+                kx, ky = 3, 3
+            else:  # bilinear
+                kx, ky = 1, 1
+            return RectBivariateSpline(x, y, self.data.T, kx=kx, ky=ky, s=0)
+
+        # pchip interpolation
+        # RegularGridInterpolator expects data in (y, x) axis order
+        # Use fill_value=None to allow extrapolation; the evaluate
+        # method handles out-of-bounds values separately
+        interp = RegularGridInterpolator(
+            (y, x), self.data, method='pchip',
+            bounds_error=False, fill_value=None)
+
+        # Wrapper to provide same interface as RectBivariateSpline
+        def pchip_interp(xi, yi, grid=False):
+            if grid:
+                msg = 'grid=True is not supported for pchip interpolation'
+                raise NotImplementedError(msg)
+            xi = np.asarray(xi)
+            yi = np.asarray(yi)
+            original_shape = xi.shape
+            # RegularGridInterpolator expects points as (y, x) pairs
+            points = np.column_stack([yi.ravel(), xi.ravel()])
+            return interp(points).reshape(original_shape)
+
+        return pchip_interp
 
     @property
     def _has_custom_interpolator(self):
@@ -453,8 +482,9 @@ class ImagePSF(Fittable2DModel):
         Whether the model is evaluated by the compiled kernel.
 
         The kernel evaluates only the bicubic spline built from the
-        image data. A model with a custom interpolator or with
-        ``interpolation='bilinear'`` calls its interpolator instead.
+        image data. A model with a custom interpolator or with an
+        ``interpolation`` other than ``'cubic'`` calls its interpolator
+        instead.
         """
         return (not self._has_custom_interpolator
                 and self.interpolation == 'cubic')
@@ -599,6 +629,8 @@ class ImagePSF(Fittable2DModel):
         else:
             evaluated_model = self.interpolator(xi, yi, grid=False)
 
+        # Track whether any pixels are outside the valid PSF region
+        has_invalid = False
         if self.fill_value is not None:
             # Set pixels that are outside the input pixel grid to the
             # fill_value to avoid extrapolation. These bounds match the
@@ -615,12 +647,19 @@ class ImagePSF(Fittable2DModel):
             ny, nx = self.data.shape
             invalid = ((xi < -0.5) | (xi > nx - 0.5)
                        | (yi < -0.5) | (yi > ny - 0.5))
-            evaluated_model[invalid] = self.fill_value
+            has_invalid = np.any(invalid)
+            if has_invalid:
+                evaluated_model[invalid] = self.fill_value
 
-        if self.flux_conserve:
+        if self.flux_conserve and not has_invalid:
             # Normalize the interpolated PSF to ensure flux conservation.
             # This corrects for small flux variations that can occur
             # during spline interpolation at fractional pixel shifts.
+            #
+            # Note: flux_conserve is only applied when all pixels are
+            # within the valid PSF region. When the PSF is partially
+            # outside the valid region (has_invalid=True), normalization
+            # would artificially boost the flux of the remaining pixels.
             model_sum = np.sum(evaluated_model)
             if model_sum != 0:
                 evaluated_model = evaluated_model / model_sum
@@ -776,20 +815,29 @@ class ImagePRF(ImagePSF):
         The value to use for points outside the input pixel grid. The
         default is 0.0.
 
-    interpolation : {'cubic', 'bilinear'}, optional
+    interpolation : {'cubic', 'bilinear', 'pchip'}, optional
         The interpolation method to use. Options are:
 
         * ``'cubic'``: Cubic spline interpolation using
           `~scipy.interpolate.RectBivariateSpline` with ``kx=3, ky=3``.
-          This provides smooth interpolation but can produce negative
-          values (ringing) for PSFs with steep gradients, especially
-          small or undersampled PSFs.
+          This provides smooth (C2 continuous) interpolation but can
+          produce negative values (ringing) for PSFs with steep
+          gradients, especially small or undersampled PSFs.
 
         * ``'bilinear'``: Bilinear interpolation using
           `~scipy.interpolate.RectBivariateSpline` with ``kx=1, ky=1``.
           This preserves non-negativity (if input PSF is non-negative,
           output will be non-negative) and provides better flux
-          conservation, but produces less smooth results.
+          conservation, but produces less smooth results (C0
+          continuous).
+
+        * ``'pchip'``: PCHIP (Piecewise Cubic Hermite Interpolating
+          Polynomial) interpolation using
+          `~scipy.interpolate.RegularGridInterpolator`. This is a
+          shape-preserving interpolation that is smoother than bilinear
+          (C1 continuous) but avoids the overshoots and ringing
+          artifacts of cubic splines. It preserves monotonicity and
+          non-negativity.
 
         The default is ``'cubic'``.
 
@@ -914,6 +962,10 @@ class ImagePRF(ImagePSF):
         # Initialize output array
         evaluated_model = np.zeros(len(x_flat), dtype=float)
 
+        # Track whether any subpixels are outside the valid PSF region
+        has_invalid = False
+        ny, nx = self.data.shape
+
         # For each output pixel, evaluate at all subpixel positions and sum
         # We expand each output coordinate to all subpixel positions
         for i in range(n_subpix):
@@ -930,10 +982,11 @@ class ImagePRF(ImagePSF):
 
             # Apply fill_value for out-of-bounds coordinates
             if self.fill_value is not None:
-                ny, nx = self.data.shape
                 invalid = ((xi < -0.5) | (xi > nx - 0.5)
                            | (yi < -0.5) | (yi > ny - 0.5))
-                subpix_values[invalid] = self.fill_value
+                if np.any(invalid):
+                    has_invalid = True
+                    subpix_values[invalid] = self.fill_value
 
             # Accumulate the sum
             evaluated_model += subpix_values
@@ -949,8 +1002,13 @@ class ImagePRF(ImagePSF):
         oversamp_area = oversamp_x * oversamp_y
         evaluated_model /= oversamp_area
 
-        if self.flux_conserve:
+        if self.flux_conserve and not has_invalid:
             # Normalize the integrated PRF to ensure flux conservation.
+            #
+            # Note: flux_conserve is only applied when all subpixels are
+            # within the valid PSF region. When the PSF is partially
+            # outside the valid region (has_invalid=True), normalization
+            # would artificially boost the flux of the remaining pixels.
             model_sum = np.sum(evaluated_model)
             if model_sum != 0:
                 evaluated_model = evaluated_model / model_sum
