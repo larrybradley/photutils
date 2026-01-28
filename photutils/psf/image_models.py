@@ -77,6 +77,30 @@ class ImagePSF(Fittable2DModel):
         takes the value of the spline at the nearest point on the edge
         of the grid.
 
+    interpolation : {'cubic', 'bilinear'}, optional
+        The interpolation method to use. Options are:
+
+        * ``'cubic'``: Cubic spline interpolation using
+          `~scipy.interpolate.RectBivariateSpline` with ``kx=3, ky=3``.
+          This provides smooth interpolation but can produce negative
+          values (ringing) for PSFs with steep gradients, especially
+          small or undersampled PSFs.
+
+        * ``'bilinear'``: Bilinear interpolation using
+          `~scipy.interpolate.RectBivariateSpline` with ``kx=1, ky=1``.
+          This preserves non-negativity (if input PSF is non-negative,
+          output will be non-negative) and provides better flux
+          conservation, but produces less smooth results.
+
+        The default is ``'cubic'``.
+
+    flux_conserve : bool, optional
+        If `True`, the interpolated PSF will be normalized such that
+        the total flux (sum of all pixel values) equals the ``flux``
+        parameter value, ensuring flux conservation during fractional
+        pixel shifts. This corrects for small flux variations that can
+        occur during spline interpolation. Default is `False`.
+
     **kwargs : dict, optional
         Additional keyword arguments passed to the
         `~astropy.modeling.Model` base class.
@@ -141,14 +165,23 @@ class ImagePSF(Fittable2DModel):
                     description=('Position of a feature in the image along '
                                  'the y axis'))
 
+    _interp_methods = ('cubic', 'bilinear')
+
     def __init__(self, data, *, flux=flux.default, x_0=x_0.default,
                  y_0=y_0.default, origin=None, oversampling=1,
-                 fill_value=0.0, **kwargs):
+                 fill_value=0.0, interpolation='cubic',
+                 flux_conserve=False, **kwargs):
 
         self.data = data
         self.origin = origin
         self.oversampling = oversampling
         self.fill_value = fill_value
+        if interpolation not in self._interp_methods:
+            msg = (f'interpolation must be one of {self._interp_methods}, '
+                   f'got {interpolation!r}')
+            raise ValueError(msg)
+        self.interpolation = interpolation
+        self.flux_conserve = flux_conserve
 
         if type(self).interpolator is not ImagePSF.interpolator:
             msg = ('Overriding the ImagePSF.interpolator attribute in a '
@@ -196,13 +229,17 @@ class ImagePSF(Fittable2DModel):
                     ('Origin', self.origin.tolist()),
                     ('Oversampling', tuple(self.oversampling.tolist())),
                     ('Fill Value', self.fill_value),
+                    ('Interpolation', self.interpolation),
+                    ('Flux Conserve', self.flux_conserve),
                     ]
         return self._format_str(keywords=keywords)
 
     def __repr__(self):
         kwargs = {'origin': self.origin.tolist(),
                   'oversampling': self.oversampling.tolist(),
-                  'fill_value': self.fill_value}
+                  'fill_value': self.fill_value,
+                  'interpolation': self.interpolation,
+                  'flux_conserve': self.flux_conserve}
         return self._format_repr(kwargs=kwargs)
 
     def copy(self):
@@ -230,7 +267,7 @@ class ImagePSF(Fittable2DModel):
         result : `ImagePSF`
             A copy of this model with only the model parameters copied.
         """
-        if not self._has_custom_interpolator:
+        if self._use_kernel:
             _ = self._spline
         return _copy_model_sharing_data(self)
 
@@ -359,11 +396,13 @@ class ImagePSF(Fittable2DModel):
         """
         The interpolating spline function.
 
-        The interpolator is computed with a 3rd-degree
-        `~scipy.interpolate.RectBivariateSpline` (kx=3, ky=3, s=0) using
-        the input image data. The interpolator is used to evaluate
-        the model at arbitrary locations, including fractional pixel
-        positions.
+        The interpolator is computed using
+        `~scipy.interpolate.RectBivariateSpline` with the input image
+        data. For ``interpolation='cubic'``, a 3rd-degree spline
+        (kx=3, ky=3) is used. For ``interpolation='bilinear'``, a
+        1st-degree spline (kx=1, ky=1) is used. The interpolator is
+        used to evaluate the model at arbitrary locations, including
+        fractional pixel positions.
 
         Notes
         -----
@@ -388,7 +427,11 @@ class ImagePSF(Fittable2DModel):
         x = np.arange(self.data.shape[1])
         y = np.arange(self.data.shape[0])
         # RectBivariateSpline expects the data to be in (x, y) axis order
-        return RectBivariateSpline(x, y, self.data.T, kx=3, ky=3, s=0)
+        if self.interpolation == 'cubic':
+            kx, ky = 3, 3
+        else:  # bilinear
+            kx, ky = 1, 1
+        return RectBivariateSpline(x, y, self.data.T, kx=kx, ky=ky, s=0)
 
     @property
     def _has_custom_interpolator(self):
@@ -403,6 +446,18 @@ class ImagePSF(Fittable2DModel):
         """
         return (type(self).interpolator is not ImagePSF.interpolator
                 or self.__dict__.get('_interpolator_assigned', False))
+
+    @property
+    def _use_kernel(self):
+        """
+        Whether the model is evaluated by the compiled kernel.
+
+        The kernel evaluates only the bicubic spline built from the
+        image data. A model with a custom interpolator or with
+        ``interpolation='bilinear'`` calls its interpolator instead.
+        """
+        return (not self._has_custom_interpolator
+                and self.interpolation == 'cubic')
 
     @cached_property
     def _spline(self):
@@ -437,7 +492,8 @@ class ImagePSF(Fittable2DModel):
 
     def _precompute_interpolators(self):
         """
-        Compute and cache the interpolators of a custom interpolator.
+        Compute and cache the interpolators of a model that is not
+        evaluated by the compiled kernel.
 
         The cached interpolators are shared by the model copies made
         with `copy` (e.g., by the fitters), so calling this method
@@ -445,10 +501,10 @@ class ImagePSF(Fittable2DModel):
         once instead of once per copy. The derivative interpolators are
         computed only when `fit_deriv` is enabled.
 
-        A model without a custom interpolator needs no such step,
-        because `copy` builds its spline.
+        A model evaluated by the kernel needs no such step, because
+        `copy` builds its spline.
         """
-        if not self._has_custom_interpolator:
+        if self._use_kernel:
             return
         _ = self.interpolator
         if self.fit_deriv is not None:
@@ -534,25 +590,44 @@ class ImagePSF(Fittable2DModel):
         if xi.shape != yi.shape:
             xi, yi = np.broadcast_arrays(xi, yi)
 
-        if self._has_custom_interpolator:
-            evaluated_model = flux * self.interpolator(xi, yi, grid=False)
-        else:
+        if self._use_kernel:
             tx, ty, coeffs = self._spline
-            values = np.empty(xi.shape, dtype=float)
+            evaluated_model = np.empty(xi.shape, dtype=float)
             bispline_sum(tx, ty, coeffs[np.newaxis], ONE_PLANE,
                          UNIT_WEIGHT, xi.ravel(), yi.ravel(),
-                         values.ravel())
-            # The flux may have units or be an array, so the product
-            # cannot be stored in the plain array of the kernel output
-            evaluated_model = flux * values
+                         evaluated_model.ravel())
+        else:
+            evaluated_model = self.interpolator(xi, yi, grid=False)
 
         if self.fill_value is not None:
             # Set pixels that are outside the input pixel grid to the
-            # fill_value to avoid extrapolation
-            invalid = _out_of_grid_mask(xi, yi, self.data.shape)
+            # fill_value to avoid extrapolation. These bounds match the
+            # RegularGridInterpolator bounds.
+            #
+            # The bounds are extended by 0.5 pixels beyond the pixel
+            # centers (i.e., [-0.5, nx - 0.5] instead of [0, nx - 1])
+            # to allow interpolation up to the edge of the outermost
+            # pixels. This ensures that fractional pixel shifts don't
+            # cause boundary clipping that would otherwise result in
+            # flux loss. Each pixel in the PSF array represents the
+            # region from (center - 0.5) to (center + 0.5), so
+            # interpolation within this extended range is valid.
+            ny, nx = self.data.shape
+            invalid = ((xi < -0.5) | (xi > nx - 0.5)
+                       | (yi < -0.5) | (yi > ny - 0.5))
             evaluated_model[invalid] = self.fill_value
 
-        return evaluated_model
+        if self.flux_conserve:
+            # Normalize the interpolated PSF to ensure flux conservation.
+            # This corrects for small flux variations that can occur
+            # during spline interpolation at fractional pixel shifts.
+            model_sum = np.sum(evaluated_model)
+            if model_sum != 0:
+                evaluated_model = evaluated_model / model_sum
+
+        # The flux may have units or be an array, so the product
+        # cannot be stored in the plain array of the model values
+        return evaluated_model * flux
 
     def fit_deriv(self, x, y, flux, x_0, y_0):
         """
@@ -598,7 +673,7 @@ class ImagePSF(Fittable2DModel):
         # gives the x_0 and y_0 derivatives from the spline partial
         # derivatives (dxi/dx_0 = -oversampling[1], dyi/dy_0 =
         # -oversampling[0])
-        if self._has_custom_interpolator:
+        if not self._use_kernel:
             dx_interp, dy_interp = self._deriv_interpolators
             d_flux = self.interpolator(xi, yi, grid=False)
             d_x_0 = (-flux * self.oversampling[1]
