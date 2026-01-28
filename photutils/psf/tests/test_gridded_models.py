@@ -16,7 +16,7 @@ from astropy.table import QTable
 from numpy.testing import assert_allclose, assert_equal
 
 from photutils.datasets import make_model_image
-from photutils.psf import GriddedPSFModel, STDPSFGrid
+from photutils.psf import GriddedImagePRF, GriddedPSFModel, STDPSFGrid
 from photutils.psf.tests.test_model_io import STDPSF_FILENAMES
 from photutils.segmentation import SourceCatalog, detect_sources
 
@@ -860,3 +860,190 @@ class TestSTDPSFGridFromASDF:
         match = "property 'oversampling' of 'STDPSFGrid' object has no setter"
         with pytest.raises(AttributeError, match=match):
             psfgrid.oversampling = (4, 5)
+
+
+@pytest.fixture(name='prfmodel')
+def fixture_gridded_prf_data():
+    """Create a GriddedImagePRF model fixture from Gaussian PSFs."""
+    psfs = []
+    yy, xx = np.mgrid[0:101, 0:101]
+    for i in range(16):
+        theta = np.deg2rad(i * 10.0)
+        gmodel = Gaussian2D(1, 50, 50, 10, 5, theta=theta)
+        psfs.append(gmodel(xx, yy))
+
+    xgrid = [0, 40, 160, 200]
+    ygrid = [0, 60, 140, 200]
+    meta = {}
+    meta['grid_xypos'] = list(product(xgrid, ygrid))
+    meta['oversampling'] = 4
+
+    nddata = NDData(psfs, meta=meta)
+    return GriddedImagePRF(nddata)
+
+
+class TestGriddedImagePRF:
+    """Tests for GriddedImagePRF."""
+
+    def test_gridded_image_prf_basic(self, prfmodel):
+        """Test basic GriddedImagePRF initialization and attributes."""
+        keys = ['grid_xypos', 'oversampling']
+        for key in keys:
+            assert key in prfmodel.meta
+        grid_xypos = prfmodel.grid_xypos
+        assert len(grid_xypos) == 16
+        assert_equal(prfmodel.oversampling, [4, 4])
+        assert_equal(prfmodel.meta['oversampling'], prfmodel.oversampling)
+        assert prfmodel.data.shape == (16, 101, 101)
+
+    def test_repr_str(self, prfmodel):
+        """Test repr and str output."""
+        repr_str = repr(prfmodel)
+        assert 'GriddedImagePRF' in repr_str
+        assert 'flux=1.' in repr_str
+        assert 'x_0=0.' in repr_str
+        assert 'y_0=0.' in repr_str
+        assert 'oversampling=' in repr_str
+        assert 'fill_value=0.0' in repr_str
+
+        str_str = str(prfmodel)
+        assert 'GriddedImagePRF' in str_str
+        assert 'Number of PSFs: 16' in str_str
+        assert 'PSF shape (oversampled pixels): (101, 101)' in str_str
+        assert 'Oversampling: [4, 4]' in str_str
+        assert 'Fill Value: 0.0' in str_str
+
+    def test_gridded_image_prf_basic_eval(self, prfmodel):
+        """Test basic evaluation."""
+        y, x = np.mgrid[0:100, 0:100]
+        prf = prfmodel.evaluate(x=x, y=y, flux=100, x_0=40, y_0=60)
+        assert prf.shape == (100, 100)
+
+        _, y2, x2 = np.mgrid[0:100, 0:100, 0:100]
+        match = 'x and y must be 1D or 2D'
+        with pytest.raises(ValueError, match=match):
+            prfmodel.evaluate(x=x2, y=y2, flux=100, x_0=40, y_0=60)
+
+    def test_gridded_image_prf_single_psf(self, prfmodel):
+        """Test evaluation with a single PSF."""
+        prfmodel = prfmodel.copy()
+        prfmodel._data = prfmodel.data[0:1, :, :]
+
+        y, x = np.mgrid[0:100, 0:100]
+        prf = prfmodel.evaluate(x=x, y=y, flux=100, x_0=40, y_0=60)
+        assert prf.shape == (100, 100)
+
+    def test_gridded_image_prf_eval_outside_grid(self, prfmodel):
+        """Test evaluation outside the grid."""
+        y, x = np.mgrid[-50:50, -50:50]
+        prf1 = prfmodel.evaluate(x=x, y=y, flux=100, x_0=0, y_0=0)
+        y, x = np.mgrid[-60:40, -60:40]
+        prf2 = prfmodel.evaluate(x=x, y=y, flux=100, x_0=-10, y_0=-10)
+        assert_allclose(prf1, prf2)
+
+        y, x = np.mgrid[150:250, 150:250]
+        prf3 = prfmodel.evaluate(x=x, y=y, flux=100, x_0=200, y_0=200)
+        y, x = np.mgrid[170:270, 170:270]
+        prf4 = prfmodel.evaluate(x=x, y=y, flux=100, x_0=220, y_0=220)
+        assert_allclose(prf3, prf4)
+
+    def test_gridded_image_prf_flux_scaling(self, prfmodel):
+        """Test that flux parameter properly scales the output."""
+        y, x = np.mgrid[-10:10, -10:10]
+
+        prfmodel.flux = 1.0
+        result_flux1 = prfmodel(x, y)
+
+        prfmodel.flux = 10.0
+        result_flux10 = prfmodel(x, y)
+
+        # Flux 10 should be 10x flux 1
+        assert_allclose(result_flux10, result_flux1 * 10, rtol=1e-10)
+
+    def test_prf_vs_psf_consistent_shape(self, psfmodel, prfmodel):
+        """Test that GriddedImagePRF and GriddedPSFModel give same shape."""
+        y, x = np.mgrid[0:50, 0:50]
+
+        psf_result = psfmodel.evaluate(x=x, y=y, flux=100, x_0=40, y_0=60)
+        prf_result = prfmodel.evaluate(x=x, y=y, flux=100, x_0=40, y_0=60)
+
+        assert psf_result.shape == prf_result.shape
+
+    def test_prf_subpixel_integration(self, prfmodel):
+        """
+        Test that GriddedImagePRF properly integrates over subpixels.
+
+        For a PRF evaluated at the same position, the sum of pixels should
+        be consistent regardless of fractional position shifts (good flux
+        conservation), while PSF evaluation can have more variation.
+        """
+        y, x = np.mgrid[-10:10, -10:10]
+        flux = 100.0
+
+        # Test flux at various fractional positions
+        fluxes = []
+        for shift in [0.0, 0.25, 0.5, 0.75]:
+            prfmodel.x_0 = 40 + shift
+            prfmodel.y_0 = 60 + shift
+            prfmodel.flux = flux
+            result = prfmodel(x + 40, y + 60)
+            fluxes.append(result.sum())
+
+        # All fluxes should be relatively similar (good flux conservation)
+        fluxes = np.array(fluxes)
+        # PRF should have moderate flux variation (< 10%)
+        # Note: This is relaxed because the Gaussian PSF isn't perfectly
+        # normalized and we're using a subset of the total PSF area
+        assert (fluxes.max() - fluxes.min()) / fluxes.mean() < 0.1
+
+    @pytest.mark.parametrize('deepcopy', [False, True])
+    def test_copy(self, prfmodel, deepcopy):
+        """Test copy and deepcopy."""
+        flux = prfmodel.flux.value
+        model_copy = prfmodel.deepcopy() if deepcopy else prfmodel.copy()
+
+        assert_equal(model_copy.data, prfmodel.data)
+        assert_equal(model_copy.grid_xypos, prfmodel.grid_xypos)
+        assert_equal(model_copy.oversampling, prfmodel.oversampling)
+        assert_equal(model_copy.meta, prfmodel.meta)
+        assert model_copy.flux.value == prfmodel.flux.value
+        assert model_copy.x_0.value == prfmodel.x_0.value
+        assert model_copy.y_0.value == prfmodel.y_0.value
+        assert model_copy.fixed == prfmodel.fixed
+
+        model_copy.data[0, 0, 0] = 42
+        if deepcopy:
+            assert model_copy.data[0, 0, 0] != prfmodel.data[0, 0, 0]
+        else:
+            assert model_copy.data[0, 0, 0] == prfmodel.data[0, 0, 0]
+
+        model_copy.flux = 100
+        assert model_copy.flux.value != flux
+
+    def test_gridded_image_prf_inherits_griddedpsfmodel(self, prfmodel):
+        """Test that GriddedImagePRF is a subclass of GriddedPSFModel."""
+        assert isinstance(prfmodel, GriddedPSFModel)
+
+        # Check inherited methods are available
+        assert hasattr(prfmodel, '_calc_interpolator')
+        assert hasattr(prfmodel, '_find_bounding_points')
+        assert hasattr(prfmodel, '_calc_bilinear_weights')
+        assert hasattr(prfmodel, 'grid_xypos')
+        assert hasattr(prfmodel, 'oversampling')
+        assert hasattr(prfmodel, 'origin')
+
+    def test_gridded_image_prf_fill_value(self, prfmodel):
+        """Test that fill_value is properly applied."""
+        prfmodel.fill_value = -99.0
+
+        # Evaluate far outside the PSF center where values should be
+        # filled. When all subpixels are filled, the result is:
+        # fill_value * flux (since we sum N^2 fill_values, then divide
+        # by N^2, then multiply by flux)
+        y, x = np.mgrid[200:210, 200:210]
+        flux = 100.0
+        result = prfmodel.evaluate(x=x, y=y, flux=flux, x_0=0, y_0=0)
+
+        # When all subpixels are out of bounds, result = fill_value * flux
+        expected = -99.0 * flux
+        assert np.all(result == expected)
