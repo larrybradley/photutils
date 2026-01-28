@@ -22,7 +22,7 @@ from photutils.psf.model_plotting import (_ModelGridPlotter,
 from photutils.psf.utils import _out_of_grid_mask
 from photutils.utils._parameters import as_pair
 
-__all__ = ['GriddedPSFModel', 'STDPSFGrid']
+__all__ = ['GriddedImagePRF', 'GriddedPSFModel', 'STDPSFGrid']
 __doctest_skip__ = ['STDPSFGrid']
 
 
@@ -1008,6 +1008,287 @@ class GriddedPSFModel(Fittable2DModel):
                                  cmap=cmap, dividers=dividers,
                                  divider_color=divider_color,
                                  divider_ls=divider_ls, figsize=figsize)
+
+
+class GriddedImagePRF(GriddedPSFModel):
+    """
+    A model for a grid of 2D ePSF models with pixel integration.
+
+    This class extends `GriddedPSFModel` to properly handle evaluation
+    by integrating over each output pixel rather than simply sampling
+    at the pixel center. This is analogous to how `ImagePRF` extends
+    `ImagePSF`.
+
+    The ePSF models are defined at fiducial detector locations and are
+    interpolated for the (x, y) detector position. The fiducial detector
+    locations must form a rectangular grid.
+
+    The model has three model parameters: an image intensity scaling
+    factor (``flux``) which is applied to the input image, and two
+    positional parameters (``x_0`` and ``y_0``) indicating the location
+    of a feature in the coordinate grid on which the model is evaluated.
+
+    When evaluating this model, it cannot be called with x and y arrays
+    that have greater than 2 dimensions.
+
+    Parameters
+    ----------
+    nddata : `~astropy.nddata.NDData`
+        A `~astropy.nddata.NDData` object containing the grid of
+        reference ePSF arrays. The data attribute must contain a 3D
+        `~numpy.ndarray` containing a stack of the 2D ePSFs with a shape
+        of ``(N_psf, ePSF_ny, ePSF_nx)``. The length of the x and y
+        axes must both be at least 4. ``N_psf`` must not be 2 or 3. All
+        elements of the input image data must be finite. The PSF peak is
+        assumed to be located at the center of the input image. Please
+        see the Notes section below for details on the normalization of
+        the input image data.
+
+        If ``N_psf`` is 1, the model will be evaluated using the single
+        ePSF image at every (x, y) position. This is equivalent to using
+        the `~photutils.psf.ImagePRF` model with the single ePSF.
+
+        The meta attribute must be dictionary containing the following:
+
+        * ``'grid_xypos'``: A list of the (x, y) grid positions of
+          each reference ePSF. The order of positions should match the
+          first axis of the 3D `~numpy.ndarray` of ePSFs. In other words,
+          ``grid_xypos[i]`` should be the (x, y) position of the reference
+          ePSF defined in ``nddata.data[i]``. The grid positions must form
+          a rectangular grid.
+
+        * ``'oversampling'``: The integer oversampling factor(s) of the
+          input ePSF images. If ``oversampling`` is a scalar then it will
+          be used for both axes. If ``oversampling`` has two elements,
+          they must be in ``(y, x)`` order.
+
+        The meta attribute may contain other properties such as the
+        telescope, instrument, detector, and filter of the ePSF.
+
+    flux : float, optional
+        The flux scaling factor for the model. This is the total flux
+        of the source, assuming the input ePSF images are properly
+        normalized.
+
+    x_0, y_0 : float, optional
+        The (x, y) position of the PSF peak in the image in the output
+        coordinate grid on which the model is evaluated.
+
+    fill_value : float, optional
+        The value to use for points outside the input pixel grid. The
+        default is 0.0.
+
+    See Also
+    --------
+    GriddedPSFModel : A model that samples (rather than integrates) the PSF.
+    ImagePRF : A model for a single 2D image PRF.
+
+    Notes
+    -----
+    The evaluation method works as follows:
+
+    1. For each output pixel at position ``(x, y)``, determine the
+       region in oversampled coordinates that corresponds to that pixel.
+
+    2. Generate a grid of subpixel centers within that region. For
+       oversampling factor ``N``, each output pixel contains ``N x N``
+       subpixels.
+
+    3. For each subpixel, interpolate the PSF at the 4 bounding grid
+       positions and then bilinearly interpolate across those positions.
+
+    4. Sum the interpolated values to get the integrated flux for that
+       output pixel.
+
+    This integration approach provides several advantages over simple
+    sampling:
+
+    - **Better flux conservation**: The sum of oversampled pixels
+      properly represents the integrated flux over the pixel area.
+
+    - **Reduced aliasing**: Sharp features in the PSF (like the central
+      peak) are properly integrated rather than potentially missed by
+      sampling.
+
+    - **Correct normalization**: For a properly normalized oversampled
+      PSF (where the sum equals the oversampling factor squared), the
+      output PRF will sum to unity (before flux scaling).
+
+    The fitted PSF model flux represents the total flux of the source,
+    assuming the input image was properly normalized. This flux is
+    determined as a multiplicative scale factor applied to the input
+    image PSF, after accounting for any oversampling. For oversampled
+    PSF images, the normalization should be adjusted so that the sum of
+    the array values equals the product of the oversampling factors.
+    """
+
+    def __init__(self, nddata, *, flux=GriddedPSFModel.flux.default,
+                 x_0=GriddedPSFModel.x_0.default,
+                 y_0=GriddedPSFModel.y_0.default, fill_value=0.0):
+        super().__init__(nddata, flux=flux, x_0=x_0, y_0=y_0,
+                         fill_value=fill_value)
+
+    def __str__(self):
+        keywords = []
+
+        keys = ('STDPSF', 'instrument', 'detector', 'filter')
+        for key in keys:
+            if key in self.meta:
+                name = key.capitalize() if key != 'STDPSF' else key
+                keywords.append((name, self.meta[key]))
+
+        keywords.extend([('Number of PSFs', len(self.grid_xypos)),
+                         ('Grid shape', self.meta['grid_shape']),
+                         ('Grid positions', self.grid_xypos.tolist()),
+                         ('PSF shape (oversampled pixels)',
+                          self.data.shape[1:]),
+                         ('Oversampling', self.oversampling.tolist()),
+                         ('Fill Value', self.fill_value)])
+
+        return self._format_str(keywords=keywords)
+
+    def __repr__(self):
+        kwargs = {'oversampling': self.oversampling.tolist(),
+                  'fill_value': self.fill_value}
+        return self._format_repr(args=[], kwargs=kwargs)
+
+    def _calc_model_values_subpix(self, x_0, y_0, xi, yi):
+        """
+        Calculate the ePSF model at a given (x_0, y_0) model coordinate
+        and the input (xi, yi) subpixel coordinates.
+
+        This method is similar to _calc_model_values but is optimized
+        for evaluating at multiple subpixel positions.
+
+        Parameters
+        ----------
+        x_0, y_0 : float
+            The (x, y) position of the model.
+
+        xi, yi : `~numpy.ndarray`
+            The input (x, y) coordinates at which the model is
+            evaluated (in oversampled PSF coordinates).
+
+        Returns
+        -------
+        result : `~numpy.ndarray`
+            The interpolated ePSF model at the input coordinates.
+        """
+        grid_idx, grid_xy = self._find_bounding_points(x_0, y_0)
+        weights = self._calc_bilinear_weights(x_0, y_0, grid_xy)
+
+        result = np.zeros_like(xi)
+        for gidx, weight in zip(grid_idx, weights, strict=True):
+            if weight != 0:
+                interp = self._calc_interpolator(gidx)
+                result += interp(xi, yi, grid=False) * weight
+
+        return result
+
+    def evaluate(self, x, y, flux, x_0, y_0):
+        """
+        Calculate the ePSF PRF model at the input coordinates by
+        integrating over each output pixel.
+
+        For each output pixel, this method sums the interpolated PSF
+        values at all oversampled subpixel centers within that pixel,
+        providing the integrated flux over the pixel area.
+
+        Parameters
+        ----------
+        x, y : float or `~numpy.ndarray`
+            The x and y positions at which to evaluate the model.
+
+        flux : float
+            The flux scaling factor for the model.
+
+        x_0, y_0 : float
+            The (x, y) position of the model.
+
+        Returns
+        -------
+        evaluated_model : `~numpy.ndarray`
+            The evaluated model.
+        """
+        if x.ndim > 2:
+            msg = 'x and y must be 1D or 2D'
+            raise ValueError(msg)
+
+        # the base Model.__call__() method converts scalar inputs to
+        # size-1 arrays before calling evaluate(), but we need scalar
+        # values for the interpolator
+        if not np.isscalar(x_0):
+            x_0 = x_0[0]
+        if not np.isscalar(y_0):
+            y_0 = y_0[0]
+
+        x = np.asarray(x, dtype=float)
+        y = np.asarray(y, dtype=float)
+
+        # Store original shape for output
+        input_shape = x.shape
+        x_flat = x.ravel()
+        y_flat = y.ravel()
+
+        oversamp_y, oversamp_x = self.oversampling
+
+        # Generate subpixel offsets within each output pixel
+        # For oversampling N, we have N subpixels spanning [-0.5, 0.5]
+        # The subpixel centers are at: (i + 0.5) / N - 0.5
+        subpix_offsets_x = (np.arange(oversamp_x) + 0.5) / oversamp_x - 0.5
+        subpix_offsets_y = (np.arange(oversamp_y) + 0.5) / oversamp_y - 0.5
+
+        # Create meshgrid of subpixel offsets
+        subpix_dy, subpix_dx = np.meshgrid(subpix_offsets_y, subpix_offsets_x,
+                                           indexing='ij')
+        subpix_dx = subpix_dx.ravel()
+        subpix_dy = subpix_dy.ravel()
+        n_subpix = len(subpix_dx)
+
+        # Initialize output array
+        evaluated_model = np.zeros(len(x_flat), dtype=float)
+
+        ny, nx = self.data.shape[1:]
+
+        # For each output pixel, evaluate at all subpixel positions and sum
+        for i in range(n_subpix):
+            # Subpixel positions in output coordinates
+            x_sub = x_flat + subpix_dx[i]
+            y_sub = y_flat + subpix_dy[i]
+
+            # Transform to oversampled PSF coordinates
+            xi = oversamp_x * (x_sub - x_0) + self.origin[0]
+            yi = oversamp_y * (y_sub - y_0) + self.origin[1]
+
+            # Interpolate at subpixel positions using the grid
+            if self.data.shape[0] == 1:
+                # Single PSF case - no bilinear interpolation needed
+                subpix_values = self._calc_interpolator(0)(xi, yi, grid=False)
+            else:
+                subpix_values = self._calc_model_values_subpix(
+                    x_0, y_0, xi, yi)
+
+            # Apply fill_value for out-of-bounds coordinates
+            if self.fill_value is not None:
+                # Use the same bounds as GriddedPSFModel
+                invalid = (xi < 0) | (xi > nx - 1) | (yi < 0) | (yi > ny - 1)
+                if np.any(invalid):
+                    subpix_values[invalid] = self.fill_value
+
+            # Accumulate the sum
+            evaluated_model += subpix_values
+
+        # Reshape to original input shape
+        evaluated_model = evaluated_model.reshape(input_shape)
+
+        # Divide by the oversampling area to conserve flux.
+        oversamp_area = oversamp_x * oversamp_y
+        evaluated_model /= oversamp_area
+
+        # Apply flux scaling
+        evaluated_model *= flux
+
+        return evaluated_model
 
 
 class STDPSFGrid:
