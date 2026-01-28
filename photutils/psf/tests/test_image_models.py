@@ -361,15 +361,250 @@ class TestImagePSF:
     def test_repr(self, image_psf):
         model_repr = repr(image_psf)
         expected = ('<ImagePSF(flux=1., x_0=0., y_0=0., origin=[10.0, 10.0], '
-                    'oversampling=[1, 1], fill_value=0.0)>')
+                    'oversampling=[1, 1], fill_value=0.0, '
+                    "interpolation='cubic', flux_conserve=False)>")
         assert model_repr == expected
         for param in image_psf.param_names:
             assert param in model_repr
 
     def test_str(self, image_psf):
         model_str = str(image_psf)
-        keys = ('PSF shape', 'Origin', 'Oversampling', 'Fill Value')
+        keys = ('PSF shape', 'Origin', 'Oversampling', 'Fill Value',
+                'Interpolation', 'Flux Conserve')
         for key in keys:
             assert key in model_str
         for param in image_psf.param_names:
             assert param in model_str
+
+    def test_interpolation_inputs(self, gaussian_psf):
+        """Test interpolation parameter validation."""
+        yy, xx = np.mgrid[-10:11, -10:11]
+        psf_data = gaussian_psf(xx, yy)
+
+        # Valid inputs
+        for interp in ('cubic', 'bilinear'):
+            model = ImagePSF(psf_data, interpolation=interp)
+            assert model.interpolation == interp
+
+        # Invalid input
+        match = 'interpolation must be one of'
+        with pytest.raises(ValueError, match=match):
+            ImagePSF(psf_data, interpolation='invalid')
+
+    def test_bilinear_interpolation(self, gaussian_psf):
+        """Test bilinear interpolation preserves non-negativity."""
+        yy, xx = np.mgrid[-10:11, -10:11]
+        psf_data = gaussian_psf(xx, yy)
+        psf_data /= np.sum(psf_data)
+
+        model = ImagePSF(psf_data, interpolation='bilinear')
+        shifts = [(0.0, 0.0), (0.5, 0.0), (0.5, 0.5), (0.25, 0.75)]
+        for dx, dy in shifts:
+            model.x_0 = dx
+            model.y_0 = dy
+            result = model(xx, yy)
+            # Bilinear should never produce negative values
+            assert result.min() >= 0
+
+    def test_bilinear_flux_conservation(self):
+        """
+        Test bilinear interpolation with small PSF has better flux
+        conservation than cubic.
+        """
+        from photutils.psf import GaussianPSF
+        model = GaussianPSF(x_0=2, y_0=2)
+        yy, xx = np.mgrid[:5, :5]
+        psf_data = model(xx, yy)
+        psf_data /= np.sum(psf_data)
+
+        yy_out, xx_out = np.mgrid[:25, :25]
+
+        # Cubic has significant flux loss at fractional positions
+        psf_cubic = ImagePSF(psf_data, interpolation='cubic')
+        result_cubic = psf_cubic.evaluate(xx_out, yy_out, 1,
+                                          x_0=10.5, y_0=10.5)
+
+        # Bilinear has much better flux conservation
+        psf_bilinear = ImagePSF(psf_data, interpolation='bilinear')
+        result_bilinear = psf_bilinear.evaluate(xx_out, yy_out, 1,
+                                                x_0=10.5, y_0=10.5)
+
+        # Bilinear should be much closer to 1.0
+        assert abs(result_bilinear.sum() - 1.0) < 0.01
+        # Cubic has large error for this small PSF
+        assert abs(result_cubic.sum() - 1.0) > 0.5
+
+        # Bilinear should have no negative values
+        assert result_bilinear.min() >= 0
+        # Cubic may have negative values
+        assert result_cubic.min() < 0
+
+    @pytest.mark.parametrize('shift', [(0.0, 0.0), (0.25, 0.0), (0.5, 0.0),
+                                       (0.5, 0.5), (0.3, 0.7)])
+    def test_flux_conserve(self, gaussian_psf, shift):
+        """Test that flux is conserved during fractional pixel shifts."""
+        yy, xx = np.mgrid[-10:11, -10:11]
+        psf_data = gaussian_psf(xx, yy)
+        psf_data /= np.sum(psf_data)  # Normalize to sum=1
+
+        flux = 10.0
+        model = ImagePSF(psf_data, flux=flux, flux_conserve=True)
+        model.x_0 = shift[0]
+        model.y_0 = shift[1]
+
+        result = model(xx, yy)
+        assert_allclose(np.sum(result), flux, rtol=1e-14)
+
+    def test_flux_conserve_narrow_psf(self):
+        """
+        Test flux conservation with narrow PSF (more interpolation error).
+        """
+        gaussian_psf = CircularGaussianPSF(fwhm=1.2)
+        yy, xx = np.mgrid[-10:11, -10:11]
+        psf_data = gaussian_psf(xx, yy)
+        psf_data /= np.sum(psf_data)
+
+        flux = 5.0
+        model = ImagePSF(psf_data, flux=flux, flux_conserve=True)
+
+        shifts = [(0.0, 0.0), (0.5, 0.5), (0.25, 0.75)]
+        for dx, dy in shifts:
+            model.x_0 = dx
+            model.y_0 = dy
+            result = model(xx, yy)
+            assert_allclose(np.sum(result), flux, rtol=1e-14)
+
+    def test_flux_conserve_false(self, gaussian_psf):
+        """Test that flux_conserve=False preserves original behavior."""
+        yy, xx = np.mgrid[-10:11, -10:11]
+        psf_data = gaussian_psf(xx, yy)
+        psf_data /= np.sum(psf_data)
+
+        flux = 1.0
+        model = ImagePSF(psf_data, flux=flux, flux_conserve=False)
+
+        # At integer position, flux should be conserved
+        model.x_0 = 0.0
+        model.y_0 = 0.0
+        result = model(xx, yy)
+        assert_allclose(np.sum(result), flux, rtol=1e-10)
+
+        # At fractional position, flux may vary slightly
+        model.x_0 = 0.5
+        model.y_0 = 0.5
+        result = model(xx, yy)
+        # Just check it's close but not exact (allows for interpolation error)
+        assert_allclose(np.sum(result), flux, rtol=1e-4)
+
+    def test_flux_conserve_with_oversampling(self, gaussian_psf):
+        """Test flux conservation with oversampled PSF."""
+        oversamp = 3
+        yy, xx = np.mgrid[-3:3.00001:(1 / oversamp), -3:3.00001:(1 / oversamp)]
+        psf_data = gaussian_psf(xx, yy)
+
+        flux = 7.5
+        model = ImagePSF(psf_data, flux=flux, oversampling=oversamp,
+                         flux_conserve=True)
+
+        # Evaluate on output grid
+        yy_out, xx_out = np.mgrid[-3:4, -3:4]
+        shifts = [(0.0, 0.0), (0.5, 0.5), (0.33, 0.66)]
+        for dx, dy in shifts:
+            model.x_0 = dx
+            model.y_0 = dy
+            result = model(xx_out, yy_out)
+            assert_allclose(np.sum(result), flux, rtol=1e-14)
+
+    def test_boundary_extension(self):
+        """
+        Test that extended bounds [-0.5, N-0.5] recover edge pixels.
+
+        The valid coordinate range is extended by 0.5 pixels beyond pixel
+        centers to ensure fractional shifts don't cause boundary clipping.
+        """
+        from photutils.psf import GaussianPSF
+
+        # Create a small 5x5 PSF
+        model = GaussianPSF(x_0=2, y_0=2)
+        yy, xx = np.mgrid[:5, :5]
+        psf_data = model(xx, yy)
+        psf_data /= np.sum(psf_data)
+
+        psf = ImagePSF(psf_data, interpolation='bilinear')
+
+        # Output grid larger than PSF
+        yy_out, xx_out = np.mgrid[:25, :25]
+
+        # At integer position, should use all 5x5 = 25 pixels within bounds
+        result_int = psf.evaluate(xx_out, yy_out, 1, x_0=10.0, y_0=10.0)
+        nonzero_int = np.count_nonzero(result_int)
+
+        # At half-pixel position, extended bounds should allow 6x6 = 36 pixels
+        # (the extra pixels come from extrapolation at the edges)
+        result_half = psf.evaluate(xx_out, yy_out, 1, x_0=10.5, y_0=10.5)
+        nonzero_half = np.count_nonzero(result_half)
+
+        # With extended bounds, half-pixel shift should have MORE valid pixels
+        # than integer shift (36 vs 25) because it can extrapolate to edges
+        assert nonzero_half >= nonzero_int
+
+        # Flux should be very well conserved with bilinear + extended bounds
+        assert_allclose(result_int.sum(), 1.0, rtol=1e-3)
+        assert_allclose(result_half.sum(), 1.0, rtol=1e-3)
+
+    def test_boundary_extension_no_clipping(self):
+        """
+        Test that fractional shifts don't cause boundary clipping.
+
+        Previously, a 0.5 pixel shift would cause coordinates like -0.5
+        to be clipped (set to fill_value=0). With extended bounds, these
+        coordinates should now be valid and interpolated.
+        """
+        from photutils.psf import GaussianPSF
+
+        model = GaussianPSF(x_0=2, y_0=2)
+        yy, xx = np.mgrid[:5, :5]
+        psf_data = model(xx, yy)
+        psf_data /= np.sum(psf_data)
+
+        psf = ImagePSF(psf_data, interpolation='bilinear')
+        yy_out, xx_out = np.mgrid[:25, :25]
+
+        # Test various fractional shifts
+        shifts = [0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0]
+        fluxes = []
+        for shift in shifts:
+            result = psf.evaluate(xx_out, yy_out, 1, x_0=10 + shift,
+                                  y_0=10 + shift)
+            fluxes.append(result.sum())
+
+        # All shifts should give approximately the same flux
+        # (within 1% for bilinear interpolation)
+        fluxes = np.array(fluxes)
+        assert_allclose(fluxes, 1.0, rtol=0.01)
+
+    @pytest.mark.parametrize('shift', [0.0, 0.25, 0.5, 0.75, 1.0])
+    def test_boundary_symmetry(self, shift):
+        """
+        Test that positive and negative fractional shifts behave symmetrically.
+        """
+        from photutils.psf import GaussianPSF
+
+        model = GaussianPSF(x_0=2, y_0=2)
+        yy, xx = np.mgrid[:5, :5]
+        psf_data = model(xx, yy)
+        psf_data /= np.sum(psf_data)
+
+        psf = ImagePSF(psf_data, interpolation='bilinear')
+        yy_out, xx_out = np.mgrid[:25, :25]
+
+        # Positive shift
+        result_pos = psf.evaluate(xx_out, yy_out, 1, x_0=10 + shift,
+                                  y_0=10 + shift)
+
+        # Negative shift (using a different center position)
+        result_neg = psf.evaluate(xx_out, yy_out, 1, x_0=14 - shift,
+                                  y_0=14 - shift)
+
+        # Both should have similar total flux
+        assert_allclose(result_pos.sum(), result_neg.sum(), rtol=1e-10)
