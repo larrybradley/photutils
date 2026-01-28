@@ -651,23 +651,10 @@ class ImagePSF(Fittable2DModel):
         else:
             evaluated_model = self.interpolator(xi, yi, grid=False)
 
-        # Track whether any pixels are outside the valid PSF region
         if self.fill_value is not None:
             # Set pixels that are outside the input pixel grid to the
-            # fill_value to avoid extrapolation. These bounds match the
-            # RegularGridInterpolator bounds.
-            #
-            # The bounds are extended by 0.5 pixels beyond the pixel
-            # centers (i.e., [-0.5, nx - 0.5] instead of [0, nx - 1])
-            # to allow interpolation up to the edge of the outermost
-            # pixels. This ensures that fractional pixel shifts don't
-            # cause boundary clipping that would otherwise result in
-            # flux loss. Each pixel in the PSF array represents the
-            # region from (center - 0.5) to (center + 0.5), so
-            # interpolation within this extended range is valid.
-            ny, nx = self.data.shape
-            invalid = ((xi < -0.5) | (xi > nx - 0.5)
-                       | (yi < -0.5) | (yi > ny - 0.5))
+            # fill_value to avoid extrapolation
+            invalid = _out_of_grid_mask(xi, yi, self.data.shape)
             if np.any(invalid):
                 evaluated_model[invalid] = self.fill_value
 
@@ -982,7 +969,6 @@ class ImagePRF(ImagePSF):
 
         # Track whether any subpixels are outside the valid PSF region
         has_invalid = False
-        ny, nx = self.data.shape
 
         # For each output pixel, evaluate at all subpixel positions and sum
         # We expand each output coordinate to all subpixel positions
@@ -1000,8 +986,7 @@ class ImagePRF(ImagePSF):
 
             # Apply fill_value for out-of-bounds coordinates
             if self.fill_value is not None:
-                invalid = ((xi < -0.5) | (xi > nx - 0.5)
-                           | (yi < -0.5) | (yi > ny - 0.5))
+                invalid = _out_of_grid_mask(xi, yi, self.data.shape)
                 if np.any(invalid):
                     has_invalid = True
                     subpix_values[invalid] = self.fill_value

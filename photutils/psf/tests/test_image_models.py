@@ -978,50 +978,10 @@ class TestImagePSF:
         assert result.sum() <= flux * 1.001  # Should not be boosted above flux
         assert result.sum() > flux * 0.9  # But should still have most of it
 
-    def test_boundary_extension(self):
+    def test_fractional_shift_flux(self):
         """
-        Test that extended bounds [-0.5, N-0.5] recover edge pixels.
-
-        The valid coordinate range is extended by 0.5 pixels beyond pixel
-        centers to ensure fractional shifts don't cause boundary clipping.
-        """
-        from photutils.psf import GaussianPSF
-
-        # Create a small 5x5 PSF
-        model = GaussianPSF(x_0=2, y_0=2)
-        yy, xx = np.mgrid[:5, :5]
-        psf_data = model(xx, yy)
-        psf_data /= np.sum(psf_data)
-
-        psf = ImagePSF(psf_data, interpolation='bilinear')
-
-        # Output grid larger than PSF
-        yy_out, xx_out = np.mgrid[:25, :25]
-
-        # At integer position, should use all 5x5 = 25 pixels within bounds
-        result_int = psf.evaluate(xx_out, yy_out, 1, x_0=10.0, y_0=10.0)
-        nonzero_int = np.count_nonzero(result_int)
-
-        # At half-pixel position, extended bounds should allow 6x6 = 36 pixels
-        # (the extra pixels come from extrapolation at the edges)
-        result_half = psf.evaluate(xx_out, yy_out, 1, x_0=10.5, y_0=10.5)
-        nonzero_half = np.count_nonzero(result_half)
-
-        # With extended bounds, half-pixel shift should have MORE valid pixels
-        # than integer shift (36 vs 25) because it can extrapolate to edges
-        assert nonzero_half >= nonzero_int
-
-        # Flux should be very well conserved with bilinear + extended bounds
-        assert_allclose(result_int.sum(), 1.0, rtol=1e-3)
-        assert_allclose(result_half.sum(), 1.0, rtol=1e-3)
-
-    def test_boundary_extension_no_clipping(self):
-        """
-        Test that fractional shifts don't cause boundary clipping.
-
-        Previously, a 0.5 pixel shift would cause coordinates like -0.5
-        to be clipped (set to fill_value=0). With extended bounds, these
-        coordinates should now be valid and interpolated.
+        Test that fractional shifts of a PSF image whose edges are near
+        zero conserve the flux.
         """
         from photutils.psf import GaussianPSF
 
@@ -1341,8 +1301,8 @@ class TestImagePRF:
         # Use a smaller evaluation grid to keep PSF fully within bounds.
         # The PSF data is on grid [-5:5.001] with oversamp=4 (shape 41x41).
         # The evaluation grid must be small enough that all subpixel
-        # coordinates stay within the valid range [-0.5, 40.5].
-        yy, xx = np.mgrid[-4:5, -4:5]
+        # coordinates stay within the valid range [0, 40].
+        yy, xx = np.mgrid[-3:4, -3:4]
 
         # Test at various positions
         for x_0, y_0 in [(0, 0), (0.5, 0.5), (0.25, 0.75)]:
