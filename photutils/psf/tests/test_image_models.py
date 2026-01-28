@@ -405,7 +405,7 @@ class TestImagePSF:
         model_repr = repr(image_psf)
         expected = ('<ImagePSF(flux=1., x_0=0., y_0=0., origin=[10.0, 10.0], '
                     'oversampling=[1, 1], fill_value=0.0, '
-                    "interpolation='cubic')>")
+                    "interpolation='cubic', clip_negative=False)>")
         assert model_repr == expected
         for param in image_psf.param_names:
             assert param in model_repr
@@ -716,6 +716,115 @@ class TestImagePSF:
 
         # Both should have similar total flux
         assert_allclose(result_pos.sum(), result_neg.sum(), rtol=1e-10)
+
+    def test_clip_negative(self):
+        """
+        Test that clip_negative prevents negative values from cubic
+        interpolation ringing.
+        """
+        from photutils.psf import GaussianPSF
+
+        # Create a small, undersampled PSF that will have ringing
+        model = GaussianPSF(x_0=2, y_0=2)
+        yy, xx = np.mgrid[:5, :5]
+        psf_data = model(xx, yy)
+        psf_data /= np.sum(psf_data)
+
+        yy_out, xx_out = np.mgrid[:25, :25]
+
+        # Without clipping, cubic interpolation produces negative values
+        psf_no_clip = ImagePSF(psf_data, interpolation='cubic',
+                               clip_negative=False)
+        result_no_clip = psf_no_clip.evaluate(xx_out, yy_out, 1,
+                                              x_0=10.5, y_0=10.5)
+        assert result_no_clip.min() < 0
+
+        # With clipping, negative values are clipped to 0
+        psf_clip = ImagePSF(psf_data, interpolation='cubic',
+                            clip_negative=True)
+        result_clip = psf_clip.evaluate(xx_out, yy_out, 1,
+                                        x_0=10.5, y_0=10.5)
+        assert result_clip.min() >= 0
+
+        # The clipped result should have the same shape (same peak location)
+        peak_no_clip = np.unravel_index(np.argmax(result_no_clip),
+                                        result_no_clip.shape)
+        peak_clip = np.unravel_index(np.argmax(result_clip), result_clip.shape)
+        assert peak_no_clip == peak_clip
+
+    def test_clip_negative_flux_scaling(self):
+        """
+        Test that clip_negative works correctly with flux scaling.
+        """
+        from photutils.psf import GaussianPSF
+
+        model = GaussianPSF(x_0=2, y_0=2)
+        yy, xx = np.mgrid[:5, :5]
+        psf_data = model(xx, yy)
+        psf_data /= np.sum(psf_data)
+
+        yy_out, xx_out = np.mgrid[:25, :25]
+        flux = 100.0
+
+        psf = ImagePSF(psf_data, flux=flux, interpolation='cubic',
+                       clip_negative=True)
+        result = psf.evaluate(xx_out, yy_out, flux, x_0=10.5, y_0=10.5)
+
+        # All values should be non-negative
+        assert result.min() >= 0
+
+        # The result should still be scaled by flux (not all zeros)
+        assert result.sum() > 0
+
+    def test_clip_negative_str_repr(self):
+        """Test that clip_negative is included in string representations."""
+        from photutils.psf import GaussianPSF
+
+        model = GaussianPSF(x_0=2, y_0=2)
+        yy, xx = np.mgrid[:5, :5]
+        psf_data = model(xx, yy)
+
+        psf = ImagePSF(psf_data, clip_negative=True)
+
+        assert 'clip_negative' in repr(psf)
+        assert 'Clip Negative' in str(psf)
+
+    def test_asymmetric_oversampling(self, gaussian_psf):
+        """
+        Test ImagePSF with different oversampling factors for x and y axes.
+        """
+        oversamp_y = 3
+        oversamp_x = 5
+
+        # Create PSF data with different sampling in x and y
+        yy, xx = np.mgrid[-5:5.001:(1 / oversamp_y),
+                          -5:5.001:(1 / oversamp_x)]
+        psf_data = gaussian_psf(xx, yy)
+
+        model = ImagePSF(psf_data, oversampling=(oversamp_y, oversamp_x))
+
+        # Verify oversampling is stored correctly
+        assert_equal(model.oversampling, (oversamp_y, oversamp_x))
+
+        # Evaluate on output grid
+        yy_out, xx_out = np.mgrid[-3:4, -3:4]
+        result = model(xx_out, yy_out)
+
+        # Should work without error and produce reasonable output
+        assert result.shape == xx_out.shape
+        assert result.sum() > 0
+
+        # Peak should be near center
+        peak_idx = np.unravel_index(np.argmax(result), result.shape)
+        assert abs(peak_idx[0] - 3) <= 1
+        assert abs(peak_idx[1] - 3) <= 1
+
+        # Test with a fractional shift
+        model.x_0 = 0.5
+        model.y_0 = 0.5
+        result_shifted = model(xx_out, yy_out)
+        assert result_shifted.shape == xx_out.shape
+        assert result_shifted.sum() > 0
 
 
 class TestImagePRF:
@@ -1037,3 +1146,75 @@ class TestImagePRF:
 
         # Total flux should be the same (within small numerical tolerance)
         assert_allclose(result_pos.sum(), result_neg.sum(), rtol=1e-4)
+
+    def test_imageprf_clip_negative(self):
+        """
+        Test that clip_negative prevents negative values from cubic
+        interpolation ringing in ImagePRF.
+        """
+        # Create a small, undersampled PSF that will have ringing
+        oversamp = 2
+        gaussian_psf = CircularGaussianPSF(fwhm=1.0)
+        yy, xx = np.mgrid[-3:3.001:(1 / oversamp), -3:3.001:(1 / oversamp)]
+        psf_data = gaussian_psf(xx, yy)
+
+        yy_out, xx_out = np.mgrid[-5:6, -5:6]
+
+        # Without clipping, cubic interpolation may produce negative values
+        prf_no_clip = ImagePRF(psf_data, oversampling=oversamp,
+                               interpolation='cubic', clip_negative=False)
+        prf_no_clip.x_0 = 0.5
+        prf_no_clip.y_0 = 0.5
+        result_no_clip = prf_no_clip(xx_out, yy_out)
+
+        # With clipping, negative values are clipped to 0
+        prf_clip = ImagePRF(psf_data, oversampling=oversamp,
+                            interpolation='cubic', clip_negative=True)
+        prf_clip.x_0 = 0.5
+        prf_clip.y_0 = 0.5
+        result_clip = prf_clip(xx_out, yy_out)
+
+        # The clipped result should have no negative values
+        assert result_clip.min() >= 0
+
+        # The clipped result should have the same peak location
+        peak_no_clip = np.unravel_index(np.argmax(result_no_clip),
+                                        result_no_clip.shape)
+        peak_clip = np.unravel_index(np.argmax(result_clip), result_clip.shape)
+        assert peak_no_clip == peak_clip
+
+    def test_imageprf_clip_negative_flux_conservation(self):
+        """
+        Test that clip_negative works correctly with flux conservation
+        in ImagePRF.
+        """
+        oversamp = 4
+        gaussian_psf = CircularGaussianPSF(fwhm=2.5)
+        yy, xx = np.mgrid[-5:5.001:(1 / oversamp), -5:5.001:(1 / oversamp)]
+        psf_data = gaussian_psf(xx, yy)
+
+        flux = 100.0
+        prf = ImagePRF(psf_data, oversampling=oversamp, flux=flux,
+                       interpolation='cubic', clip_negative=True)
+
+        yy_out, xx_out = np.mgrid[-4:5, -4:5]
+        prf.x_0 = 0.5
+        prf.y_0 = 0.5
+        result = prf(xx_out, yy_out)
+
+        # All values should be non-negative
+        assert result.min() >= 0
+
+        # Flux should still be well conserved
+        assert_allclose(result.sum(), flux, rtol=0.01)
+
+    def test_imageprf_clip_negative_str_repr(self, oversampled_psf_data):
+        """
+        Test that clip_negative is included in ImagePRF string
+        representations.
+        """
+        psf_data, oversamp = oversampled_psf_data
+        model = ImagePRF(psf_data, oversampling=oversamp, clip_negative=True)
+
+        assert 'clip_negative' in repr(model)
+        assert 'Clip Negative' in str(model)

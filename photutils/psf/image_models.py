@@ -95,6 +95,12 @@ class ImagePSF(Fittable2DModel):
           produce negative values (ringing) for PSFs with steep
           gradients, especially small or undersampled PSFs.
 
+    clip_negative : bool, optional
+        If `True`, clip any negative values in the interpolated output
+        to zero. This is useful for preventing ringing artifacts from
+        cubic spline interpolation from producing unphysical negative
+        flux values. Default is `False`.
+
     **kwargs : dict, optional
         Additional keyword arguments passed to the
         `~astropy.modeling.Model` base class.
@@ -163,7 +169,8 @@ class ImagePSF(Fittable2DModel):
 
     def __init__(self, data, *, flux=flux.default, x_0=x_0.default,
                  y_0=y_0.default, origin=None, oversampling=1,
-                 fill_value=0.0, interpolation='cubic', **kwargs):
+                 fill_value=0.0, interpolation='cubic',
+                 clip_negative=False, **kwargs):
 
         self.data = data
         self.origin = origin
@@ -174,6 +181,7 @@ class ImagePSF(Fittable2DModel):
                    f'got {interpolation!r}')
             raise ValueError(msg)
         self.interpolation = interpolation
+        self.clip_negative = clip_negative
 
         super().__init__(flux, x_0, y_0, **kwargs)
 
@@ -205,6 +213,7 @@ class ImagePSF(Fittable2DModel):
                     ('Oversampling', tuple(self.oversampling.tolist())),
                     ('Fill Value', self.fill_value),
                     ('Interpolation', self.interpolation),
+                    ('Clip Negative', self.clip_negative),
                     ]
         return self._format_str(keywords=keywords)
 
@@ -212,7 +221,8 @@ class ImagePSF(Fittable2DModel):
         kwargs = {'origin': self.origin.tolist(),
                   'oversampling': self.oversampling.tolist(),
                   'fill_value': self.fill_value,
-                  'interpolation': self.interpolation}
+                  'interpolation': self.interpolation,
+                  'clip_negative': self.clip_negative}
         return self._format_repr(kwargs=kwargs)
 
     def copy(self):
@@ -409,6 +419,23 @@ class ImagePSF(Fittable2DModel):
 
         # Wrapper to provide same interface as RectBivariateSpline
         def pchip_interp(xi, yi, grid=False):
+            """
+            PCHIP interpolator wrapper.
+
+            Parameters
+            ----------
+            xi : array_like
+                The x coordinates of the evaluation points.
+            yi : array_like
+                The y coordinates of the evaluation points.
+            grid : bool, optional
+                If `True`, evaluate on a grid. Not supported for PCHIP.
+
+            Returns
+            -------
+            result : `~numpy.ndarray`
+                The interpolated values.
+            """
             if grid:
                 msg = 'grid=True is not supported for pchip interpolation'
                 raise NotImplementedError(msg)
@@ -535,6 +562,11 @@ class ImagePSF(Fittable2DModel):
                        | (yi < -0.5) | (yi > ny - 0.5))
             if np.any(invalid):
                 evaluated_model[invalid] = self.fill_value
+
+        # Clip negative values if requested (useful for cubic interpolation
+        # which can produce ringing artifacts with negative values)
+        if self.clip_negative:
+            evaluated_model = np.clip(evaluated_model, 0, None)
 
         evaluated_model *= flux
 
@@ -693,6 +725,12 @@ class ImagePRF(ImagePSF):
           or bilinear and should only be used when non-negativity is
           critical.
 
+    clip_negative : bool, optional
+        If `True`, clip the interpolated values to be non-negative.
+        This can be useful when using cubic interpolation, which
+        can produce small negative values (ringing artifacts) for
+        PSFs with steep gradients. The default is `False`.
+
     **kwargs : dict, optional
         Additional optional keyword arguments to be passed to the
         `astropy.modeling.Model` base class.
@@ -752,6 +790,15 @@ class ImagePRF(ImagePSF):
     >>> yy_out, xx_out = np.mgrid[-5:6, -5:6]
     >>> result = prf_model(xx_out, yy_out)
     """
+
+    def __init__(self, data, *, flux=ImagePSF.flux.default,
+                 x_0=ImagePSF.x_0.default, y_0=ImagePSF.y_0.default,
+                 origin=None, oversampling=1, fill_value=0.0,
+                 interpolation='cubic', clip_negative=False, **kwargs):
+        super().__init__(data, flux=flux, x_0=x_0, y_0=y_0, origin=origin,
+                         oversampling=oversampling, fill_value=fill_value,
+                         interpolation=interpolation,
+                         clip_negative=clip_negative, **kwargs)
 
     def evaluate(self, x, y, flux, x_0, y_0):
         """
@@ -838,6 +885,11 @@ class ImagePRF(ImagePSF):
 
         # Reshape to original input shape
         evaluated_model = evaluated_model.reshape(input_shape)
+
+        # Clip negative values if requested (useful for cubic interpolation
+        # which can produce ringing artifacts with negative values)
+        if self.clip_negative:
+            evaluated_model = np.clip(evaluated_model, 0, None)
 
         # Divide by the oversampling area to conserve flux.
         # When summing NxN subpixels, we need to normalize by dividing
