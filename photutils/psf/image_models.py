@@ -13,7 +13,7 @@ from scipy.interpolate import RectBivariateSpline
 from photutils.psf.utils import _out_of_grid_mask
 from photutils.utils._parameters import as_pair
 
-__all__ = ['ImagePSF']
+__all__ = ['ImagePRF', 'ImagePSF']
 
 
 class ImagePSF(Fittable2DModel):
@@ -580,3 +580,256 @@ class ImagePSF(Fittable2DModel):
             d_y_0[invalid] = 0.0
 
         return [d_flux, d_x_0, d_y_0]
+
+
+class ImagePRF(ImagePSF):
+    """
+    A model for a 2D image PRF (Pixel Response Function).
+
+    This class extends `ImagePSF` to properly handle oversampled PSF
+    images by integrating over each output pixel rather than simply
+    sampling at the pixel center. For oversampled PSF data, this
+    provides more accurate flux values and better flux conservation,
+    especially for fractional pixel shifts near sharp gradients like
+    the PSF peak.
+
+    The key difference from `ImagePSF` is in how the model is evaluated:
+
+    - `ImagePSF`: Samples the interpolated PSF at a single point per
+      output pixel (the pixel center transformed to oversampled
+      coordinates).
+
+    - `ImagePRF`: Integrates the interpolated PSF over each output pixel
+      by summing the values at all oversampled subpixel centers that
+      fall within that pixel. This properly accounts for the pixel
+      response function.
+
+    Parameters
+    ----------
+    data : 2D `~numpy.ndarray`
+        Array containing the 2D oversampled PSF image. The length of the
+        x and y axes must both be at least 4. All elements of the input
+        image data must be finite. By default, the PSF peak is assumed
+        to be located at the center of the input image (see the
+        ``origin`` keyword). Please see the Notes section below for
+        details on the normalization of the input image data.
+
+    flux : float, optional
+        The total flux of the source, assuming the input image
+        was properly normalized.
+
+    x_0, y_0 : float
+        The x and y positions of a feature in the image in the output
+        coordinate grid on which the model is evaluated. Typically, this
+        refers to the position of the PSF peak, which is assumed to be
+        located at the center of the input image (see the ``origin``
+        keyword).
+
+    origin : tuple of 2 float or None, optional
+        The ``(x, y)`` coordinate with respect to the input image data
+        array that represents the reference pixel of the input data.
+
+        The reference ``origin`` pixel will be placed at the model
+        ``x_0`` and ``y_0`` coordinates in the output coordinate system
+        on which the model is evaluated.
+
+        Most typically, the input PSF should be centered in the input
+        image, and thus the origin should be set to the central pixel of
+        the ``data`` array.
+
+        If the origin is set to `None`, then the origin will be set to
+        the center of the ``data`` array (``(npix - 1) / 2.0``).
+
+    oversampling : int or array_like (int), optional
+        The integer oversampling factor(s) of the input PSF image. If
+        ``oversampling`` is a scalar then it will be used for both axes.
+        If ``oversampling`` has two elements, they must be in ``(y, x)``
+        order. For `ImagePRF`, the oversampling determines how many
+        subpixels are summed within each output pixel.
+
+    fill_value : float, optional
+        The value to use for points outside the input pixel grid. The
+        default is 0.0.
+
+    interpolation : {'cubic', 'bilinear'}, optional
+        The interpolation method to use. Options are:
+
+        * ``'cubic'``: Cubic spline interpolation using
+          `~scipy.interpolate.RectBivariateSpline` with ``kx=3, ky=3``.
+          This provides smooth interpolation but can produce negative
+          values (ringing) for PSFs with steep gradients, especially
+          small or undersampled PSFs.
+
+        * ``'bilinear'``: Bilinear interpolation using
+          `~scipy.interpolate.RectBivariateSpline` with ``kx=1, ky=1``.
+          This preserves non-negativity (if input PSF is non-negative,
+          output will be non-negative) and provides better flux
+          conservation, but produces less smooth results.
+
+        The default is ``'cubic'``.
+
+    flux_conserve : bool, optional
+        If `True`, the integrated PRF will be normalized such that
+        the total flux (sum of all pixel values) equals the ``flux``
+        parameter value, ensuring flux conservation during fractional
+        pixel shifts. This corrects for small flux variations that can
+        occur during spline interpolation. Default is `False`.
+
+    **kwargs : dict, optional
+        Additional optional keyword arguments to be passed to the
+        `astropy.modeling.Model` base class.
+
+    See Also
+    --------
+    ImagePSF : A model that samples (rather than integrates) the PSF.
+    GriddedPSFModel : A model for a grid of ePSF models.
+
+    Notes
+    -----
+    The evaluation method works as follows:
+
+    1. For each output pixel at position ``(x, y)``, determine the
+       region in oversampled coordinates that corresponds to that pixel.
+
+    2. Generate a grid of subpixel centers within that region. For
+       oversampling factor ``N``, each output pixel contains ``N x N``
+       subpixels.
+
+    3. Interpolate the PSF at all subpixel centers.
+
+    4. Sum the interpolated values to get the integrated flux for that
+       output pixel.
+
+    This integration approach provides several advantages over simple
+    sampling:
+
+    - **Better flux conservation**: The sum of oversampled pixels
+      properly represents the integrated flux over the pixel area.
+
+    - **Reduced aliasing**: Sharp features in the PSF (like the central
+      peak) are properly integrated rather than potentially missed by
+      sampling.
+
+    - **Correct normalization**: For a properly normalized oversampled
+      PSF (where the sum equals the oversampling factor squared), the
+      output PRF will sum to unity (before flux scaling).
+
+    For oversampled PSF images, the normalization should be adjusted so
+    that the sum of the array values equals the product of the
+    oversampling factors (e.g., oversampling squared if the oversampling
+    is the same along both axes).
+
+    Examples
+    --------
+    Create a PRF model from an oversampled Gaussian PSF:
+
+    >>> import numpy as np
+    >>> from photutils.psf import CircularGaussianPSF, ImagePRF
+    >>> oversamp = 4
+    >>> gaussian_psf = CircularGaussianPSF(x_0=0, y_0=0, fwhm=2.5)
+    >>> yy, xx = np.mgrid[-5:5.001:(1/oversamp), -5:5.001:(1/oversamp)]
+    >>> psf_data = gaussian_psf(xx, yy)
+    >>> prf_model = ImagePRF(psf_data, oversampling=oversamp)
+    >>> # Evaluate on a non-oversampled output grid
+    >>> yy_out, xx_out = np.mgrid[-5:6, -5:6]
+    >>> result = prf_model(xx_out, yy_out)
+    """
+
+    def evaluate(self, x, y, flux, x_0, y_0):
+        """
+        Calculate the value of the PRF model at the input coordinates
+        by integrating over each output pixel.
+
+        For each output pixel, this method sums the interpolated PSF
+        values at all oversampled subpixel centers within that pixel,
+        providing the integrated flux over the pixel area.
+
+        Parameters
+        ----------
+        x, y : float or array_like
+            The x and y coordinates at which to evaluate the model.
+
+        flux : float
+            The total flux of the source, assuming the input image
+            was properly normalized.
+
+        x_0, y_0 : float
+            The x and y positions of the feature in the image in the
+            output coordinate grid on which the model is evaluated.
+
+        Returns
+        -------
+        result : `~numpy.ndarray`
+            The value of the model evaluated at the input coordinates.
+        """
+        x = np.asarray(x, dtype=float)
+        y = np.asarray(y, dtype=float)
+
+        # Store original shape for output
+        input_shape = x.shape
+        x_flat = x.ravel()
+        y_flat = y.ravel()
+
+        oversamp_y, oversamp_x = self.oversampling
+
+        # Generate subpixel offsets within each output pixel
+        # For oversampling N, we have N subpixels spanning [-0.5, 0.5]
+        # The subpixel centers are at: -0.5 + (0.5 + i) / N for i in [0, N-1]
+        # which simplifies to: (i + 0.5) / N - 0.5
+        subpix_offsets_x = (np.arange(oversamp_x) + 0.5) / oversamp_x - 0.5
+        subpix_offsets_y = (np.arange(oversamp_y) + 0.5) / oversamp_y - 0.5
+
+        # Create meshgrid of subpixel offsets
+        subpix_dy, subpix_dx = np.meshgrid(subpix_offsets_y, subpix_offsets_x,
+                                           indexing='ij')
+        subpix_dx = subpix_dx.ravel()
+        subpix_dy = subpix_dy.ravel()
+        n_subpix = len(subpix_dx)
+
+        # Initialize output array
+        evaluated_model = np.zeros(len(x_flat), dtype=float)
+
+        # For each output pixel, evaluate at all subpixel positions and sum
+        # We expand each output coordinate to all subpixel positions
+        for i in range(n_subpix):
+            # Subpixel positions in output coordinates
+            x_sub = x_flat + subpix_dx[i]
+            y_sub = y_flat + subpix_dy[i]
+
+            # Transform to oversampled PSF coordinates
+            xi = oversamp_x * (x_sub - x_0) + self._origin[0]
+            yi = oversamp_y * (y_sub - y_0) + self._origin[1]
+
+            # Interpolate at subpixel positions
+            subpix_values = self.interpolator(xi, yi, grid=False)
+
+            # Apply fill_value for out-of-bounds coordinates
+            if self.fill_value is not None:
+                ny, nx = self.data.shape
+                invalid = ((xi < -0.5) | (xi > nx - 0.5)
+                           | (yi < -0.5) | (yi > ny - 0.5))
+                subpix_values[invalid] = self.fill_value
+
+            # Accumulate the sum
+            evaluated_model += subpix_values
+
+        # Reshape to original input shape
+        evaluated_model = evaluated_model.reshape(input_shape)
+
+        # Divide by the oversampling area to conserve flux.
+        # When summing NxN subpixels, we need to normalize by dividing
+        # by the oversampling area to get the correct integrated flux.
+        # This is analogous to how the input PSF array should be normalized
+        # by the product of the oversampling factors.
+        oversamp_area = oversamp_x * oversamp_y
+        evaluated_model /= oversamp_area
+
+        if self.flux_conserve:
+            # Normalize the integrated PRF to ensure flux conservation.
+            model_sum = np.sum(evaluated_model)
+            if model_sum != 0:
+                evaluated_model = evaluated_model / model_sum
+
+        evaluated_model *= flux
+
+        return evaluated_model
