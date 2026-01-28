@@ -72,29 +72,28 @@ class ImagePSF(Fittable2DModel):
         is 0.0. If `None`, values outside the input pixel grid are
         extrapolated from the spline fit.
 
-    interpolation : {'cubic', 'bilinear'}, optional
+    interpolation : {'pchip', 'bilinear', 'cubic'}, optional
         The interpolation method to use. Options are:
 
-        * ``'cubic'``: Cubic spline interpolation using
-          `~scipy.interpolate.RectBivariateSpline` with ``kx=3, ky=3``.
-          This provides smooth interpolation but can produce negative
-          values (ringing) for PSFs with steep gradients, especially
-          small or undersampled PSFs.
+        * ``'pchip'``: PCHIP (Piecewise Cubic Hermite Interpolating
+          Polynomial) interpolation using
+          `~scipy.interpolate.RegularGridInterpolator`. This is a
+          shape-preserving interpolation that is smoother than bilinear
+          (C1 continuous) but avoids the overshoots and ringing
+          artifacts of cubic splines. It preserves monotonicity and
+          non-negativity. This is the default.
 
         * ``'bilinear'``: Bilinear interpolation using
           `~scipy.interpolate.RectBivariateSpline` with ``kx=1, ky=1``.
           This preserves non-negativity (if input PSF is non-negative,
-          output will be non-negative) and provides better flux
-          conservation, but produces less smooth results.
+          output will be non-negative), but produces less smooth
+          results (C0 continuous).
 
-        The default is ``'cubic'``.
-
-    flux_conserve : bool, optional
-        If `True`, the interpolated PSF will be normalized such that
-        the total flux (sum of all pixel values) equals the ``flux``
-        parameter value, ensuring flux conservation during fractional
-        pixel shifts. This corrects for small flux variations that can
-        occur during spline interpolation. Default is `False`.
+        * ``'cubic'``: Cubic spline interpolation using
+          `~scipy.interpolate.RectBivariateSpline` with ``kx=3, ky=3``.
+          This provides smooth (C2 continuous) interpolation but can
+          produce negative values (ringing) for PSFs with steep
+          gradients, especially small or undersampled PSFs.
 
     **kwargs : dict, optional
         Additional keyword arguments passed to the
@@ -164,8 +163,7 @@ class ImagePSF(Fittable2DModel):
 
     def __init__(self, data, *, flux=flux.default, x_0=x_0.default,
                  y_0=y_0.default, origin=None, oversampling=1,
-                 fill_value=0.0, interpolation='cubic',
-                 flux_conserve=False, **kwargs):
+                 fill_value=0.0, interpolation='cubic', **kwargs):
 
         self.data = data
         self.origin = origin
@@ -176,7 +174,6 @@ class ImagePSF(Fittable2DModel):
                    f'got {interpolation!r}')
             raise ValueError(msg)
         self.interpolation = interpolation
-        self.flux_conserve = flux_conserve
 
         super().__init__(flux, x_0, y_0, **kwargs)
 
@@ -208,7 +205,6 @@ class ImagePSF(Fittable2DModel):
                     ('Oversampling', tuple(self.oversampling.tolist())),
                     ('Fill Value', self.fill_value),
                     ('Interpolation', self.interpolation),
-                    ('Flux Conserve', self.flux_conserve),
                     ]
         return self._format_str(keywords=keywords)
 
@@ -216,8 +212,7 @@ class ImagePSF(Fittable2DModel):
         kwargs = {'origin': self.origin.tolist(),
                   'oversampling': self.oversampling.tolist(),
                   'fill_value': self.fill_value,
-                  'interpolation': self.interpolation,
-                  'flux_conserve': self.flux_conserve}
+                  'interpolation': self.interpolation}
         return self._format_repr(kwargs=kwargs)
 
     def copy(self):
@@ -522,7 +517,6 @@ class ImagePSF(Fittable2DModel):
         evaluated_model = self.interpolator(xi, yi, grid=False)
 
         # Track whether any pixels are outside the valid PSF region
-        has_invalid = False
         if self.fill_value is not None:
             # Set pixels that are outside the input pixel grid to the
             # fill_value to avoid extrapolation. These bounds match the
@@ -539,22 +533,8 @@ class ImagePSF(Fittable2DModel):
             ny, nx = self.data.shape
             invalid = ((xi < -0.5) | (xi > nx - 0.5)
                        | (yi < -0.5) | (yi > ny - 0.5))
-            has_invalid = np.any(invalid)
-            if has_invalid:
+            if np.any(invalid):
                 evaluated_model[invalid] = self.fill_value
-
-        if self.flux_conserve and not has_invalid:
-            # Normalize the interpolated PSF to ensure flux conservation.
-            # This corrects for small flux variations that can occur
-            # during spline interpolation at fractional pixel shifts.
-            #
-            # Note: flux_conserve is only applied when all pixels are
-            # within the valid PSF region. When the PSF is partially
-            # outside the valid region (has_invalid=True), normalization
-            # would artificially boost the flux of the remaining pixels.
-            model_sum = np.sum(evaluated_model)
-            if model_sum != 0:
-                evaluated_model = evaluated_model / model_sum
 
         evaluated_model *= flux
 
@@ -695,32 +675,23 @@ class ImagePRF(ImagePSF):
         * ``'cubic'``: Cubic spline interpolation using
           `~scipy.interpolate.RectBivariateSpline` with ``kx=3, ky=3``.
           This provides smooth (C2 continuous) interpolation but can
-          produce negative values (ringing) for PSFs with steep
+          produce small negative values (ringing) for PSFs with steep
           gradients, especially small or undersampled PSFs.
+          This is the default.
 
         * ``'bilinear'``: Bilinear interpolation using
           `~scipy.interpolate.RectBivariateSpline` with ``kx=1, ky=1``.
           This preserves non-negativity (if input PSF is non-negative,
-          output will be non-negative) and provides better flux
-          conservation, but produces less smooth results (C0
-          continuous).
+          output will be non-negative), but produces less smooth
+          results (C0 continuous).
 
         * ``'pchip'``: PCHIP (Piecewise Cubic Hermite Interpolating
           Polynomial) interpolation using
           `~scipy.interpolate.RegularGridInterpolator`. This is a
-          shape-preserving interpolation that is smoother than bilinear
-          (C1 continuous) but avoids the overshoots and ringing
-          artifacts of cubic splines. It preserves monotonicity and
-          non-negativity.
-
-        The default is ``'cubic'``.
-
-    flux_conserve : bool, optional
-        If `True`, the integrated PRF will be normalized such that
-        the total flux (sum of all pixel values) equals the ``flux``
-        parameter value, ensuring flux conservation during fractional
-        pixel shifts. This corrects for small flux variations that can
-        occur during spline interpolation. Default is `False`.
+          shape-preserving interpolation that preserves monotonicity
+          and non-negativity, but is significantly slower than cubic
+          or bilinear and should only be used when non-negativity is
+          critical.
 
     **kwargs : dict, optional
         Additional optional keyword arguments to be passed to the
@@ -876,13 +847,15 @@ class ImagePRF(ImagePSF):
         oversamp_area = oversamp_x * oversamp_y
         evaluated_model /= oversamp_area
 
-        if self.flux_conserve and not has_invalid:
-            # Normalize the integrated PRF to ensure flux conservation.
-            #
-            # Note: flux_conserve is only applied when all subpixels are
-            # within the valid PSF region. When the PSF is partially
-            # outside the valid region (has_invalid=True), normalization
-            # would artificially boost the flux of the remaining pixels.
+        # Normalize the integrated PRF to ensure flux conservation.
+        # This corrects for small flux variations that can occur
+        # during spline interpolation at fractional pixel shifts.
+        #
+        # Note: normalization is only applied when all subpixels are
+        # within the valid PSF region. When the PSF is partially
+        # outside the valid region (has_invalid=True), normalization
+        # would artificially boost the flux of the remaining pixels.
+        if not has_invalid:
             model_sum = np.sum(evaluated_model)
             if model_sum != 0:
                 evaluated_model = evaluated_model / model_sum
