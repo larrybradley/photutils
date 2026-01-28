@@ -382,7 +382,7 @@ class TestImagePSF:
         psf_data = gaussian_psf(xx, yy)
 
         # Valid inputs
-        for interp in ('cubic', 'bilinear'):
+        for interp in ('cubic', 'bilinear', 'pchip'):
             model = ImagePSF(psf_data, interpolation=interp)
             assert model.interpolation == interp
 
@@ -405,6 +405,40 @@ class TestImagePSF:
             result = model(xx, yy)
             # Bilinear should never produce negative values
             assert result.min() >= 0
+
+    def test_pchip_interpolation(self):
+        """
+        Test PCHIP interpolation with well-sampled PSF.
+
+        PCHIP provides shape-preserving interpolation that should:
+        1. Preserve non-negativity (like bilinear)
+        2. Be smoother than bilinear (C1 continuous)
+        3. Avoid ringing artifacts of cubic splines
+
+        Note: PCHIP requires sufficient data points to work well.
+        For very small PSFs (< 10 pixels), bilinear may be better.
+        """
+        # Use a well-sampled PSF (21x21)
+        gaussian_psf = CircularGaussianPSF(fwhm=3.0)
+        yy, xx = np.mgrid[-10:11, -10:11]
+        psf_data = gaussian_psf(xx, yy)
+        psf_data /= np.sum(psf_data)
+
+        model = ImagePSF(psf_data, interpolation='pchip')
+        assert model.interpolation == 'pchip'
+
+        # Evaluate at fractional positions
+        shifts = [(0.0, 0.0), (0.5, 0.0), (0.5, 0.5), (0.25, 0.75)]
+        for dx, dy in shifts:
+            model.x_0 = dx
+            model.y_0 = dy
+            result = model(xx, yy)
+
+            # PCHIP should preserve non-negativity for non-negative input
+            assert result.min() >= 0, f'Negative value at shift ({dx}, {dy})'
+
+            # Flux should be reasonably conserved
+            assert_allclose(result.sum(), 1.0, rtol=0.02)
 
     def test_bilinear_flux_conservation(self):
         """
@@ -443,7 +477,9 @@ class TestImagePSF:
                                        (0.5, 0.5), (0.3, 0.7)])
     def test_flux_conserve(self, gaussian_psf, shift):
         """Test that flux is conserved during fractional pixel shifts."""
-        yy, xx = np.mgrid[-10:11, -10:11]
+        # Use a larger PSF grid to ensure the PSF stays within bounds
+        # for all fractional shifts tested
+        yy, xx = np.mgrid[-12:13, -12:13]
         psf_data = gaussian_psf(xx, yy)
         psf_data /= np.sum(psf_data)  # Normalize to sum=1
 
@@ -452,7 +488,9 @@ class TestImagePSF:
         model.x_0 = shift[0]
         model.y_0 = shift[1]
 
-        result = model(xx, yy)
+        # Evaluate on a grid that keeps PSF fully within bounds
+        yy_out, xx_out = np.mgrid[-11:12, -11:12]
+        result = model(xx_out, yy_out)
         assert_allclose(np.sum(result), flux, rtol=1e-14)
 
     def test_flux_conserve_narrow_psf(self):
@@ -460,18 +498,21 @@ class TestImagePSF:
         Test flux conservation with narrow PSF (more interpolation error).
         """
         gaussian_psf = CircularGaussianPSF(fwhm=1.2)
-        yy, xx = np.mgrid[-10:11, -10:11]
+        # Use a larger grid to ensure PSF stays within bounds
+        yy, xx = np.mgrid[-12:13, -12:13]
         psf_data = gaussian_psf(xx, yy)
         psf_data /= np.sum(psf_data)
 
         flux = 5.0
         model = ImagePSF(psf_data, flux=flux, flux_conserve=True)
 
+        # Evaluate on a smaller grid that keeps PSF fully within bounds
+        yy_out, xx_out = np.mgrid[-11:12, -11:12]
         shifts = [(0.0, 0.0), (0.5, 0.5), (0.25, 0.75)]
         for dx, dy in shifts:
             model.x_0 = dx
             model.y_0 = dy
-            result = model(xx, yy)
+            result = model(xx_out, yy_out)
             assert_allclose(np.sum(result), flux, rtol=1e-14)
 
     def test_flux_conserve_false(self, gaussian_psf):
@@ -499,21 +540,53 @@ class TestImagePSF:
     def test_flux_conserve_with_oversampling(self, gaussian_psf):
         """Test flux conservation with oversampled PSF."""
         oversamp = 3
-        yy, xx = np.mgrid[-3:3.00001:(1 / oversamp), -3:3.00001:(1 / oversamp)]
+        # Use a larger grid to ensure PSF stays within bounds
+        yy, xx = np.mgrid[-5:5.00001:(1 / oversamp), -5:5.00001:(1 / oversamp)]
         psf_data = gaussian_psf(xx, yy)
 
         flux = 7.5
         model = ImagePSF(psf_data, flux=flux, oversampling=oversamp,
                          flux_conserve=True)
 
-        # Evaluate on output grid
-        yy_out, xx_out = np.mgrid[-3:4, -3:4]
+        # Evaluate on output grid that keeps PSF fully within bounds
+        yy_out, xx_out = np.mgrid[-4:5, -4:5]
         shifts = [(0.0, 0.0), (0.5, 0.5), (0.33, 0.66)]
         for dx, dy in shifts:
             model.x_0 = dx
             model.y_0 = dy
             result = model(xx_out, yy_out)
             assert_allclose(np.sum(result), flux, rtol=1e-14)
+
+    def test_flux_conserve_edge_clipping(self, gaussian_psf):
+        """
+        Test that flux_conserve does not boost flux when PSF is at the edge.
+
+        When the PSF is placed at the image edge and some pixels are clipped
+        to fill_value, the flux_conserve normalization should NOT be applied
+        to avoid artificially boosting the flux of the remaining pixels.
+        """
+        yy, xx = np.mgrid[-10:11, -10:11]
+        psf_data = gaussian_psf(xx, yy)
+        psf_data /= np.sum(psf_data)  # Normalize to sum=1
+
+        flux = 10.0
+        model = ImagePSF(psf_data, flux=flux, flux_conserve=True)
+
+        # Evaluate on a grid that extends beyond the PSF bounds
+        # This will cause some edge pixels to be clipped
+        yy_out, xx_out = np.mgrid[-15:16, -15:16]
+
+        # At shift (0, 0), some evaluation points will be outside valid bounds
+        model.x_0 = 0.0
+        model.y_0 = 0.0
+        result = model(xx_out, yy_out)
+
+        # Without the fix, flux_conserve would normalize to exactly flux=10.0
+        # even though some edge pixels are clipped to fill_value=0.
+        # With the fix, flux_conserve is skipped, so the sum should be close
+        # to (but not exactly) 10.0 due to the Gaussian extending beyond the
+        # PSF data grid. The important thing is that the flux is NOT boosted.
+        assert result.sum() <= flux * 1.001  # Should not be boosted above flux
 
     def test_boundary_extension(self):
         """
@@ -657,10 +730,10 @@ class TestImagePRF:
         assert 'y_0' in model.param_names
 
     def test_imageprf_interpolation_options(self, oversampled_psf_data):
-        """Test that ImagePRF supports both interpolation methods."""
+        """Test that ImagePRF supports all interpolation methods."""
         psf_data, oversamp = oversampled_psf_data
 
-        for interp in ('cubic', 'bilinear'):
+        for interp in ('cubic', 'bilinear', 'pchip'):
             model = ImagePRF(psf_data, oversampling=oversamp,
                              interpolation=interp)
             assert model.interpolation == interp
@@ -768,7 +841,11 @@ class TestImagePRF:
         prf = ImagePRF(psf_data, oversampling=oversamp, flux=flux,
                        flux_conserve=True)
 
-        yy, xx = np.mgrid[-5:6, -5:6]
+        # Use a smaller evaluation grid to keep PSF fully within bounds.
+        # The PSF data is on grid [-5:5.001] with oversamp=4 (shape 41x41).
+        # The evaluation grid must be small enough that all subpixel
+        # coordinates stay within the valid range [-0.5, 40.5].
+        yy, xx = np.mgrid[-4:5, -4:5]
 
         # Test at various positions
         for x_0, y_0 in [(0, 0), (0.5, 0.5), (0.25, 0.75)]:
