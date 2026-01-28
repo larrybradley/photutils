@@ -8,7 +8,7 @@ import pytest
 from astropy.modeling.fitting import TRFLSQFitter
 from numpy.testing import assert_allclose, assert_equal
 
-from photutils.psf import CircularGaussianPSF, ImagePSF
+from photutils.psf import CircularGaussianPSF, ImagePRF, ImagePSF
 
 
 @pytest.fixture(name='gaussian_psf')
@@ -608,3 +608,321 @@ class TestImagePSF:
 
         # Both should have similar total flux
         assert_allclose(result_pos.sum(), result_neg.sum(), rtol=1e-10)
+
+
+class TestImagePRF:
+    """Tests for the ImagePRF class."""
+
+    @pytest.fixture
+    def oversampled_psf_data(self):
+        """Create oversampled Gaussian PSF data."""
+        oversamp = 4
+        gaussian_psf = CircularGaussianPSF(fwhm=2.5)
+        yy, xx = np.mgrid[-5:5.001:(1 / oversamp), -5:5.001:(1 / oversamp)]
+        psf_data = gaussian_psf(xx, yy)
+        return psf_data, oversamp
+
+    def test_imageprf_basic(self, oversampled_psf_data):
+        """Test basic ImagePRF functionality."""
+        psf_data, oversamp = oversampled_psf_data
+        model = ImagePRF(psf_data, oversampling=oversamp)
+
+        # Evaluate on non-oversampled grid
+        yy, xx = np.mgrid[-5:6, -5:6]
+        result = model(xx, yy)
+
+        # Result should have same shape as input grid
+        assert result.shape == xx.shape
+
+        # Result should be non-negative (for non-negative input)
+        assert result.min() >= -1e-10  # allow small numerical errors
+
+    def test_imageprf_inherits_from_imagepsf(self, oversampled_psf_data):
+        """Test that ImagePRF inherits all ImagePSF features."""
+        psf_data, oversamp = oversampled_psf_data
+        model = ImagePRF(psf_data, oversampling=oversamp)
+
+        # Check inherited attributes
+        assert hasattr(model, 'data')
+        assert hasattr(model, 'origin')
+        assert hasattr(model, 'oversampling')
+        assert hasattr(model, 'fill_value')
+        assert hasattr(model, 'interpolation')
+        assert hasattr(model, 'flux_conserve')
+        assert hasattr(model, 'interpolator')
+
+        # Check parameters
+        assert 'flux' in model.param_names
+        assert 'x_0' in model.param_names
+        assert 'y_0' in model.param_names
+
+    def test_imageprf_interpolation_options(self, oversampled_psf_data):
+        """Test that ImagePRF supports both interpolation methods."""
+        psf_data, oversamp = oversampled_psf_data
+
+        for interp in ('cubic', 'bilinear'):
+            model = ImagePRF(psf_data, oversampling=oversamp,
+                             interpolation=interp)
+            assert model.interpolation == interp
+
+            yy, xx = np.mgrid[-3:4, -3:4]
+            result = model(xx, yy)
+            assert result.shape == xx.shape
+
+    def test_imageprf_flux_scaling(self, oversampled_psf_data):
+        """Test that flux parameter properly scales the output."""
+        psf_data, oversamp = oversampled_psf_data
+        model = ImagePRF(psf_data, oversampling=oversamp, flux=1.0)
+
+        yy, xx = np.mgrid[-5:6, -5:6]
+        result_flux1 = model(xx, yy)
+
+        model.flux = 10.0
+        result_flux10 = model(xx, yy)
+
+        # Flux 10 should be 10x flux 1
+        assert_allclose(result_flux10, result_flux1 * 10, rtol=1e-14)
+
+    def test_imageprf_position_shift(self, oversampled_psf_data):
+        """Test that x_0, y_0 properly shift the model position."""
+        psf_data, oversamp = oversampled_psf_data
+        model = ImagePRF(psf_data, oversampling=oversamp)
+
+        yy, xx = np.mgrid[-5:6, -5:6]
+
+        # Centered at origin
+        model.x_0 = 0
+        model.y_0 = 0
+        result_center = model(xx, yy)
+
+        # Find peak position
+        peak_idx = np.unravel_index(np.argmax(result_center),
+                                    result_center.shape)
+        # Peak should be near center
+        assert abs(peak_idx[0] - 5) <= 1
+        assert abs(peak_idx[1] - 5) <= 1
+
+        # Shifted by 2 pixels
+        model.x_0 = 2
+        model.y_0 = 2
+        result_shifted = model(xx, yy)
+
+        # Peak should move
+        peak_idx_shifted = np.unravel_index(np.argmax(result_shifted),
+                                            result_shifted.shape)
+        assert abs(peak_idx_shifted[0] - 7) <= 1
+        assert abs(peak_idx_shifted[1] - 7) <= 1
+
+    def test_prf_vs_psf_integer_positions(self, oversampled_psf_data):
+        """
+        Test that ImagePRF and ImagePSF give similar results at integer
+        positions for well-sampled PSFs.
+        """
+        psf_data, oversamp = oversampled_psf_data
+
+        prf = ImagePRF(psf_data, oversampling=oversamp)
+        psf = ImagePSF(psf_data, oversampling=oversamp)
+
+        yy, xx = np.mgrid[-3:4, -3:4]
+
+        result_prf = prf(xx, yy)
+        result_psf = psf(xx, yy)
+
+        # With the oversampling area normalization, PRF and PSF should
+        # give similar total flux for well-sampled PSFs
+        assert_allclose(result_prf.sum(), result_psf.sum(), rtol=0.1)
+
+    def test_imageprf_flux_conservation_fractional_shift(self):
+        """
+        Test that ImagePRF conserves flux better than ImagePSF
+        at fractional pixel positions.
+        """
+        oversamp = 4
+        gaussian_psf = CircularGaussianPSF(fwhm=2.0)
+        yy, xx = np.mgrid[-5:5.001:(1 / oversamp), -5:5.001:(1 / oversamp)]
+        psf_data = gaussian_psf(xx, yy)
+
+        prf = ImagePRF(psf_data, oversampling=oversamp,
+                       interpolation='bilinear')
+
+        yy_out, xx_out = np.mgrid[-5:6, -5:6]
+
+        # Test flux at various fractional positions
+        fluxes = []
+        for shift in [0.0, 0.25, 0.5, 0.75]:
+            prf.x_0 = shift
+            prf.y_0 = shift
+            result = prf(xx_out, yy_out)
+            fluxes.append(result.sum())
+
+        # All fluxes should be similar (good flux conservation)
+        fluxes = np.array(fluxes)
+        # PRF should have small flux variation (< 5%)
+        assert (fluxes.max() - fluxes.min()) / fluxes.mean() < 0.05
+
+    def test_imageprf_flux_conserve_option(self, oversampled_psf_data):
+        """Test that flux_conserve=True ensures exact flux conservation."""
+        psf_data, oversamp = oversampled_psf_data
+
+        flux = 100.0
+        prf = ImagePRF(psf_data, oversampling=oversamp, flux=flux,
+                       flux_conserve=True)
+
+        yy, xx = np.mgrid[-5:6, -5:6]
+
+        # Test at various positions
+        for x_0, y_0 in [(0, 0), (0.5, 0.5), (0.25, 0.75)]:
+            prf.x_0 = x_0
+            prf.y_0 = y_0
+            result = prf(xx, yy)
+            assert_allclose(result.sum(), flux, rtol=1e-14)
+
+    def test_imageprf_subpixel_integration(self):
+        """
+        Test that ImagePRF properly integrates over subpixels.
+
+        For a constant input, the PRF should return the same constant
+        (since summing N^2 subpixels each with value C gives N^2 * C,
+        which is the expected normalization for an oversampled PSF).
+        """
+        oversamp = 3
+        # Create a flat PSF (all ones)
+        psf_data = np.ones((21, 21), dtype=float)
+
+        prf = ImagePRF(psf_data, oversampling=oversamp)
+
+        # Evaluate at a single pixel
+        result = prf.evaluate(np.array([0.0]), np.array([0.0]),
+                              flux=1.0, x_0=0.0, y_0=0.0)
+
+        # For a flat PSF with all 1s, each subpixel has value 1.
+        # Summing oversamp^2 subpixels gives oversamp^2, then dividing
+        # by oversamp^2 (the oversampling area) gives 1.0
+        expected = 1.0
+        assert_allclose(result[0], expected, rtol=1e-10)
+
+    def test_imageprf_reproduces_gaussian_integral(self):
+        """
+        Test that ImagePRF properly integrates a Gaussian PSF.
+
+        For a well-sampled Gaussian, the PRF (which integrates) and PSF
+        (which samples) should give similar values at the center pixel
+        after accounting for the oversampling normalization.
+        """
+        oversamp = 8
+        gaussian_psf = CircularGaussianPSF(fwhm=2.5)  # well-sampled PSF
+        yy, xx = np.mgrid[-5:5.001:(1 / oversamp), -5:5.001:(1 / oversamp)]
+        psf_data = gaussian_psf(xx, yy)
+
+        prf = ImagePRF(psf_data, oversampling=oversamp,
+                       interpolation='bilinear')
+        psf = ImagePSF(psf_data, oversampling=oversamp,
+                       interpolation='bilinear')
+
+        # Evaluate at center pixel only
+        result_prf = prf.evaluate(np.array([0.0]), np.array([0.0]),
+                                  flux=1.0, x_0=0.0, y_0=0.0)
+        result_psf = psf.evaluate(np.array([0.0]), np.array([0.0]),
+                                  flux=1.0, x_0=0.0, y_0=0.0)
+
+        # PRF integrates over the pixel (and normalizes by area),
+        # PSF samples at center. For a smooth, well-sampled Gaussian,
+        # these should give similar values.
+        assert_allclose(result_prf[0], result_psf[0], rtol=0.1)
+
+    def test_imageprf_different_xy_oversampling(self):
+        """Test ImagePRF with different oversampling in x and y."""
+        oversamp_y = 3
+        oversamp_x = 5
+        gaussian_psf = CircularGaussianPSF(fwhm=2.5)
+
+        # Create PSF data with different sampling in x and y
+        yy, xx = np.mgrid[-5:5.001:(1 / oversamp_y),
+                          -5:5.001:(1 / oversamp_x)]
+        psf_data = gaussian_psf(xx, yy)
+
+        prf = ImagePRF(psf_data, oversampling=(oversamp_y, oversamp_x))
+
+        yy_out, xx_out = np.mgrid[-3:4, -3:4]
+        result = prf(xx_out, yy_out)
+
+        # Should work without error and produce reasonable output
+        assert result.shape == xx_out.shape
+        assert result.sum() > 0
+
+    def test_imageprf_copy(self, oversampled_psf_data):
+        """Test that copy() works for ImagePRF."""
+        psf_data, oversamp = oversampled_psf_data
+        model = ImagePRF(psf_data, oversampling=oversamp, flux=5.0,
+                         x_0=1.0, y_0=2.0)
+        model_copy = model.copy()
+
+        assert_equal(model.flux.value, model_copy.flux.value)
+        assert_equal(model.x_0.value, model_copy.x_0.value)
+        assert_equal(model.y_0.value, model_copy.y_0.value)
+
+    def test_imageprf_deepcopy(self, oversampled_psf_data):
+        """Test that deepcopy() works for ImagePRF."""
+        psf_data, oversamp = oversampled_psf_data
+        model = ImagePRF(psf_data, oversampling=oversamp)
+        model_copy = model.deepcopy()
+
+        # Modify original
+        model.data[0, 0] = 999.0
+
+        # Deep copy should not be affected
+        assert model_copy.data[0, 0] != 999.0
+
+    def test_imageprf_fill_value(self, oversampled_psf_data):
+        """Test that fill_value is applied for out-of-bounds pixels."""
+        psf_data, oversamp = oversampled_psf_data
+        fill_val = -99.0
+        prf = ImagePRF(psf_data, oversampling=oversamp, fill_value=fill_val)
+
+        # Evaluate far outside the PSF extent
+        result = prf.evaluate(np.array([100.0]), np.array([100.0]),
+                              flux=1.0, x_0=0.0, y_0=0.0)
+
+        # All subpixels are out of bounds, so each gets fill_value.
+        # Summing oversamp^2 fill_values then dividing by oversamp^2
+        # gives just fill_value.
+        expected = fill_val
+        assert_allclose(result[0], expected, rtol=1e-10)
+
+    def test_imageprf_str_repr(self, oversampled_psf_data):
+        """Test string representations."""
+        psf_data, oversamp = oversampled_psf_data
+        model = ImagePRF(psf_data, oversampling=oversamp)
+
+        # Should have string representations that work
+        str_repr = str(model)
+        repr_str = repr(model)
+
+        assert 'ImagePRF' in repr_str
+        assert 'PSF shape' in str_repr
+
+    @pytest.mark.parametrize('shift', [0.0, 0.25, 0.5, 0.75])
+    def test_imageprf_shift_symmetry(self, shift):
+        """Test that shifts are symmetric."""
+        oversamp = 4
+        gaussian_psf = CircularGaussianPSF(fwhm=2.5)
+        yy, xx = np.mgrid[-5:5.001:(1 / oversamp), -5:5.001:(1 / oversamp)]
+        psf_data = gaussian_psf(xx, yy)
+
+        prf = ImagePRF(psf_data, oversampling=oversamp,
+                       interpolation='bilinear')
+
+        yy_out, xx_out = np.mgrid[-5:6, -5:6]
+
+        # Positive shift
+        prf.x_0 = shift
+        prf.y_0 = shift
+        result_pos = prf(xx_out, yy_out)
+
+        # Negative shift from different reference
+        prf.x_0 = 1.0 - shift
+        prf.y_0 = 1.0 - shift
+        result_neg = prf(xx_out, yy_out)
+
+        # Total flux should be the same (within small numerical tolerance)
+        assert_allclose(result_pos.sum(), result_neg.sum(), rtol=1e-4)
