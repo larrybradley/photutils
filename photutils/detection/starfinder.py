@@ -176,7 +176,8 @@ class StarFinder(StarFinderBase):
 
         return _StarFinderCatalog(data, xypos, self.kernel,
                                   n_brightest=self.n_brightest,
-                                  peak_max=self.peak_max)
+                                  peak_max=self.peak_max,
+                                  mask=mask)
 
     @deprecated_positional_kwargs(since='3.0', until='4.0')
     def find_stars(self, data, mask=None):
@@ -264,10 +265,11 @@ class _StarFinderCatalog(StarFinderCatalogBase):
     """
 
     def __init__(self, data, xypos, kernel, *, n_brightest=None,
-                 peak_max=None):
+                 peak_max=None, mask=None):
         super().__init__(data, xypos, kernel,
                          n_brightest=n_brightest,
-                         peak_max=peak_max)
+                         peak_max=peak_max,
+                         mask=mask)
         self.default_columns = ('id', 'x_centroid', 'y_centroid', 'fwhm',
                                 'roundness', 'orientation', 'max_value',
                                 'flux', 'mag')
@@ -277,7 +279,7 @@ class _StarFinderCatalog(StarFinderCatalogBase):
         Return a tuple of attribute names to copy during slicing.
         """
         return ('data', 'unit', 'kernel', 'n_brightest', 'peak_max',
-                'cutout_shape', 'default_columns')
+                'cutout_shape', 'default_columns', 'mask')
 
     @cached_property
     def cutout_data(self):
@@ -285,6 +287,8 @@ class _StarFinderCatalog(StarFinderCatalogBase):
         The cutout data arrays with negative values set to zero.
         """
         cutouts = self.make_cutouts(self.data)
+        if self.mask_cutouts is not None:
+            cutouts[self.mask_cutouts] = 0.0
         cutouts[cutouts < 0] = 0.0  # exclude negative pixels
         return cutouts
 
