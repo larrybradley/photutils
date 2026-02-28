@@ -234,13 +234,20 @@ class StarFinderCatalogBase(metaclass=abc.ABCMeta):
         `~astropy.units.Quantity` array, then ``peak_max`` must have the
         same units. If ``peak_max`` is set to `None`, then no peak pixel
         value filtering will be performed.
+
+    mask : 2D bool `~numpy.ndarray` or `None`, optional
+        A boolean mask with the same shape as ``data``, where a `True`
+        value indicates the corresponding element of ``data`` is
+        masked. Masked pixels are set to zero in the cutout arrays
+        used for property calculations. If `None`, no masking is
+        applied.
     """
 
     @deprecated_renamed_argument('brightest', 'n_brightest', '3.0',
                                  until='4.0')
     @deprecated_renamed_argument('peakmax', 'peak_max', '3.0', until='4.0')
     def __init__(self, data, xypos, kernel, *, n_brightest=None,
-                 peak_max=None):
+                 peak_max=None, mask=None):
         # Validate the units
         check_units((data, peak_max), ('data', 'peak_max'))
 
@@ -253,6 +260,7 @@ class StarFinderCatalogBase(metaclass=abc.ABCMeta):
         self.xypos = np.atleast_2d(xypos)
         self.n_brightest = n_brightest
         self.peak_max = peak_max
+        self.mask = mask
         self.default_columns = ()
 
         self.id = np.arange(len(self)) + 1
@@ -307,8 +315,10 @@ class StarFinderCatalogBase(metaclass=abc.ABCMeta):
             value = self.__dict__[key]
 
             # Do not insert lazy attributes that are always scalar (e.g.,
-            # isscalar), i.e., not an array/list for each source
-            if np.isscalar(value):
+            # isscalar), i.e., not an array/list for each source.
+            # Also skip None values (e.g., mask_cutouts when no mask
+            # is provided).
+            if value is None or np.isscalar(value):
                 continue
 
             newcls.__dict__[key] = value[index]
@@ -322,7 +332,7 @@ class StarFinderCatalogBase(metaclass=abc.ABCMeta):
         This method should be overridden in subclasses.
         """
         return ('data', 'unit', 'kernel', 'n_brightest', 'peak_max',
-                'cutout_shape', 'default_columns')
+                'cutout_shape', 'default_columns', 'mask')
 
     @property
     def _cached_properties(self):
@@ -395,15 +405,34 @@ class StarFinderCatalogBase(metaclass=abc.ABCMeta):
         return cutouts
 
     @cached_property
+    def mask_cutouts(self):
+        """
+        3D bool array of mask cutouts.
+
+        `True` indicates a masked pixel. Pixels that fall outside
+        the image boundary are also marked as masked. Returns `None`
+        if no mask was provided.
+        """
+        if self.mask is None:
+            return None
+        mask_float = self.mask.astype(np.float64)
+        cutouts, _ = _make_cutouts(mask_float, self.xypos[:, 0],
+                                   self.xypos[:, 1], self.cutout_shape,
+                                   fill_value=1.0)
+        return cutouts > 0.5
+
+    @cached_property
     def cutout_data(self):
         """
         The cutout data arrays.
 
-        Subclasses may override this property to customize the cutouts
-        used for moment-based photometry calculations (e.g., zeroing
-        negative pixels or subtracting a local sky background).
+        Masked pixels (from the user-provided ``mask``) are set
+        to zero.
         """
-        return self.make_cutouts(self.data)
+        cutouts = self.make_cutouts(self.data)
+        if self.mask_cutouts is not None:
+            cutouts[self.mask_cutouts] = 0.0
+        return cutouts
 
     @cached_property
     def moments(self):

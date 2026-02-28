@@ -386,3 +386,36 @@ class TestStarFinder:
         with pytest.warns(AstropyDeprecationWarning, match=match):
             finder = StarFinder(threshold=5.0, kernel=kernel, peakmax=100.0)
         assert finder.peak_max == 100.0
+
+    def test_mask_applied_to_cutouts(self, kernel):
+        """
+        Regression test: mask should be applied to cutout property
+        calculations, not just the source-finding step.
+        """
+        from photutils.detection.starfinder import _StarFinderCatalog
+
+        # Create a small image with one source
+        data = np.zeros((21, 21))
+        data[10, 10] = 100.0
+        data[10, 9] = 50.0
+        data[10, 11] = 50.0
+        data[9, 10] = 50.0
+        data[11, 10] = 50.0
+
+        # Set a pixel to NaN and mask it
+        data_nan = data.copy()
+        data_nan[9, 9] = np.nan
+        mask = np.zeros_like(data, dtype=bool)
+        mask[9, 9] = True
+
+        xypos = np.array([[10, 10]])
+
+        # Without mask: NaN in the cutout
+        cat_nomask = _StarFinderCatalog(data_nan, xypos, kernel)
+        assert not np.all(np.isfinite(cat_nomask.cutout_data))
+
+        # With mask: NaN pixel is zeroed in the cutout
+        cat = _StarFinderCatalog(data_nan, xypos, kernel, mask=mask)
+        assert cat.mask is not None
+        assert cat.mask_cutouts is not None
+        assert np.all(np.isfinite(cat.cutout_data))

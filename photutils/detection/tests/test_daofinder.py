@@ -621,3 +621,39 @@ class TestDAOStarFinder:
         with pytest.warns(AstropyDeprecationWarning, match=match):
             finder = DAOStarFinder(threshold=5.0, fwhm=3.0, peakmax=100.0)
         assert finder.peak_max == 100.0
+
+    def test_mask_applied_to_cutouts(self):
+        """
+        Regression test: mask should be applied to cutout property
+        calculations, not just the source-finding step.
+        """
+        # Create a simple image with one source
+        data = np.zeros((21, 21))
+        data[10, 10] = 100.0
+        data[10, 9] = 50.0
+        data[10, 11] = 50.0
+        data[9, 10] = 50.0
+        data[11, 10] = 50.0
+
+        # Set a pixel to NaN and mask it
+        data_nan = data.copy()
+        data_nan[9, 9] = np.nan
+        mask = np.zeros_like(data, dtype=bool)
+        mask[9, 9] = True
+
+        # Use xycoords to bypass convolution-based source finding
+        xycoords = np.array([[10, 10]])
+        finder = DAOStarFinder(threshold=0.1, fwhm=3.0,
+                               xycoords=xycoords,
+                               sharpness_range=(-np.inf, np.inf),
+                               roundness_range=(-np.inf, np.inf))
+
+        # Without mask the NaN propagates into cutout_data
+        cat_nomask = finder._get_raw_catalog(data_nan)
+        assert not np.all(np.isfinite(cat_nomask.cutout_data))
+
+        # With mask the NaN pixel is zeroed in cutout_data
+        cat = finder._get_raw_catalog(data_nan, mask=mask)
+        assert cat.mask is not None
+        assert cat.mask_cutouts is not None
+        assert np.all(np.isfinite(cat.cutout_data))
