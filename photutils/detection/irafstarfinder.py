@@ -323,7 +323,8 @@ class IRAFStarFinder(StarFinderBase):
                                       sharpness_range=self.sharpness_range,
                                       roundness_range=self.roundness_range,
                                       n_brightest=self.n_brightest,
-                                      peak_max=self.peak_max)
+                                      peak_max=self.peak_max,
+                                      mask=mask)
 
     @deprecated_positional_kwargs(since='3.0', until='4.0')
     def find_stars(self, data, mask=None):
@@ -432,7 +433,7 @@ class _IRAFStarFinderCatalog(StarFinderCatalogBase):
 
     def __init__(self, data, convolved_data, xypos, kernel, *,
                  sharpness_range=(0.5, 2.0), roundness_range=(0.0, 0.2),
-                 n_brightest=None, peak_max=None):
+                 n_brightest=None, peak_max=None, mask=None):
 
         # Validate the units, but do not strip them
         inputs = (data, convolved_data, peak_max)
@@ -441,7 +442,8 @@ class _IRAFStarFinderCatalog(StarFinderCatalogBase):
 
         super().__init__(data, xypos, kernel,
                          n_brightest=n_brightest,
-                         peak_max=peak_max)
+                         peak_max=peak_max,
+                         mask=mask)
 
         self.convolved_data = convolved_data
         self.sharpness_range = sharpness_range
@@ -457,7 +459,7 @@ class _IRAFStarFinderCatalog(StarFinderCatalogBase):
         """
         return ('data', 'unit', 'convolved_data', 'kernel',
                 'sharpness_range', 'roundness_range', 'n_brightest',
-                'peak_max', 'cutout_shape', 'default_columns')
+                'peak_max', 'cutout_shape', 'default_columns', 'mask')
 
     @cached_property
     def sky(self):
@@ -469,12 +471,24 @@ class _IRAFStarFinderCatalog(StarFinderCatalogBase):
         within the kernel footprint.
         """
         skymask = ~self.kernel.mask.astype(bool)  # True=sky, False=obj
-        # n_sky is always > 0 because the kernel mask never covers the
-        # entire footprint (the Gaussian kernel is always truncated
-        # within the array, leaving unmasked border pixels).
-        n_sky = np.count_nonzero(skymask)
+        if self.mask_cutouts is not None:
+            # Combine kernel sky mask with user mask: exclude
+            # user-masked pixels from the sky calculation.
+            sky_valid = skymask[np.newaxis, :, :] & ~self.mask_cutouts
+            n_sky = np.count_nonzero(sky_valid, axis=(1, 2))
+        else:
+            sky_valid = skymask
+            # n_sky is always > 0 because the kernel mask never covers
+            # the entire footprint (the Gaussian kernel is always
+            # truncated within the array, leaving unmasked border
+            # pixels).
+            n_sky = np.count_nonzero(skymask)
+
         axis = (1, 2)
-        sky = np.sum(self.cutout_data_nosub * skymask, axis=axis) / n_sky
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', RuntimeWarning)
+            sky = (np.sum(self.cutout_data_nosub * sky_valid, axis=axis)
+                   / n_sky)
 
         if self.unit is not None:
             sky <<= self.unit
@@ -486,7 +500,10 @@ class _IRAFStarFinderCatalog(StarFinderCatalogBase):
         """
         The cutout data without sky subtraction or masking.
         """
-        return self.make_cutouts(self.data)
+        cutouts = self.make_cutouts(self.data)
+        if self.mask_cutouts is not None:
+            cutouts[self.mask_cutouts] = 0.0
+        return cutouts
 
     @cached_property
     def cutout_data(self):
@@ -497,6 +514,8 @@ class _IRAFStarFinderCatalog(StarFinderCatalogBase):
         # safe.
         data = ((self.cutout_data_nosub - self.sky[:, np.newaxis, np.newaxis])
                 * self.kernel.mask)
+        if self.mask_cutouts is not None:
+            data[self.mask_cutouts] = 0.0
         # IRAF starfind discards negative pixels
         data[data < 0] = 0.0
         return data
