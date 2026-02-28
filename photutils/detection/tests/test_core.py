@@ -252,7 +252,7 @@ class TestStarFinderCatalogBase:
         """
         cat = make_catalog()
         expected = ('data', 'unit', 'kernel', 'n_brightest', 'peak_max',
-                    'cutout_shape', 'default_columns')
+                    'cutout_shape', 'default_columns', 'mask')
         assert cat._get_init_attributes() == expected
 
     def test_cached_properties_class_attribute(self, make_catalog):
