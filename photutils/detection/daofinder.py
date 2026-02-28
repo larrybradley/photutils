@@ -407,7 +407,8 @@ class DAOStarFinder(StarFinderBase):
                                      roundness_range=self.roundness_range,
                                      n_brightest=self.n_brightest,
                                      peak_max=self.peak_max,
-                                     scale_threshold=self.scale_threshold)
+                                     scale_threshold=self.scale_threshold,
+                                     mask=mask)
 
     @deprecated_positional_kwargs(since='3.0', until='4.0')
     def find_stars(self, data, mask=None):
@@ -537,7 +538,8 @@ class _DAOStarFinderCatalog(StarFinderCatalogBase):
 
     def __init__(self, data, convolved_data, xypos, threshold, kernel, *,
                  sharpness_range=(0.2, 1.0), roundness_range=(-1.0, 1.0),
-                 n_brightest=None, peak_max=None, scale_threshold=True):
+                 n_brightest=None, peak_max=None, scale_threshold=True,
+                 mask=None):
 
         # Validate the units, but do not strip them
         inputs = (data, convolved_data, threshold, peak_max)
@@ -546,7 +548,8 @@ class _DAOStarFinderCatalog(StarFinderCatalogBase):
 
         super().__init__(data, xypos, kernel,
                          n_brightest=n_brightest,
-                         peak_max=peak_max)
+                         peak_max=peak_max,
+                         mask=mask)
 
         self.convolved_data = convolved_data
         self.threshold = threshold
@@ -569,7 +572,7 @@ class _DAOStarFinderCatalog(StarFinderCatalogBase):
         return ('data', 'unit', 'convolved_data', 'kernel', 'threshold',
                 'sharpness_range', 'roundness_range', 'n_brightest',
                 'peak_max', 'threshold_eff', 'cutout_shape',
-                'cutout_center', 'default_columns')
+                'cutout_center', 'default_columns', 'mask')
 
     @cached_property
     def cutout_convdata(self):
@@ -577,7 +580,10 @@ class _DAOStarFinderCatalog(StarFinderCatalogBase):
         The cutout of the convolved data centered on the source
         position.
         """
-        return self.make_cutouts(self.convolved_data)
+        cutouts = self.make_cutouts(self.convolved_data)
+        if self.mask_cutouts is not None:
+            cutouts[self.mask_cutouts] = 0.0
+        return cutouts
 
     @cached_property
     def peak(self):
