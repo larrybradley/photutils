@@ -131,6 +131,15 @@ class StarFinderBase(metaclass=abc.ABCMeta):
                 footprint = kernel.mask.astype(bool)
             find_peaks_kwargs['footprint'] = footprint
         else:
+            # Use the kernel shape as box_size for the fast separable
+            # maximum_filter path (local-max detection at the PSF
+            # scale), then enforce circular minimum separation via
+            # KD-tree post-filtering.
+            if isinstance(kernel, np.ndarray):
+                box_size = kernel.shape
+            else:
+                box_size = kernel.data.shape
+            find_peaks_kwargs['box_size'] = box_size
             find_peaks_kwargs['min_separation'] = min_separation
 
         # Define the border exclusion region
