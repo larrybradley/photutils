@@ -568,3 +568,47 @@ class TestIRAFStarFinder:
             finder = IRAFStarFinder(threshold=5.0, fwhm=3.0,
                                     minsep_fwhm=2.5, min_separation=7.0)
         assert finder.min_separation == 7.0
+
+    def test_mask_applied_to_properties(self):
+        """
+        Regression test: mask should be applied to cutout property
+        calculations, not just the source-finding step.
+        """
+        # Create a simple image with one source
+        size = 41
+        y, x = np.mgrid[:size, :size]
+        fwhm = 3.0
+        sigma = fwhm / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+        gauss = np.exp(-((x - 20)**2 + (y - 20)**2) / (2 * sigma**2))
+        data = 100.0 * gauss
+
+        # Add NaN near the source (within the cutout range)
+        data_nan = data.copy()
+        data_nan[18, :] = np.nan
+        mask = np.zeros(data_nan.shape, dtype=bool)
+        mask[18, :] = True
+
+        # Use xycoords to bypass convolution-based source finding;
+        # disable sharpness/roundness bounds so only finiteness matters.
+        xycoords = np.array([[20, 20]])
+        finder = IRAFStarFinder(threshold=0.1, fwhm=fwhm,
+                                xycoords=xycoords,
+                                sharpness_range=(-np.inf, np.inf),
+                                roundness_range=(-np.inf, np.inf))
+
+        # Without mask the NaN propagates into moment-based properties
+        # (roundness, fwhm, etc.) and the source is rejected.
+        with pytest.warns(NoDetectionsWarning):
+            tbl_nomask = finder(data_nan)
+        assert tbl_nomask is None
+
+        # With mask the NaN row is zeroed in the cutouts and all
+        # properties are finite, so the source is found.
+        tbl = finder(data_nan, mask=mask)
+        assert tbl is not None
+        assert len(tbl) == 1
+        assert np.all(np.isfinite(tbl['x_centroid']))
+        assert np.all(np.isfinite(tbl['y_centroid']))
+        assert np.all(np.isfinite(tbl['sharpness']))
+        assert np.all(np.isfinite(tbl['roundness']))
+        assert np.all(np.isfinite(tbl['flux']))
