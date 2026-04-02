@@ -131,16 +131,20 @@ class StarFinderBase(metaclass=abc.ABCMeta):
                 footprint = kernel.mask.astype(bool)
             find_peaks_kwargs['footprint'] = footprint
         else:
-            # Use the kernel shape as box_size for the fast separable
-            # maximum_filter path (local-max detection at the PSF
-            # scale), then enforce circular minimum separation via
-            # KD-tree post-filtering.
-            if isinstance(kernel, np.ndarray):
-                box_size = kernel.shape
+            # For small radii, build the circular footprint explicitly
+            # (avoids tie-breaking side effects on plateau-like data in
+            # convolved images). For large radii, use the fast circular
+            # algorithm via min_separation.
+            idx = np.arange(-min_separation, min_separation + 1)
+            fp_size = len(idx)
+            if fp_size <= 9:
+                xx, yy = np.meshgrid(idx, idx)
+                footprint = np.array(
+                    (xx ** 2 + yy ** 2) <= min_separation ** 2,
+                    dtype=int)
+                find_peaks_kwargs['footprint'] = footprint
             else:
-                box_size = kernel.data.shape
-            find_peaks_kwargs['box_size'] = box_size
-            find_peaks_kwargs['min_separation'] = min_separation
+                find_peaks_kwargs['min_separation'] = min_separation
 
         # Define the border exclusion region
         if exclude_border:
