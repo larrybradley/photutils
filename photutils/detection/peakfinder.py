@@ -506,8 +506,22 @@ def find_peaks(data, threshold, *, box_size=3, footprint=None, mask=None,
 
     # Enforce minimum separation between peaks using a KD-tree
     if min_separation is not None and min_separation > 0:
+        print(f'Enforcing minimum separation of {min_separation} pixels between peaks...')
+        print(f'Number of peaks before enforcing separation: {len(x_peaks)}')
+        from astropy.table import Table
+        t = Table()
+        t['x_peak'] = x_peaks
+        t['y_peak'] = y_peaks
+        t['peak_value'] = peak_values
+        t.write('peaks_before_separation.ecsv', overwrite=True)
         x_peaks, y_peaks, peak_values = _ensure_spacing(
             x_peaks, y_peaks, peak_values, min_separation)
+        print(f'Number of peaks after enforcing separation: {len(x_peaks)}')
+        t = Table()
+        t['x_peak'] = x_peaks
+        t['y_peak'] = y_peaks
+        t['peak_value'] = peak_values
+        t.write('peaks_after_separation.ecsv', overwrite=True)
 
     n_x_peaks = len(x_peaks)
     if n_x_peaks == 0:
