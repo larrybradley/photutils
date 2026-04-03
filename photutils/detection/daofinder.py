@@ -333,6 +333,8 @@ class DAOStarFinder(StarFinderBase):
                                       check_normalization=False)
 
         if self.xycoords is None:
+            # _find_stars returns integer peak pixel positions;
+            # subpixel centroids are computed later in the catalog.
             xypos = self._find_stars(convolved_data, self.kernel,
                                      self.threshold_eff, mask=mask,
                                      min_separation=self.min_separation,

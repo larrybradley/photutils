@@ -755,3 +755,31 @@ arrays directly under ``'nonposmin_labels'`` and ``'n_markers_labels'``
 keys in the returned `~photutils.segmentation.SegmentationImage`
 ``info`` dictionary, replacing the nested ``info['warnings']``
 dictionary.
+
+``find_peaks`` ``min_separation`` Enforcement
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The ``min_separation`` keyword of
+:func:`~photutils.detection.find_peaks` now strictly enforces the
+minimum separation between all returned peaks. Previously, the result
+was equivalent to passing a circular ``footprint`` of the given radius
+to :func:`~scipy.ndimage.maximum_filter`, which allowed equal-valued
+peaks on a plateau to survive even when they were closer than
+``min_separation``. Non-integer radii were also affected by an
+asymmetric half-pixel shift, because the circular footprint had an even
+number of elements.
+
+The circular footprint is now always odd-sized, so it is symmetric for
+both integer and non-integer radii, and a greedy filtering step
+(brightest first) removes any remaining peaks that are closer than
+``min_separation`` to a brighter peak. The returned peaks are therefore
+a subset of the peaks previously found, and the star finder classes
+(:class:`~photutils.detection.DAOStarFinder`,
+:class:`~photutils.detection.IRAFStarFinder`, and
+:class:`~photutils.detection.StarFinder`), which use ``min_separation``
+internally, may now return fewer sources.
+
+Note that the star finders apply ``min_separation`` to the integer
+peak-pixel positions. The subpixel centroids computed afterwards may
+shift sources slightly, so the centroid-based separations in the output
+tables can be slightly smaller than ``min_separation``.

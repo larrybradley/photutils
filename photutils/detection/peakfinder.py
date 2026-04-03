@@ -4,6 +4,7 @@ Tools for finding local peaks in an astronomical image.
 """
 
 import inspect
+import math
 import warnings
 
 import numpy as np
@@ -25,10 +26,11 @@ def _ensure_spacing(x_peaks, y_peaks, peak_values, min_separation):
     """
     Enforce minimum Euclidean separation between peaks using a KD-tree.
 
-    Peaks are greedily selected in order of decreasing intensity. If two
-    peaks are within ``min_separation`` of each other, the fainter one
-    is removed. For equal-valued peaks, the one encountered first in the
-    sorted order is kept.
+    Peaks are greedily selected in order of decreasing intensity. If
+    two peaks are separated by strictly less than ``min_separation``,
+    the fainter one is removed. For equal-valued peaks, the one
+    encountered first in the sorted order is kept. Peaks separated by
+    exactly ``min_separation`` are both retained.
 
     Parameters
     ----------
@@ -69,9 +71,16 @@ def _ensure_spacing(x_peaks, y_peaks, peak_values, min_separation):
     for i in range(npeaks):
         if not keep[i]:
             continue
+        # Find neighbors strictly closer than min_separation.
+        # query_ball_point returns distances <= r, so we query with
+        # r=min_separation and then exclude neighbors at exactly
+        # min_separation (those are allowed).
         neighbors = tree.query_ball_point(coords[i], r=min_separation)
         for j in neighbors:
-            if j > i:
+            if j <= i:
+                continue
+            dist = np.sqrt(np.sum((coords[i] - coords[j]) ** 2))
+            if dist < min_separation:
                 keep[j] = False
 
     # Map back to original indices and sort to preserve the input
@@ -179,19 +188,17 @@ def _fast_circular_peaks(data, radius):
         Boolean mask where `True` indicates a local maximum within the
         circular region.
     """
-    # Build the circular footprint
-    idx = np.arange(-radius, radius + 1)
+    # Build the circular footprint with an odd-sized array so that
+    # the center is at integer coordinate 0, ensuring a symmetric
+    # footprint for both integer and non-integer radii.
+    iradius = math.ceil(radius)
+    idx = np.arange(-iradius, iradius + 1)
     radius_sq = radius ** 2
-    footprint_size = len(idx)
+    footprint_size = len(idx)  # always odd
 
     xx, yy = np.meshgrid(idx, idx)
     footprint_bool = (xx ** 2 + yy ** 2) <= radius_sq
 
-    # For even-sized footprints (non-integer radius), scipy's
-    # maximum_filter places the center at index ``footprint_size // 2``
-    # (i.e., the origin is biased by +0.5 pixel). The same convention is
-    # used here so that the fast path is bit-identical to the reference
-    # maximum_filter(footprint=...) result.
     half = footprint_size // 2
 
     # Circumscribed box (size = footprint_size): contains the footprint.
@@ -201,13 +208,8 @@ def _fast_circular_peaks(data, radius):
                                   cval=0.0)
     definite = (data == data_max_box)
 
-    # Inscribed box: fits inside the circle. For even-sized footprints,
-    # the circle center is shifted by 0.5 from the pixel center. We
-    # account for this so the inscribed box stays inside the circle.
-    if footprint_size % 2 == 0:
-        half_side = int(np.floor(radius / np.sqrt(2) - 0.5))
-    else:
-        half_side = int(np.floor(radius / np.sqrt(2)))
+    # Inscribed box: fits inside the circle.
+    half_side = int(np.floor(radius / np.sqrt(2)))
     side_insc = max(2 * half_side + 1, 3)
 
     data_max_insc = maximum_filter(data, size=side_insc, mode='constant',
@@ -249,10 +251,11 @@ def find_peaks(data, threshold, *, box_size=3, footprint=None, mask=None,
     peaks unless there are identical peaks within the region.
 
     When ``min_separation`` is set, a fast algorithm is used that
-    produces results equivalent to using a circular ``footprint`` of the
-    given radius for `~scipy.ndimage.maximum_filter`, but is typically
-    ~10-400x faster (depending on the radius). When set, ``box_size``
-    and ``footprint`` are not used for peak detection.
+    finds local maxima within a circular region of the given radius,
+    followed by a greedy filtering step that ensures no two returned
+    peaks are separated by less than ``min_separation`` pixels. When
+    set, ``box_size`` and ``footprint`` are not used for peak
+    detection.
 
     If ``centroid_func`` is input, then it will be used to calculate a
     centroid within the defined local region centered on each detected
@@ -319,14 +322,15 @@ def find_peaks(data, threshold, *, box_size=3, footprint=None, mask=None,
 
     min_separation : float or None, optional
         The minimum allowed separation (in pixels) between detected
-        peaks, enforced using a circular region of this radius. Each
-        detected peak must be the maximum value (or tied for the
-        maximum) within a circle of this radius. This is equivalent to
-        using a circular ``footprint`` of the given radius but uses a
-        fast algorithm that is typically ~10-400x faster (depending on
-        the radius). When set, ``box_size`` and ``footprint`` are not
-        used for peak detection. If `None` (default), the peak detection
-        uses ``box_size`` or ``footprint`` as specified.
+        peaks. When set, a fast algorithm first identifies local maxima
+        within a circular region of this radius, then a greedy
+        filtering step removes any remaining peaks that are closer
+        than ``min_separation`` to a brighter peak (handling
+        equal-valued plateaus). This is typically ~10-400x faster than
+        using an explicit circular ``footprint`` of the given radius.
+        When set, ``box_size`` and ``footprint`` are not used for peak
+        detection. If `None` (default), the peak detection uses
+        ``box_size`` or ``footprint`` as specified.
 
     centroid_func : callable, optional
         A callable object (e.g., function or class) that is used to
@@ -367,13 +371,16 @@ def find_peaks(data, threshold, *, box_size=3, footprint=None, mask=None,
     of the maximum pixel value within the input ``box_size`` or
     ``footprint`` (i.e., only the peak pixel is identified).
 
-    When ``min_separation`` is given, peaks are detected
-    using a fast algorithm that is mathematically equivalent
-    to a circular ``footprint`` of the given radius for
-    `~scipy.ndimage.maximum_filter`. The algorithm uses two fast O(N)
-    separable box filters (inscribed and circumscribed squares of
-    the circle) to classify most candidates, then verifies only the
-    remaining few against the exact circular region.
+    When ``min_separation`` is given, peaks are detected in two steps.
+    First, a fast algorithm identifies local maxima within a symmetric
+    circular footprint of the given radius, using two fast O(N)
+    separable box filters (inscribed and circumscribed squares of the
+    circle) to classify most candidates and verifying only the remaining
+    few against the exact circular region. Second, a greedy filtering
+    step (brightest first) removes any peaks that are still closer
+    than ``min_separation`` to a brighter peak, which handles
+    equal-valued plateaus that the local-maximum step cannot
+    disambiguate.
 
     A centroiding function can be input via the ``centroid_func``
     keyword to compute centroid coordinates with subpixel precision
@@ -491,13 +498,15 @@ def find_peaks(data, threshold, *, box_size=3, footprint=None, mask=None,
     y_peaks, x_peaks = peak_goodmask.nonzero()
     peak_values = data[y_peaks, x_peaks]
 
-    # Ensure minimum separation between peaks if requested. This is done
-    # after all other filtering steps to minimize the number of peaks
-    # that need to be checked for separation, which is the most
-    # computationally expensive step.
-    # if min_separation is not None and min_separation > 0:
-    #     x_peaks, y_peaks, peak_values = _ensure_spacing(
-    #         x_peaks, y_peaks, peak_values, min_separation)
+    # Ensure minimum separation between peaks if requested. The
+    # _fast_circular_peaks step above rejects peaks that are not
+    # the local maximum within their circular neighborhood, but
+    # equal-valued peaks (plateaus) within min_separation can still
+    # both survive. This greedy step removes the fainter (or later)
+    # peak from any pair that is still too close.
+    if min_separation is not None and min_separation > 0:
+        x_peaks, y_peaks, peak_values = _ensure_spacing(
+            x_peaks, y_peaks, peak_values, min_separation)
 
     if unit is not None:
         peak_values <<= unit

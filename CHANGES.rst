@@ -403,6 +403,20 @@ Bug Fixes
     kernel must contain only finite values and have a positive
     maximum. [#2377]
 
+  - Fixed a bug in ``find_peaks`` where the ``min_separation`` parameter
+    did not enforce the minimum separation for non-integer radius values.
+    The circular footprint used for peak detection had an even number
+    of elements for non-integer radii, causing an asymmetric half-pixel
+    shift that could allow peaks closer than ``min_separation`` to
+    survive. [#xxxx]
+
+  - The ``find_peaks`` ``min_separation`` parameter now strictly
+    enforces the minimum separation between all returned peaks,
+    including equal-valued peaks on plateaus that previously could
+    both survive. A greedy filtering step (brightest first) now
+    removes any peaks that are still closer than ``min_separation``
+    to a brighter peak. [#xxxx]
+
 - ``photutils.isophote``
 
   - Changed ``bool`` to ``bint`` in ``ellipse_model.pyx`` to fix a
