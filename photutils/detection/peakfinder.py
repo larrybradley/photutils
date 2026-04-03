@@ -9,6 +9,7 @@ import warnings
 import numpy as np
 from astropy.table import QTable
 from scipy.ndimage import maximum_filter
+from scipy.spatial import cKDTree
 
 from photutils.utils._deprecation import deprecated_renamed_argument
 from photutils.utils._misc import _get_meta
@@ -18,6 +19,66 @@ from photutils.utils._stats import nanmin
 from photutils.utils.exceptions import NoDetectionsWarning
 
 __all__ = ['find_peaks']
+
+
+def _ensure_spacing(x_peaks, y_peaks, peak_values, min_separation):
+    """
+    Enforce minimum Euclidean separation between peaks using a KD-tree.
+
+    Peaks are greedily selected in order of decreasing intensity. If two
+    peaks are within ``min_separation`` of each other, the fainter one
+    is removed. For equal-valued peaks, the one encountered first in the
+    sorted order is kept.
+
+    Parameters
+    ----------
+    x_peaks : 1D `~numpy.ndarray`
+        The x pixel coordinates of the peaks.
+
+    y_peaks : 1D `~numpy.ndarray`
+        The y pixel coordinates of the peaks.
+
+    peak_values : 1D `~numpy.ndarray` or `~astropy.units.Quantity`
+        The peak values.
+
+    min_separation : float
+        The minimum allowed Euclidean distance (in pixels) between
+        peaks.
+
+    Returns
+    -------
+    x_peaks, y_peaks, peak_values : tuple of `~numpy.ndarray`
+        The filtered arrays with minimum separation enforced, in the
+        same row-major order (ascending y, then x) as the input arrays.
+    """
+    npeaks = len(x_peaks)
+    if npeaks <= 1:
+        return x_peaks, y_peaks, peak_values
+
+    # Sort by descending intensity (stable sort preserves order for ties)
+    values = peak_values
+    if hasattr(peak_values, 'value'):  # handle Quantity
+        values = peak_values.value
+    order = np.argsort(-values, kind='stable')
+
+    coords = np.column_stack([x_peaks[order].astype(float),
+                              y_peaks[order].astype(float)])
+    tree = cKDTree(coords)
+
+    keep = np.ones(npeaks, dtype=bool)
+    for i in range(npeaks):
+        if not keep[i]:
+            continue
+        neighbors = tree.query_ball_point(coords[i], r=min_separation)
+        for j in neighbors:
+            if j > i:
+                keep[j] = False
+
+    # Map back to original indices and sort to preserve the input
+    # row-major order (ascending y, then x) produced by nonzero().
+    orig_idx = np.sort(order[keep])
+
+    return x_peaks[orig_idx], y_peaks[orig_idx], peak_values[orig_idx]
 
 
 def _verify_ring_candidates(data, peak_mask, needs_verify, footprint_bool,
@@ -427,9 +488,16 @@ def find_peaks(data, threshold, *, box_size=3, footprint=None, mask=None,
 
     # Exclude peaks below the threshold
     peak_goodmask = np.logical_and(peak_goodmask, (data > threshold))
-
     y_peaks, x_peaks = peak_goodmask.nonzero()
     peak_values = data[y_peaks, x_peaks]
+
+    # Ensure minimum separation between peaks if requested. This is done
+    # after all other filtering steps to minimize the number of peaks
+    # that need to be checked for separation, which is the most
+    # computationally expensive step.
+    # if min_separation is not None and min_separation > 0:
+    #     x_peaks, y_peaks, peak_values = _ensure_spacing(
+    #         x_peaks, y_peaks, peak_values, min_separation)
 
     if unit is not None:
         peak_values <<= unit
