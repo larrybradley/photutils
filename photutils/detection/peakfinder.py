@@ -470,6 +470,7 @@ def find_peaks(data, threshold, *, box_size=3, footprint=None, mask=None,
         data = np.copy(data)  # do not mutate the input data
         data[mask] = nanmin(data)
 
+    # peak_goodmask: good pixels are True
     if min_separation is not None and min_separation > 0:
         peak_goodmask = _fast_circular_peaks(data, min_separation)
     elif footprint is not None:
@@ -479,7 +480,7 @@ def find_peaks(data, threshold, *, box_size=3, footprint=None, mask=None,
     else:
         data_max = maximum_filter(data, size=box_size, mode='constant',
                                   cval=0.0)
-        peak_goodmask = (data == data_max)  # good pixels are True
+        peak_goodmask = (data == data_max)
 
     # Exclude peaks that are masked
     if mask is not None:
