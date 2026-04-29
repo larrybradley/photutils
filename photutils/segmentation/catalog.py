@@ -20,7 +20,8 @@ from photutils.segmentation._catalog_centroid_refine import _CentroidRefiner
 from photutils.segmentation._catalog_local_bkg import _LocalBackground
 from photutils.segmentation._catalog_photometry import _Photometry
 from photutils.segmentation.core import SegmentationImage
-from photutils.utils._catalog_helpers import as_scalar, get_lazyproperties
+from photutils.utils._catalog_helpers import (as_scalar, get_lazyproperties,
+                                              slice_composition_helper)
 from photutils.utils._deprecation import (_get_future_column_names,
                                           create_empty_deprecated_qtable,
                                           deprecated_getattr,
@@ -617,15 +618,23 @@ class SourceCatalog:
         # Evaluated lazyproperty objects and extra properties
         keys = (set(self.__dict__.keys())
                 & (set(self._lazyproperties) | set(self._custom_properties)))
-        # `_shape` is a `_ShapeProperties` helper that depends on
-        # `moments_central`; let it be lazily rebuilt on the sliced
-        # instance from the (already-sliced) cached moments.
-        keys.discard('_shape')
-        # Composition helpers hold a reference to ``self``; rebuild them
-        # lazily on the sliced instance.
-        keys.discard('_local_bkg')
-        keys.discard('_centroid_refiner')
-        keys.discard('_photometry')
+        # Composition helpers hold a reference back to the parent
+        # catalog (or to a per-source array); they are handled
+        # separately below so that any cached @lazyproperty values
+        # stored on the helper are sliced and preserved on the new
+        # instance (avoiding expensive recomputation on slicing).
+        helper_specs = (
+            ('_shape', _ShapeProperties,
+             lambda: _ShapeProperties(newcls.moments_central)),
+            ('_local_bkg', _LocalBackground,
+             lambda: _LocalBackground(newcls)),
+            ('_centroid_refiner', _CentroidRefiner,
+             lambda: _CentroidRefiner(newcls)),
+            ('_photometry', _Photometry,
+             lambda: _Photometry(newcls)),
+        )
+        for helper_key, _, _ in helper_specs:
+            keys.discard(helper_key)
         for key in keys:
             value = self.__dict__[key]
 
@@ -651,6 +660,19 @@ class SourceCatalog:
                 val = self._index_object_list(value, index)
 
             newcls.__dict__[key] = val
+
+        # Rebind composition helpers to the sliced instance, copying
+        # sliced cached lazyproperty values from the original helpers
+        # so expensive per-source results (e.g., centroid_win,
+        # local_background values) are preserved.
+        for helper_key, helper_cls, helper_factory in helper_specs:
+            old_helper = self.__dict__.get(helper_key)
+            new_helper = slice_composition_helper(
+                old_helper, helper_factory, helper_cls, index,
+                isscalar_new=newcls.isscalar,
+                index_object_list=self._index_object_list)
+            if new_helper is not None:
+                newcls.__dict__[helper_key] = new_helper
         return newcls
 
     def __str__(self):

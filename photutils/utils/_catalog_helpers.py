@@ -80,3 +80,88 @@ def get_lazyproperties(cls):
                 [i[0] for i in inspect.getmembers(
                     cls, predicate=_islazyproperty)])
     return getattr(cls, attr)
+
+
+def slice_composition_helper(old_helper, helper_factory, helper_cls, index,
+                             *, isscalar_new, index_object_list):
+    """
+    Build a new composition helper via ``helper_factory`` and copy
+    sliced cached lazyproperty values from ``old_helper`` into it.
+
+    This preserves expensive per-source computations cached on
+    composition helpers (e.g., `_LocalBackground`, `_CentroidRefiner`,
+    `_ShapeProperties`) when the host catalog is sliced.
+
+    Parameters
+    ----------
+    old_helper : helper instance or None
+        The previously-cached helper instance on the parent catalog,
+        or `None` if it was never computed.
+
+    helper_factory : callable
+        A zero-argument callable that returns a fresh helper instance
+        bound to the (already-sliced) host.
+
+    helper_cls : type
+        The helper class (used to introspect cached
+        `~astropy.utils.lazyproperty` names).
+
+    index : array_like or slice
+        The index applied to the parent catalog.
+
+    isscalar_new : bool
+        Whether the new host is scalar (single source).
+
+    index_object_list : callable
+        Fallback ``(value, index) -> sliced_value`` for object lists
+        that do not support direct indexing (e.g., fancy indices on
+        Python lists).
+
+    Returns
+    -------
+    new_helper : helper instance or None
+        The new helper with sliced caches, or `None` if ``old_helper``
+        was `None`.
+    """
+    import numpy as np
+    if old_helper is None:
+        return None
+
+    new_helper = helper_factory()
+    cached_keys = (set(old_helper.__dict__.keys())
+                   & set(get_lazyproperties(helper_cls)))
+    for key in cached_keys:
+        value = old_helper.__dict__[key]
+        if np.isscalar(value):
+            new_helper.__dict__[key] = value
+            continue
+
+        # Tuples of arrays (e.g., ``(cos_theta, sin_theta)``) are
+        # cached as a unit; slice each element individually.
+        if isinstance(value, tuple):
+            new_helper.__dict__[key] = tuple(
+                _slice_one(item, index, isscalar_new, index_object_list)
+                for item in value)
+            continue
+
+        new_helper.__dict__[key] = _slice_one(
+            value, index, isscalar_new, index_object_list)
+
+    return new_helper
+
+
+def _slice_one(value, index, isscalar_new, index_object_list):
+    """Slice a single cached lazyproperty value using the same
+    convention as the catalog ``__getitem__`` loop.
+    """
+    import numpy as np
+    if np.isscalar(value):
+        return value
+    try:
+        if isscalar_new:
+            if isinstance(value, np.ndarray):
+                return value[:, np.newaxis][index]
+            return [value[index]]
+        return value[index]
+    except TypeError:
+        return index_object_list(value, index)

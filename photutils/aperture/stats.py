@@ -19,7 +19,8 @@ from photutils.aperture._stats_helpers import _ApertureCutoutBuilder
 from photutils.aperture.core import (_aperture_metadata,
                                      _update_method_subpixels_docstring)
 from photutils.morphology import gini as gini_func
-from photutils.utils._catalog_helpers import as_scalar, get_lazyproperties
+from photutils.utils._catalog_helpers import (as_scalar, get_lazyproperties,
+                                              slice_composition_helper)
 from photutils.utils._deprecation import (create_empty_deprecated_qtable,
                                           deprecated_getattr,
                                           deprecated_positional_kwargs)
@@ -402,14 +403,19 @@ class ApertureStats:
         # Slice evaluated lazyproperty objects
         keys = set(self.__dict__.keys()) & set(self._lazyproperties)
         keys.add('_local_bkg')  # iterable defined in __init__
-        # `_shape` is a `_ShapeProperties` helper that depends on
-        # `moments_central`; let it be lazily rebuilt on the sliced
-        # instance from the (already-sliced) cached moments.
-        keys.discard('_shape')
-        # `_cutout_builder` is a composition helper that holds a
-        # reference to ``self``; rebuild it lazily on the sliced
-        # instance.
-        keys.discard('_cutout_builder')
+        # Composition helpers hold a reference back to the parent
+        # stats instance (or to a per-source array); they are handled
+        # separately below so that any cached @lazyproperty values
+        # stored on the helper are sliced and preserved on the new
+        # instance (avoiding expensive recomputation on slicing).
+        helper_specs = (
+            ('_shape', _ShapeProperties,
+             lambda: _ShapeProperties(newcls.moments_central)),
+            ('_cutout_builder', _ApertureCutoutBuilder,
+             lambda: _ApertureCutoutBuilder(newcls)),
+        )
+        for helper_key, _, _ in helper_specs:
+            keys.discard(helper_key)
         for key in keys:
             value = self.__dict__[key]
 
@@ -439,6 +445,23 @@ class ApertureStats:
                 val = arr[index].tolist()
 
             newcls.__dict__[key] = val
+
+        # Rebind composition helpers to the sliced instance, copying
+        # sliced cached lazyproperty values from the original helpers
+        # so expensive per-source results are preserved.
+        def _index_object_list(value, idx):
+            arr = np.empty(len(value), dtype=object)
+            arr[:] = list(value)
+            return arr[idx].tolist()
+
+        for helper_key, helper_cls, helper_factory in helper_specs:
+            old_helper = self.__dict__.get(helper_key)
+            new_helper = slice_composition_helper(
+                old_helper, helper_factory, helper_cls, index,
+                isscalar_new=newcls.isscalar,
+                index_object_list=_index_object_list)
+            if new_helper is not None:
+                newcls.__dict__[helper_key] = new_helper
         return newcls
 
     def __str__(self):
