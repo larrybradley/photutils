@@ -2029,6 +2029,75 @@ class SourceCatalog:
         return values
 
     @lazyproperty
+    def _extrema_cutout_indices(self):
+        """
+        Cutout-relative ``(y_min, x_min, y_max, x_max)`` indices of the
+        minimum and maximum unmasked pixel of every source, computed
+        in a single vectorized pass over the concatenated unmasked
+        pixels.
+
+        Returns an ``(n_sources, 4)`` float array; rows are
+        ``(y_min, x_min, y_max, x_max)``.  Fully-masked sources have
+        all four entries set to NaN.
+
+        If multiple pixels share the extremum value, the one with the
+        smallest flat row-major index inside the cutout is reported,
+        matching the behavior of `numpy.argmin` / `numpy.argmax`.
+        """
+        masks = self._cutout_total_masks
+        cutouts = self._data_cutouts
+        n = len(masks)
+        out = np.full((n, 4), np.nan, dtype=float)
+
+        sizes = np.empty(n, dtype=np.intp)
+        ys_list = []
+        xs_list = []
+        vals_list = []
+        for i, (tmask, dcut) in enumerate(zip(masks, cutouts, strict=True)):
+            valid = ~tmask
+            ys, xs = np.nonzero(valid)
+            sizes[i] = ys.size
+            if ys.size == 0:
+                continue
+            ys_list.append(ys)
+            xs_list.append(xs)
+            vals_list.append(dcut[ys, xs])
+
+        if not vals_list:
+            return out
+
+        nonempty = np.flatnonzero(sizes > 0)
+        sizes_ne = sizes[nonempty]
+        splits = np.concatenate(([0], np.cumsum(sizes_ne[:-1])))
+        concat_vals = np.concatenate(vals_list)
+        concat_ys = np.concatenate(ys_list)
+        concat_xs = np.concatenate(xs_list)
+        n_ne = nonempty.size
+        group_ids = np.repeat(np.arange(n_ne), sizes_ne)
+
+        min_per_group = np.minimum.reduceat(concat_vals, splits)
+        max_per_group = np.maximum.reduceat(concat_vals, splits)
+        is_min = concat_vals == min_per_group[group_ids]
+        is_max = concat_vals == max_per_group[group_ids]
+
+        # `group_ids` is non-decreasing, so positions of True values are
+        # also grouped contiguously; the first True per group can be
+        # found by detecting changes in the corresponding group ids.
+        for is_extremum, y_col, x_col in (
+                (is_min, 0, 1), (is_max, 2, 3)):
+            pos = np.flatnonzero(is_extremum)
+            if pos.size == 0:
+                continue
+            gids = group_ids[pos]
+            first = np.concatenate(([True], gids[1:] != gids[:-1]))
+            first_idx = pos[first]
+            src = nonempty[gids[first]]
+            out[src, y_col] = concat_ys[first_idx]
+            out[src, x_col] = concat_xs[first_idx]
+
+        return out
+
+    @lazyproperty
     @as_scalar
     def cutout_min_value_index(self):
         """
@@ -2038,16 +2107,7 @@ class SourceCatalog:
         If there are multiple occurrences of the minimum value, only the
         first occurrence is returned.
         """
-        data = self.data_cutout_masked
-        if self.isscalar:
-            data = (data,)
-        idx = []
-        for arr in data:
-            if np.all(arr.mask):
-                idx.append((np.nan, np.nan))
-            else:
-                idx.append(np.unravel_index(np.argmin(arr), arr.shape))
-        return np.array(idx)
+        return self._extrema_cutout_indices[:, 0:2].copy()
 
     @lazyproperty
     @as_scalar
@@ -2059,16 +2119,15 @@ class SourceCatalog:
         If there are multiple occurrences of the maximum value, only the
         first occurrence is returned.
         """
-        data = self.data_cutout_masked
-        if self.isscalar:
-            data = (data,)
-        idx = []
-        for arr in data:
-            if np.all(arr.mask):
-                idx.append((np.nan, np.nan))
-            else:
-                idx.append(np.unravel_index(np.argmax(arr), arr.shape))
-        return np.array(idx)
+        return self._extrema_cutout_indices[:, 2:4].copy()
+
+    @lazyproperty
+    def _bbox_starts(self):
+        """
+        Per-source ``(y_start, x_start)`` of the cutout bounding box.
+        """
+        return np.array([(slc[0].start, slc[1].start)
+                         for slc in self._slices_iter], dtype=float)
 
     @lazyproperty
     @as_scalar
@@ -2080,13 +2139,7 @@ class SourceCatalog:
         If there are multiple occurrences of the minimum value, only the
         first occurrence is returned.
         """
-        index = self.cutout_min_value_index
-        if self.isscalar:
-            index = (index,)
-        out = []
-        for idx, slc in zip(index, self._slices_iter, strict=True):
-            out.append((idx[0] + slc[0].start, idx[1] + slc[1].start))
-        return np.array(out)
+        return self._extrema_cutout_indices[:, 0:2] + self._bbox_starts
 
     @lazyproperty
     @as_scalar
@@ -2098,13 +2151,7 @@ class SourceCatalog:
         If there are multiple occurrences of the maximum value, only the
         first occurrence is returned.
         """
-        index = self.cutout_max_value_index
-        if self.isscalar:
-            index = (index,)
-        out = []
-        for idx, slc in zip(index, self._slices_iter, strict=True):
-            out.append((idx[0] + slc[0].start, idx[1] + slc[1].start))
-        return np.array(out)
+        return self._extrema_cutout_indices[:, 2:4] + self._bbox_starts
 
     @lazyproperty
     @as_scalar
