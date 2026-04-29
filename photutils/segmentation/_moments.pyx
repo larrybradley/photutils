@@ -2,20 +2,26 @@
 # cython: language_level=3, boundscheck=False, wraparound=False
 # cython: cdivision=True
 """
-Cython kernel for computing raw image moments (up to 3rd order)
-for a list of 2D source cutouts.
+Cython kernels used by `~photutils.segmentation.SourceCatalog`.
 
-This replaces the per-source ``yp.T @ arr @ xp`` matrix-multiply
-formulation in `SourceCatalog.moments` with a single C-level pass
-over each cutout's pixels, eliminating the Python/BLAS dispatch
-overhead that dominates runtime when there are many small
-(~10x10) sources.
+Includes
+* `raw_moments_3rd_order` and `central_moments_3rd_order` which
+  replace the per-source ``yp.T @ arr @ xp`` matrix-multiply
+  formulation with a single C-level pass over each cutout's pixels.
+* `centroid_win_step` which performs one iteration of the windowed
+  (Gaussian-weighted) centroid update used by `centroid_win`.
 """
 
 import numpy as np
+
 cimport numpy as np
 
-__all__ = ['raw_moments_3rd_order', 'central_moments_3rd_order']
+
+cdef extern from "math.h":
+    double exp(double x)
+
+__all__ = ['raw_moments_3rd_order', 'central_moments_3rd_order',
+           'centroid_win_step']
 
 DTYPE = np.float64
 ctypedef np.float64_t DTYPE_t
@@ -198,3 +204,75 @@ def central_moments_3rd_order(list cutouts, np.ndarray[DTYPE_t, ndim=2] centroid
             out_v[i, 3, 3] += y3 * s3
 
     return out
+
+
+def centroid_win_step(np.ndarray[DTYPE_t, ndim=2] data,
+                      np.ndarray[np.uint8_t, ndim=2, cast=True] mask,
+                      double cx, double cy,
+                      double radius_sq, double inv_2sigma2):
+    """
+    Perform one iteration of the windowed (SExtractor XWIN/YWIN)
+    centroid update.
+
+    Computes Gaussian-weighted moments of ``data`` over the unmasked
+    pixels lying inside the circular aperture of radius
+    ``sqrt(radius_sq)`` centered at ``(cx, cy)``.
+
+    Parameters
+    ----------
+    data : 2D ndarray (float64)
+        Cutout data; masked pixels may already be replaced by mirrored
+        values when ``aperture_mask_method='correct'``.
+
+    mask : 2D ndarray (bool)
+        Boolean mask; pixels where ``mask`` is `True` are excluded.
+
+    cx : float
+        Cutout-relative ``x`` centroid position.
+
+    cy : float
+        Cutout-relative ``y`` centroid position.
+
+    radius_sq : float
+        Squared aperture radius (``(4 sigma)^2``); pixels with
+        ``dx*dx + dy*dy > radius_sq`` are excluded.
+
+    inv_2sigma2 : float
+        ``-1 / (2 sigma^2)`` used in the Gaussian weight.
+
+    Returns
+    -------
+    total : float
+        Gaussian-weighted flux inside the aperture.
+
+    mx : float
+        First-moment in ``x`` (relative to ``cx``).
+
+    my : float
+        First-moment in ``y`` (relative to ``cy``).
+    """
+    cdef DTYPE_t[:, :] data_v = data
+    cdef np.uint8_t[:, :] mask_v = mask
+    cdef Py_ssize_t ny = data_v.shape[0]
+    cdef Py_ssize_t nx = data_v.shape[1]
+    cdef Py_ssize_t yi, xi
+    cdef double dy, dx, r2, w
+    cdef double total = 0.0
+    cdef double mx = 0.0
+    cdef double my = 0.0
+
+    for yi in range(ny):
+        dy = <double>yi - cy
+        for xi in range(nx):
+            if mask_v[yi, xi]:
+                continue
+            dx = <double>xi - cx
+            r2 = dx * dx + dy * dy
+            if r2 > radius_sq:
+                continue
+            w = data_v[yi, xi] * exp(r2 * inv_2sigma2)
+            total += w
+            mx += w * dx
+            my += w * dy
+
+    return total, mx, my

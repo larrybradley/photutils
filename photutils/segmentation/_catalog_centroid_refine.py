@@ -14,6 +14,7 @@ import numpy as np
 from astropy.stats import gaussian_fwhm_to_sigma
 from astropy.utils import lazyproperty
 
+from photutils.segmentation._moments import centroid_win_step
 from photutils.segmentation.utils import _mask_to_mirrored_value
 from photutils.utils._progress_bars import add_progress_bar
 
@@ -120,7 +121,7 @@ class _CentroidRefiner:
             # Cache for cutout data when the integer bbox doesn't change
             prev_ixcen = prev_iycen = None
             cached_data = None
-            cached_mask = None
+            cached_mask_u8 = None
 
             iter_ = 0
             dcen = 1.0
@@ -173,37 +174,20 @@ class _CentroidRefiner:
                                 mask=data_mask)
 
                         cached_data = data
-                        cached_mask = data_mask
+                        cached_mask_u8 = data_mask.view(np.uint8)
 
                     # Centroid position in cutout coordinates
                     cx = xcen - max(0, ixmin)
                     cy = ycen - max(0, iymin)
 
-                    ny = slc_y.stop - slc_y.start
-                    nx = slc_x.stop - slc_x.start
-
-                    # Build coordinate grids relative to centroid (reused
-                    # for circle mask, Gaussian, and moments)
-                    xvals = np.arange(nx) - cx
-                    yvals = np.arange(ny) - cy
-                    xx = xvals[np.newaxis, :]
-                    yy = yvals[:, np.newaxis]
-
-                    # Inline binary circle mask
-                    rr2 = xx * xx + yy * yy
-                    aper_weights = (rr2 <= radius_sq).astype(float)
-
-                    # Inline Gaussian weight
-                    gweight = np.exp(rr2 * inv_2sigma2)
-
-                    # Apply weights and mask
-                    weighted = (cached_data * aper_weights * gweight)
-                    weighted[cached_mask] = 0.0
-
-                    # Inline moment computation
-                    total = np.sum(weighted)
-                    dx = np.sum(weighted * xx) / total
-                    dy = np.sum(weighted * yy) / total
+                    # Gaussian-weighted moments inside the binary disk,
+                    # computed in C to avoid allocating per-iteration
+                    # coord/weight arrays and a per-pixel ``np.exp`` call.
+                    total, mx, my = centroid_win_step(
+                        cached_data, cached_mask_u8, cx, cy,
+                        radius_sq, inv_2sigma2)
+                    dx = mx / total
+                    dy = my / total
 
                     dcen = math.sqrt(dx * dx + dy * dy)
                     xcen += dx * 2.0
