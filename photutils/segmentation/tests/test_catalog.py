@@ -890,7 +890,7 @@ class TestSourceCatalog:
                 raise ValueError(msg)
             return root_scalar(fcn, args=args, bracket=bracket, method=method)
 
-        with patch('photutils.segmentation.catalog.root_scalar',
+        with patch('photutils.segmentation._catalog_photometry.root_scalar',
                    mock_root_scalar):
             r = cat.flux_radius(0.5)
 
@@ -1739,7 +1739,7 @@ def test_flux_radius_no_solution(single_source_catalog):
         msg = 'bracket signs'
         raise ValueError(msg)
 
-    with patch('photutils.segmentation.catalog.root_scalar',
+    with patch('photutils.segmentation._catalog_photometry.root_scalar',
                mock_root_scalar):
         result = cat.flux_radius(0.5)
     assert np.isnan(result.value[0])
