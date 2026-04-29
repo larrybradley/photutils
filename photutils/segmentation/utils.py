@@ -141,6 +141,15 @@ def _mask_to_mirrored_value(data, replace_mask, xycenter, *, mask=None):
     result : 2D `~numpy.ndarray`
         A 2D array with replaced masked pixels.
     """
+    # Fast path: when nothing needs to be replaced, return the input
+    # unchanged.  All callers either consume ``data`` read-only or
+    # explicitly copy before mutating, so skipping ``np.copy(data)``
+    # here is safe and avoids the dominant cost of this helper for the
+    # very common case of sources without neighboring sources inside
+    # their aperture cutout.
+    if not replace_mask.any():
+        return data
+
     outdata = np.copy(data)
 
     ymasked, xmasked = np.nonzero(replace_mask)

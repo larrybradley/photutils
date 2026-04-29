@@ -186,6 +186,10 @@ class _CentroidRefiner:
                     total, mx, my = centroid_win_step(
                         cached_data, cached_mask_u8, cx, cy,
                         radius_sq, inv_2sigma2)
+                    if total == 0.0:
+                        xcen = np.nan
+                        ycen = np.nan
+                        break
                     dx = mx / total
                     dy = my / total
 
