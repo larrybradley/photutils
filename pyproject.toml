@@ -323,6 +323,11 @@ ignore = [
     'INP001',  # implicit-namespace-package
     'TRY400',  # error-instead-of-exception
 ]
+'tools/*' = [
+    'D',  # pydocstyle
+    'INP001',  # implicit-namespace-package
+    'T201',  # print
+]
 'test_*.py' = [
     'D',  # pydocstyle
     'S101',  # assert
