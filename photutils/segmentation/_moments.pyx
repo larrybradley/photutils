@@ -20,10 +20,11 @@ cimport numpy as np
 cdef extern from "math.h":
     double exp(double x)
     double sqrt(double x)
+    int isfinite(double x)
 
 __all__ = ['raw_moments_3rd_order', 'central_moments_3rd_order',
            'centroid_win_step', 'aperture_weighted_sum',
-           'kron_radius_sums']
+           'kron_radius_sums', 'build_aperture_cutout_mask']
 
 DTYPE = np.float64
 ctypedef np.float64_t DTYPE_t
@@ -453,3 +454,123 @@ def kron_radius_sums(np.ndarray[DTYPE_t, ndim=2] data,
             denom += v
 
     return number, denom
+
+
+def build_aperture_cutout_mask(np.ndarray[DTYPE_t, ndim=2, mode='c'] data,
+                               user_mask,
+                               segm_mask,
+                               double xcen, double ycen,
+                               double bkg, int method,
+                               int zero_masked):
+    """
+    In-place build of the per-source aperture cutout used by the
+    Kron / flux_radius / centroid_win / aperture-photometry paths.
+
+    Performs in a single C pass:
+
+    1. ``data -= bkg`` (so callers can pass the raw cutout).
+    2. ``data_mask = ~isfinite(data) | user_mask``.
+    3. If ``method == 1`` ('mask'), ``data_mask |= segm_mask``.
+    4. If ``method == 2`` ('correct'), replace each pixel where
+       ``segm_mask`` is `True` with the value of the pixel mirrored
+       across ``(int(xcen + 0.5), int(ycen + 0.5))``.  Pixels whose
+       mirror falls outside the cutout, or whose mirror is itself
+       masked (in either ``data_mask`` or ``segm_mask``), are set to
+       zero.  This matches the behaviour of
+       ``photutils.segmentation.utils._mask_to_mirrored_value``.
+    5. If ``zero_masked`` is non-zero, ``data[data_mask] = 0`` (used
+       by ``flux_radius``).
+
+    Parameters
+    ----------
+    data : 2D float64 `~numpy.ndarray` (C-contiguous)
+        Modified in place.
+
+    user_mask : 2D bool `~numpy.ndarray` or `None`
+        Per-pixel user mask (`True` = excluded).
+
+    segm_mask : 2D bool `~numpy.ndarray` or `None`
+        Per-pixel neighbor-segment mask (`True` = neighboring source).
+        Required when ``method != 0``.
+
+    xcen, ycen : float
+        Cutout-relative source centroid (used for mirror replacement
+        when ``method == 2``).
+
+    bkg : float
+        Local background to subtract from ``data``.
+
+    method : int
+        ``0`` = no segm masking, ``1`` = include segm_mask in
+        ``data_mask`` ('mask'), ``2`` = mirror-replace ('correct').
+
+    zero_masked : int
+        If non-zero, also zero out masked pixels in ``data`` so that a
+        plain ``sum`` (no boolean indexing) returns the right value.
+
+    Returns
+    -------
+    data_mask : 2D `~numpy.ndarray` of `~numpy.uint8`
+        Per-pixel boolean (0 / 1) mask of pixels excluded from
+        photometry.
+    """
+    cdef DTYPE_t[:, ::1] d_v = data
+    cdef Py_ssize_t ny = d_v.shape[0]
+    cdef Py_ssize_t nx = d_v.shape[1]
+    cdef Py_ssize_t i, j, mi, mj
+    cdef int has_user_mask = user_mask is not None
+    cdef int has_segm_mask = segm_mask is not None
+    cdef np.uint8_t[:, ::1] um_v
+    cdef np.uint8_t[:, ::1] sm_v
+
+    cdef np.ndarray[np.uint8_t, ndim=2] out_mask = np.zeros(
+        (ny, nx), dtype=np.uint8)
+    cdef np.uint8_t[:, ::1] m_v = out_mask
+
+    cdef double v
+
+    if has_user_mask:
+        um_v = np.ascontiguousarray(user_mask).view(np.uint8)
+    if has_segm_mask:
+        sm_v = np.ascontiguousarray(segm_mask).view(np.uint8)
+
+    # Pass 1: in-place bkg subtract; build data_mask
+    for j in range(ny):
+        for i in range(nx):
+            v = d_v[j, i] - bkg
+            d_v[j, i] = v
+            if not isfinite(v):
+                m_v[j, i] = 1
+            elif has_user_mask and um_v[j, i]:
+                m_v[j, i] = 1
+
+    if method == 1 and has_segm_mask:
+        # 'mask': fold segm_mask into data_mask
+        for j in range(ny):
+            for i in range(nx):
+                if sm_v[j, i]:
+                    m_v[j, i] = 1
+    elif method == 2 and has_segm_mask:
+        # 'correct': mirror-replace each segm_mask pixel
+        cxc = int(xcen + 0.5)
+        cyc = int(ycen + 0.5)
+        for j in range(ny):
+            for i in range(nx):
+                if not sm_v[j, i]:
+                    continue
+                mi = 2 * cxc - i
+                mj = 2 * cyc - j
+                if mi < 0 or mj < 0 or mi >= nx or mj >= ny:
+                    d_v[j, i] = 0.0
+                elif m_v[mj, mi] or sm_v[mj, mi]:
+                    d_v[j, i] = 0.0
+                else:
+                    d_v[j, i] = d_v[mj, mi]
+
+    if zero_masked:
+        for j in range(ny):
+            for i in range(nx):
+                if m_v[j, i]:
+                    d_v[j, i] = 0.0
+
+    return out_mask

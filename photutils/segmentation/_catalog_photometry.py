@@ -19,6 +19,7 @@ from photutils.aperture import (BoundingBox, CircularAperture,
 from photutils.geometry import circular_overlap_grid, elliptical_overlap_grid
 from photutils.geometry.circular_overlap import circular_flux_radius_brentq
 from photutils.segmentation._moments import (aperture_weighted_sum,
+                                             build_aperture_cutout_mask,
                                              kron_radius_sums)
 from photutils.segmentation.utils import _mask_to_mirrored_value
 from photutils.utils._progress_bars import add_progress_bar
@@ -253,6 +254,8 @@ class _Photometry:
         min_circ_radius = (catalog.kron_params[2]
                            if len(catalog.kron_params) == 3 else 0.0)
         aperture_mask_method = catalog.aperture_mask_method
+        method_code = {'none': 0, 'mask': 1, 'correct': 2}[
+            aperture_mask_method]
 
         labels = catalog.labels
         if catalog.progress_bar:
@@ -314,34 +317,34 @@ class _Photometry:
 
             # Cutout data (local background explicitly zero for SE
             # agreement)
-            data = data_full[slc_lg].astype(float)
+            data = np.ascontiguousarray(data_full[slc_lg],
+                                        dtype=np.float64)
 
-            # Build data mask (non-finite + input mask)
-            data_mask = ~np.isfinite(data)
-            if mask_full is not None:
-                data_mask |= mask_full[slc_lg]
+            # Cutout centroid position (used both for mirror-replace and
+            # by the kron-radius kernel below).
+            cutout_xc = xc - lg_xmin
+            cutout_yc = yc - lg_ymin
 
-            # Mask or correct neighboring sources
-            if aperture_mask_method != 'none':
+            # Per-source neighbor mask (only when needed by the kernel)
+            if method_code != 0:
                 seg_cut = segm_data[slc_lg]
                 segm_mask = (seg_cut != label) & (seg_cut != 0)
-                if aperture_mask_method == 'mask':
-                    mask = data_mask | segm_mask
-                else:
-                    mask = data_mask
-                if aperture_mask_method == 'correct':
-                    cutout_xycen = (xc - max(0, ixmin), yc - max(0, iymin))
-                    data = _mask_to_mirrored_value(data, segm_mask,
-                                                   cutout_xycen,
-                                                   mask=mask)
             else:
-                mask = data_mask
+                segm_mask = None
+
+            user_mask_cut = (mask_full[slc_lg]
+                             if mask_full is not None else None)
+
+            # One C pass: build data_mask, mirror-replace 'correct'
+            # pixels (no bkg subtraction here -- matches the prior
+            # SExtractor-agreement behavior).
+            mask = build_aperture_cutout_mask(
+                data, user_mask_cut, segm_mask,
+                cutout_xc, cutout_yc, 0.0, method_code, 0)
 
             # Run the C kernel to compute the (numerator, denominator)
             # of the unscaled Kron radius without allocating the
             # ``rr2``, ``rr`` and ``pixel_mask`` per-source arrays.
-            cutout_xc = xc - lg_xmin
-            cutout_yc = yc - lg_ymin
             if use_circular:
                 # Equivalent to (dx*dx + dy*dy) <= min_circ_radius**2:
                 # use cxx=cyy=1, cxy=0, scale_sq=min_circ_radius**2.
@@ -357,7 +360,7 @@ class _Photometry:
 
             flux_numer, flux_denom = kron_radius_sums(
                 data,
-                mask.view(np.uint8),
+                mask,
                 cutout_xc, cutout_yc,
                 kxx, kxy, kyy, scale_sq)
 
@@ -741,6 +744,11 @@ class _Photometry:
         aperture_mask_method = catalog.aperture_mask_method
         max_aper_size = max(data_arr.size, 1_000_000)
 
+        # Translate the aperture-mask method string into the integer
+        # code used by ``build_aperture_cutout_mask``.
+        method_code = {'none': 0, 'mask': 1, 'correct': 2}[
+            aperture_mask_method]
+
         labels = catalog.labels
         if catalog.progress_bar:
             labels = add_progress_bar(labels, desc='flux_radius prep')
@@ -782,35 +790,31 @@ class _Photometry:
 
             slc_lg = (slice(data_ymin, data_ymax),
                       slice(data_xmin, data_xmax))
-            cutout_data = data_arr[slc_lg].astype(float) - bkg
-
-            # Build data mask (non-finite + user mask)
-            data_mask = ~np.isfinite(cutout_data)
-            if mask_arr is not None:
-                data_mask |= mask_arr[slc_lg]
+            cutout_data = np.ascontiguousarray(data_arr[slc_lg],
+                                               dtype=np.float64)
 
             # Cutout centroid position
             cutout_xcen = xcen - data_xmin
             cutout_ycen = ycen - data_ymin
 
-            # Handle neighboring sources
-            if aperture_mask_method != 'none':
+            # Per-source neighbor mask (only when needed by the kernel)
+            if method_code != 0:
                 seg_cut = segm_data[slc_lg]
                 segm_mask = (seg_cut != label) & (seg_cut != 0)
-                if aperture_mask_method == 'mask':
-                    data_mask = data_mask | segm_mask
-                elif aperture_mask_method == 'correct':
-                    cutout_data = _mask_to_mirrored_value(
-                        cutout_data, segm_mask,
-                        (cutout_xcen, cutout_ycen), mask=data_mask)
+            else:
+                segm_mask = None
 
-            # Pre-zero masked pixels so the root-finding function can use a
-            # simple sum without masking
-            clean_data = cutout_data.copy()
-            clean_data[data_mask] = 0.0
+            user_mask_cut = (mask_arr[slc_lg]
+                             if mask_arr is not None else None)
 
-            # Pre-compute grid parameters for circular_overlap_grid
-            ny, nx = clean_data.shape
+            # One C pass: subtract bkg, build data_mask, mirror-replace
+            # 'correct' pixels, and zero masked pixels so the
+            # root-finder can use a plain ``sum``.
+            build_aperture_cutout_mask(
+                cutout_data, user_mask_cut, segm_mask,
+                cutout_xcen, cutout_ycen, bkg, method_code, 1)
+
+            ny, nx = cutout_data.shape
             xmin_edge = -0.5 - cutout_xcen
             xmax_edge = nx - 0.5 - cutout_xcen
             ymin_edge = -0.5 - cutout_ycen
@@ -818,7 +822,7 @@ class _Photometry:
             grid_params = (xmin_edge, xmax_edge, ymin_edge, ymax_edge,
                            nx, ny, use_exact, subpixels)
 
-            args.append([clean_data, grid_params, kronflux, max_radius_])
+            args.append([cutout_data, grid_params, kronflux, max_radius_])
 
         return args
 

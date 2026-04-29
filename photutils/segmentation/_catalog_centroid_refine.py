@@ -14,8 +14,8 @@ import numpy as np
 from astropy.stats import gaussian_fwhm_to_sigma
 from astropy.utils import lazyproperty
 
-from photutils.segmentation._moments import centroid_win_step
-from photutils.segmentation.utils import _mask_to_mirrored_value
+from photutils.segmentation._moments import (build_aperture_cutout_mask,
+                                             centroid_win_step)
 from photutils.utils._progress_bars import add_progress_bar
 
 __all__ = []
@@ -82,8 +82,9 @@ class _CentroidRefiner:
         segm_data = catalog._segmentation_image.data
         data_shape = data_arr.shape
         aperture_mask_method = catalog.aperture_mask_method
-        do_correct = aperture_mask_method == 'correct'
         do_segm_mask = aperture_mask_method != 'none'
+        method_code = {'none': 0, 'mask': 1, 'correct': 2}[
+            aperture_mask_method]
         max_aper_size = max(data_arr.size, 1_000_000)
 
         max_iters = 16
@@ -91,42 +92,46 @@ class _CentroidRefiner:
 
         xcen_win = []
         ycen_win = []
-        for label, xcen, ycen, rad_hl, nan_hl_ in zip(
-                labels, catalog._x_centroid, catalog._y_centroid, radius_hl,
-                nan_hl, strict=True):
+        # Hoist the catch_warnings context manager out of the per-source
+        # loop: previously this paid the simplefilter() / __exit__() cost
+        # ~10000 times for centroid_win on a 10k-source catalog (~25 ms).
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', RuntimeWarning)
+            for label, xcen, ycen, rad_hl, nan_hl_ in zip(
+                    labels, catalog._x_centroid, catalog._y_centroid,
+                    radius_hl, nan_hl, strict=True):
 
-            if nan_hl_ or math.isnan(xcen) or math.isnan(ycen):
-                xcen_win.append(np.nan)
-                ycen_win.append(np.nan)
-                continue
+                if nan_hl_ or math.isnan(xcen) or math.isnan(ycen):
+                    xcen_win.append(np.nan)
+                    ycen_win.append(np.nan)
+                    continue
 
-            sigma = 2.0 * rad_hl * gaussian_fwhm_to_sigma
-            inv_2sigma2 = -1.0 / (2.0 * sigma * sigma)
-            radius = 4.0 * sigma
-            radius_sq = radius * radius
+                sigma = 2.0 * rad_hl * gaussian_fwhm_to_sigma
+                inv_2sigma2 = -1.0 / (2.0 * sigma * sigma)
+                radius = 4.0 * sigma
+                radius_sq = radius * radius
 
-            # Compute the full (unclipped) bounding box for the aperture
-            # using the initial centroid. The radius is fixed, so the bbox
-            # size stays the same across iterations even if the center
-            # shifts slightly.
-            bbox_halfsize = int(radius + 1.5)
-            full_ny = full_nx = 2 * bbox_halfsize + 1
+                # Compute the full (unclipped) bounding box for the
+                # aperture using the initial centroid. The radius is
+                # fixed, so the bbox size stays the same across
+                # iterations even if the center shifts slightly.
+                bbox_halfsize = int(radius + 1.5)
+                full_ny = full_nx = 2 * bbox_halfsize + 1
 
-            # OOM guard
-            if full_ny * full_nx > max_aper_size:
-                xcen_win.append(np.nan)
-                ycen_win.append(np.nan)
-                continue
+                # OOM guard
+                if full_ny * full_nx > max_aper_size:
+                    xcen_win.append(np.nan)
+                    ycen_win.append(np.nan)
+                    continue
 
-            # Cache for cutout data when the integer bbox doesn't change
-            prev_ixcen = prev_iycen = None
-            cached_data = None
-            cached_mask_u8 = None
+                # Cache for cutout data when the integer bbox doesn't
+                # change
+                prev_ixcen = prev_iycen = None
+                cached_data = None
+                cached_mask_u8 = None
 
-            iter_ = 0
-            dcen = 1.0
-            with warnings.catch_warnings():
-                warnings.simplefilter('ignore', RuntimeWarning)
+                iter_ = 0
+                dcen = 1.0
                 while iter_ < max_iters and dcen > centroid_threshold:
                     # Compute integer bounding box
                     ixmin = int(xcen + 0.5) - bbox_halfsize
@@ -147,34 +152,29 @@ class _CentroidRefiner:
                     cur_iycen = int(ycen + 0.5)
 
                     # Recompute cutout data only when the integer center
-                    # changes to avoid redundant _mask_to_mirrored_value
-                    # calls
+                    # changes to avoid redundant cutout-mask construction
                     if cur_ixcen != prev_ixcen or cur_iycen != prev_iycen:
                         prev_ixcen = cur_ixcen
                         prev_iycen = cur_iycen
 
-                        data = data_arr[slc_y, slc_x].astype(float)
-                        data_mask = ~np.isfinite(data)
-                        if mask_arr is not None:
-                            data_mask |= mask_arr[slc_y, slc_x]
-
-                        cutout_xycen = (xcen - max(0, ixmin),
-                                        ycen - max(0, iymin))
-
+                        cutout = np.ascontiguousarray(
+                            data_arr[slc_y, slc_x], dtype=np.float64)
+                        cutout_xcen = xcen - max(0, ixmin)
+                        cutout_ycen = ycen - max(0, iymin)
                         if do_segm_mask:
                             seg_cut = segm_data[slc_y, slc_x]
                             segm_mask = ((seg_cut != label)
                                          & (seg_cut != 0))
-                            if aperture_mask_method == 'mask':
-                                data_mask = data_mask | segm_mask
-
-                        if do_correct:
-                            data = _mask_to_mirrored_value(
-                                data, segm_mask, cutout_xycen,
-                                mask=data_mask)
-
-                        cached_data = data
-                        cached_mask_u8 = data_mask.view(np.uint8)
+                        else:
+                            segm_mask = None
+                        user_mask_cut = (mask_arr[slc_y, slc_x]
+                                         if mask_arr is not None
+                                         else None)
+                        cached_mask_u8 = build_aperture_cutout_mask(
+                            cutout, user_mask_cut, segm_mask,
+                            cutout_xcen, cutout_ycen, 0.0,
+                            method_code, 0)
+                        cached_data = cutout
 
                     # Centroid position in cutout coordinates
                     cx = xcen - max(0, ixmin)
@@ -182,7 +182,8 @@ class _CentroidRefiner:
 
                     # Gaussian-weighted moments inside the binary disk,
                     # computed in C to avoid allocating per-iteration
-                    # coord/weight arrays and a per-pixel ``np.exp`` call.
+                    # coord/weight arrays and a per-pixel ``np.exp``
+                    # call.
                     total, mx, my = centroid_win_step(
                         cached_data, cached_mask_u8, cx, cy,
                         radius_sq, inv_2sigma2)
@@ -198,8 +199,8 @@ class _CentroidRefiner:
                     ycen += dy * 2.0
                     iter_ += 1
 
-            xcen_win.append(xcen)
-            ycen_win.append(ycen)
+                xcen_win.append(xcen)
+                ycen_win.append(ycen)
 
         xcen_win = np.array(xcen_win)
         ycen_win = np.array(ycen_win)
