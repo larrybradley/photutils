@@ -356,8 +356,8 @@ class _Photometry:
                 scale_sq = scale * scale
 
             flux_numer, flux_denom = kron_radius_sums(
-                np.ascontiguousarray(data, dtype=float),
-                np.ascontiguousarray(mask).view(np.uint8),
+                data,
+                mask.view(np.uint8),
                 cutout_xc, cutout_yc,
                 kxx, kxy, kyy, scale_sq)
 
@@ -508,8 +508,8 @@ class _Photometry:
             aperture_weights = mask_data[slc_sm]
             flux_, flux_err_ = aperture_weighted_sum(
                 np.ascontiguousarray(aperture_weights, dtype=float),
-                np.ascontiguousarray(data, dtype=float),
-                np.ascontiguousarray(mask).view(np.uint8),
+                data,
+                mask.view(np.uint8),
                 None if error is None
                 else np.ascontiguousarray(error, dtype=float))
             flux.append(flux_)
@@ -555,8 +555,8 @@ class _Photometry:
             # masks and intermediate weighted arrays.
             flux_, flux_err_ = aperture_weighted_sum(
                 np.ascontiguousarray(aperture_weights, dtype=float),
-                np.ascontiguousarray(data, dtype=float),
-                np.ascontiguousarray(mask).view(np.uint8),
+                data,
+                mask.view(np.uint8),
                 None if error is None
                 else np.ascontiguousarray(error, dtype=float))
             flux.append(flux_)
@@ -657,8 +657,8 @@ class _Photometry:
             aperture_weights = mask_data[slc_sm]
             flux_, flux_err_ = aperture_weighted_sum(
                 np.ascontiguousarray(aperture_weights, dtype=float),
-                np.ascontiguousarray(data, dtype=float),
-                np.ascontiguousarray(mask).view(np.uint8),
+                data,
+                mask.view(np.uint8),
                 None if error is None
                 else np.ascontiguousarray(error, dtype=float))
             flux.append(flux_)
