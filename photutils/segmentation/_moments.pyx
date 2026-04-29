@@ -19,9 +19,11 @@ cimport numpy as np
 
 cdef extern from "math.h":
     double exp(double x)
+    double sqrt(double x)
 
 __all__ = ['raw_moments_3rd_order', 'central_moments_3rd_order',
-           'centroid_win_step', 'aperture_weighted_sum']
+           'centroid_win_step', 'aperture_weighted_sum',
+           'kron_radius_sums']
 
 DTYPE = np.float64
 ctypedef np.float64_t DTYPE_t
@@ -365,3 +367,89 @@ def aperture_weighted_sum(np.ndarray[DTYPE_t, ndim=2] weights,
     else:
         flux_err = float('nan')
     return flux, flux_err
+
+
+def kron_radius_sums(np.ndarray[DTYPE_t, ndim=2] data,
+                     np.ndarray[np.uint8_t, ndim=2, cast=True] mask,
+                     double xc, double yc,
+                     double cxx, double cxy, double cyy,
+                     double scale_sq):
+    """
+    Compute the unscaled Kron-radius numerator and denominator for one
+    source.
+
+    Replaces the per-source NumPy block::
+
+        xx = np.arange(nx) - xc
+        yy = np.arange(ny) - yc
+        rr2 = cxx*xx*xx + cxy*xx*yy + cyy*yy*yy
+        rr = sqrt(max(rr2, 0))
+        pixel_mask = (rr <= scale) & ~mask
+        flux_numer = sum(data[pixel_mask] * rr[pixel_mask])
+        flux_denom = sum(data[pixel_mask])
+
+    with a single C loop, eliminating the per-source allocation of the
+    ``rr2``, ``rr`` and ``pixel_mask`` arrays.
+
+    Parameters
+    ----------
+    data : 2D ndarray (float64)
+        Cutout data (already mirror-corrected when needed).
+
+    mask : 2D ndarray (bool)
+        Boolean mask; pixels with ``mask`` True are excluded.
+
+    xc : float
+        Cutout-relative source ``x`` centroid.
+
+    yc : float
+        Cutout-relative source ``y`` centroid.
+
+    cxx : float
+        Elliptical-radius coefficient ``cxx``.
+
+    cxy : float
+        Elliptical-radius coefficient ``cxy``.
+
+    cyy : float
+        Elliptical-radius coefficient ``cyy``.
+
+    scale_sq : float
+        Squared aperture scale (``scale**2``); pixels with
+        ``rr2 > scale_sq`` are excluded.
+
+    Returns
+    -------
+    flux_numer : float
+        ``sum(data * sqrt(max(rr2, 0)))`` over the aperture's good
+        pixels.
+
+    flux_denom : float
+        ``sum(data)`` over the aperture's good pixels.
+    """
+    cdef DTYPE_t[:, :] d_v = data
+    cdef np.uint8_t[:, :] m_v = mask
+    cdef Py_ssize_t ny = d_v.shape[0]
+    cdef Py_ssize_t nx = d_v.shape[1]
+    cdef Py_ssize_t i, j
+    cdef double dy, dx, r2, r, v
+    cdef double number = 0.0
+    cdef double denom = 0.0
+
+    for j in range(ny):
+        dy = <double>j - yc
+        for i in range(nx):
+            if m_v[j, i]:
+                continue
+            dx = <double>i - xc
+            r2 = cxx * dx * dx + cxy * dx * dy + cyy * dy * dy
+            if r2 > scale_sq:
+                continue
+            v = d_v[j, i]
+            if r2 < 0.0:
+                r2 = 0.0
+            r = sqrt(r2)
+            number += v * r
+            denom += v
+
+    return number, denom

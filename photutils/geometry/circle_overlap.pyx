@@ -22,7 +22,8 @@ cimport numpy as np
 
 from .core cimport area_arc, area_triangle, floor_sqrt
 
-__all__ = ['circular_overlap_grid', 'circular_overlap_weighted_sum']
+__all__ = ['circular_overlap_grid', 'circular_overlap_weighted_sum',
+           'circular_flux_radius_brentq']
 
 
 cdef extern from "math.h" nogil:
@@ -345,3 +346,170 @@ def circular_overlap_weighted_sum(np.ndarray[DTYPE_t, ndim=2] data,
                         total += data_v[j, i] * frac
 
     return total
+
+
+cdef double _flux_fcn(double r, double[:, :] data_v, Py_ssize_t ny,
+                      Py_ssize_t nx, double xmin, double xmax,
+                      double ymin, double ymax, double dx, double dy,
+                      double inv_dxdy, int use_exact, int subpixels,
+                      double normflux):
+    """
+    Inline equivalent of ``1 - sum(data * frac) / normflux``.
+    """
+    cdef Py_ssize_t i, j
+    cdef double pxmin, pxcen, pxmax, pymin, pycen, pymax
+    cdef double bxmin, bxmax, bymin, bymax
+    cdef double pixel_radius, d, frac
+    cdef double total = 0.0
+
+    pixel_radius = 0.5 * sqrt(dx * dx + dy * dy)
+    bxmin = -r - 0.5 * dx
+    bxmax = +r + 0.5 * dx
+    bymin = -r - 0.5 * dy
+    bymax = +r + 0.5 * dy
+
+    for i in range(nx):
+        pxmin = xmin + i * dx
+        pxcen = pxmin + dx * 0.5
+        pxmax = pxmin + dx
+        if pxmax > bxmin and pxmin < bxmax:
+            for j in range(ny):
+                pymin = ymin + j * dy
+                pycen = pymin + dy * 0.5
+                pymax = pymin + dy
+                if pymax > bymin and pymin < bymax:
+                    d = sqrt(pxcen * pxcen + pycen * pycen)
+                    if d < r - pixel_radius:
+                        total += data_v[j, i]
+                    elif d < r + pixel_radius:
+                        if use_exact:
+                            frac = circular_overlap_single_exact(
+                                pxmin, pymin, pxmax, pymax, r) * inv_dxdy
+                        else:
+                            frac = circular_overlap_single_subpixel(
+                                pxmin, pymin, pxmax, pymax, r, subpixels)
+                        total += data_v[j, i] * frac
+
+    return 1.0 - total / normflux
+
+
+def circular_flux_radius_brentq(np.ndarray[DTYPE_t, ndim=2] data,
+                                double xmin, double xmax,
+                                double ymin, double ymax,
+                                double normflux,
+                                double min_radius, double max_radius,
+                                int use_exact, int subpixels,
+                                double xtol=2e-12, double rtol=8.881784197001252e-16,
+                                int maxiter=100):
+    """
+    Pure-Cython Brent's-method root-finder for the ``flux_radius``
+    inner loop.
+
+    Replaces ``scipy.optimize.root_scalar(method='brentq')`` calling a
+    Python callback that calls ``circular_overlap_weighted_sum``: the
+    callback dispatch alone accounted for ~0.36 s on 10000 sources.
+
+    The function whose root is found is
+    ``f(r) = 1 - sum(data * frac(r)) / normflux``.
+
+    Brackets are automatically shrunk (``max_radius`` reduced by
+    ``0.1 * max_radius`` per failed attempt) when the bracket end-points
+    do not have opposite signs, matching the behavior of the original
+    Python loop.
+
+    Returns
+    -------
+    radius : float
+        The root, or ``NaN`` when no bracket with opposite signs can be
+        found above ``min_radius``.
+    """
+    cdef DTYPE_t[:, :] data_v = data
+    cdef Py_ssize_t ny = data_v.shape[0]
+    cdef Py_ssize_t nx = data_v.shape[1]
+    cdef double dx = (xmax - xmin) / nx
+    cdef double dy = (ymax - ymin) / ny
+    cdef double inv_dxdy = 1.0 / (dx * dy)
+
+    cdef double xpre, xcur, xblk, fpre, fcur, fblk
+    cdef double spre, scur, sbis, stry, dpre, dblk
+    cdef double max_radius_delta = 0.1 * max_radius
+    cdef double tol, dm, df
+    cdef Py_ssize_t i
+
+    while max_radius > min_radius:
+        xpre = min_radius
+        xcur = max_radius
+        fpre = _flux_fcn(xpre, data_v, ny, nx, xmin, xmax, ymin, ymax,
+                         dx, dy, inv_dxdy, use_exact, subpixels, normflux)
+        fcur = _flux_fcn(xcur, data_v, ny, nx, xmin, xmax, ymin, ymax,
+                         dx, dy, inv_dxdy, use_exact, subpixels, normflux)
+        if fpre == 0.0:
+            return xpre
+        if fcur == 0.0:
+            return xcur
+        if (fpre > 0.0) == (fcur > 0.0):
+            # No sign change: shrink the bracket and retry
+            max_radius -= max_radius_delta
+            continue
+
+        # Brent's method (scipy zeros C implementation transliterated)
+        xblk = 0.0
+        fblk = 0.0
+        spre = 0.0
+        scur = 0.0
+        for i in range(maxiter):
+            if fpre != 0.0 and fcur != 0.0 and (fpre > 0.0) != (fcur > 0.0):
+                xblk = xpre
+                fblk = fpre
+                spre = scur = xcur - xpre
+            if abs(fblk) < abs(fcur):
+                xpre = xcur
+                xcur = xblk
+                xblk = xpre
+                fpre = fcur
+                fcur = fblk
+                fblk = fpre
+
+            tol = xtol + rtol * abs(xcur)
+            sbis = (xblk - xcur) / 2.0
+            if fcur == 0.0 or abs(sbis) < tol:
+                return xcur
+
+            if abs(spre) > tol and abs(fcur) < abs(fpre):
+                if xpre == xblk:
+                    # interpolate
+                    stry = -fcur * (xcur - xpre) / (fcur - fpre)
+                else:
+                    # extrapolate
+                    dpre = (fpre - fcur) / (xpre - xcur)
+                    dblk = (fblk - fcur) / (xblk - xcur)
+                    stry = -fcur * (fblk * dblk - fpre * dpre) / (
+                        dblk * dpre * (fblk - fpre))
+                if (2.0 * abs(stry) < min(abs(spre), 3.0 * abs(sbis) - tol)):
+                    # good short step
+                    spre = scur
+                    scur = stry
+                else:
+                    # bisect
+                    spre = sbis
+                    scur = sbis
+            else:
+                spre = sbis
+                scur = sbis
+
+            xpre = xcur
+            fpre = fcur
+            if abs(scur) > tol:
+                xcur += scur
+            else:
+                if sbis > 0.0:
+                    xcur += tol
+                else:
+                    xcur -= tol
+
+            fcur = _flux_fcn(xcur, data_v, ny, nx, xmin, xmax, ymin,
+                             ymax, dx, dy, inv_dxdy, use_exact,
+                             subpixels, normflux)
+        return xcur
+
+    return float('nan')
