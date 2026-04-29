@@ -1462,15 +1462,8 @@ class SourceCatalog:
         """
         Spatial moments up to 3rd order of the source.
         """
-        result = []
-        for arr in self._moment_data_cutouts:
-            ny, nx = arr.shape
-            y = np.arange(ny, dtype=float)
-            x = np.arange(nx, dtype=float)
-            yp = np.column_stack([np.ones(ny), y, y * y, y ** 3])
-            xp = np.column_stack([np.ones(nx), x, x * x, x ** 3])
-            result.append(yp.T @ arr @ xp)
-        return np.array(result)
+        from photutils.segmentation._moments import raw_moments_3rd_order
+        return raw_moments_3rd_order(list(self._moment_data_cutouts))
 
     @lazyproperty
     @use_detcat
@@ -1480,20 +1473,13 @@ class SourceCatalog:
         Central moments (translation invariant) of the source up to 3rd
         order.
         """
+        from photutils.segmentation._moments import central_moments_3rd_order
         cutout_centroid = self.cutout_centroid
         if self.isscalar:
             cutout_centroid = cutout_centroid[np.newaxis, :]
-        result = []
-        for arr, xcen, ycen in zip(self._moment_data_cutouts,
-                                   cutout_centroid[:, 0],
-                                   cutout_centroid[:, 1], strict=True):
-            ny, nx = arr.shape
-            yc = np.arange(ny, dtype=float) - ycen
-            xc = np.arange(nx, dtype=float) - xcen
-            yp = np.column_stack([np.ones(ny), yc, yc * yc, yc ** 3])
-            xp = np.column_stack([np.ones(nx), xc, xc * xc, xc ** 3])
-            result.append(yp.T @ arr @ xp)
-        return np.array(result)
+        # cutout_centroid is (x, y); kernel expects (x, y) in that order
+        cen = np.ascontiguousarray(cutout_centroid, dtype=float)
+        return central_moments_3rd_order(list(self._moment_data_cutouts), cen)
 
     @lazyproperty
     @use_detcat
