@@ -24,6 +24,7 @@ from photutils.geometry import circular_overlap_grid, elliptical_overlap_grid
 from photutils.morphology import gini as gini_func
 from photutils.segmentation.core import SegmentationImage
 from photutils.segmentation.utils import _mask_to_mirrored_value
+from photutils.utils._catalog_helpers import as_scalar, get_lazyproperties
 from photutils.utils._deprecation import (_get_future_column_names,
                                           create_empty_deprecated_qtable,
                                           deprecated_getattr,
@@ -98,39 +99,6 @@ _DEPRECATED_META_KEYS = {
     'localbkg_width': 'local_bkg_width',
     'apermask_method': 'aperture_mask_method',
 }
-
-
-def as_scalar(method):
-    """
-    Return a decorated method where it will always return a scalar value
-    (instead of a length-1 tuple/list/array) if the class is scalar.
-
-    Note that lazyproperties that begin with '_' should not have this
-    decorator applied. Such properties are assumed to always be iterable
-    and when slicing (see __getitem__) from a cached multi-object
-    catalog to create a single-object catalog, they will no longer be
-    scalar.
-
-    Parameters
-    ----------
-    method : function
-        The method to be decorated.
-
-    Returns
-    -------
-    decorator : function
-        The decorated method.
-    """
-    @functools.wraps(method)
-    def _as_scalar(*args, **kwargs):
-        result = method(*args, **kwargs)
-        try:
-            return (result[0] if args[0].isscalar and len(result) == 1
-                    else result)
-        except TypeError:  # if result has no len
-            return result
-
-    return _as_scalar
 
 
 def use_detcat(method):
@@ -578,21 +546,8 @@ class SourceCatalog:
     def _lazyproperties(self):
         """
         A list of all class lazyproperties (even in superclasses).
-
-        The result is cached on the class to avoid repeated
-        introspection via `inspect.getmembers`.
         """
-        cls = self.__class__
-        attr = '_cached_lazyproperties'
-        # Subclasses get their own lazyproperty list
-        if attr not in cls.__dict__:
-            def islazyproperty(obj):
-                return isinstance(obj, lazyproperty)
-
-            setattr(cls, attr,
-                    [i[0] for i in inspect.getmembers(
-                        cls, predicate=islazyproperty)])
-        return getattr(cls, attr)
+        return get_lazyproperties(self.__class__)
 
     @staticmethod
     def _index_object_list(lst, index):

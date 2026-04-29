@@ -3,8 +3,6 @@
 Tools for calculating properties of sources defined by an Aperture.
 """
 
-import functools
-import inspect
 import warnings
 from copy import deepcopy
 
@@ -20,6 +18,7 @@ from photutils.aperture import Aperture, SkyAperture, region_to_aperture
 from photutils.aperture.core import (_aperture_metadata,
                                      _update_method_subpixels_docstring)
 from photutils.morphology import gini as gini_func
+from photutils.utils._catalog_helpers import as_scalar, get_lazyproperties
 from photutils.utils._deprecation import (create_empty_deprecated_qtable,
                                           deprecated_getattr,
                                           deprecated_positional_kwargs)
@@ -86,7 +85,8 @@ def as_scalar(method):
 
 
 @_update_method_subpixels_docstring
-class ApertureStats:  # numpydoc ignore: PR01,PR02,PR04,PR07
+class ApertureStats:
+    # numpydoc ignore: PR01,PR02,PR04,PR07
     """
     Class to create a catalog of statistics for pixels within an
     aperture.
@@ -363,21 +363,8 @@ class ApertureStats:  # numpydoc ignore: PR01,PR02,PR04,PR07
     def _lazyproperties(self):
         """
         A list of all class lazyproperties (even in superclasses).
-
-        The result is cached on the class to avoid repeated
-        introspection via `inspect.getmembers`.
         """
-        cls = self.__class__
-        attr = '_cached_lazyproperties'
-        # Subclasses get their own lazyproperty list
-        if attr not in cls.__dict__:
-            def islazyproperty(obj):
-                return isinstance(obj, lazyproperty)
-
-            setattr(cls, attr,
-                    [i[0] for i in inspect.getmembers(
-                        cls, predicate=islazyproperty)])
-        return getattr(cls, attr)
+        return get_lazyproperties(self.__class__)
 
     @property
     def properties(self):
