@@ -1258,9 +1258,9 @@ class TestSourceCatalog:
         data[8, 8] = 0
         cat = SourceCatalog(data, segm)
         assert_allclose(cat[0].covariance,
-                        [(1 / 12, 0), (0, 1 / 12)] * u.pix**2)
+                        [(1 / 12, 0), (0, 1 / 12)])
         assert_allclose(cat[1].covariance,
-                        [(np.nan, np.nan), (np.nan, np.nan)] * u.pix**2)
+                        [(np.nan, np.nan), (np.nan, np.nan)])
         assert_allclose(cat.fwhm, [0.67977799, np.nan] * u.pix)
 
 

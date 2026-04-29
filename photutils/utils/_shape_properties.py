@@ -10,12 +10,18 @@ eccentricity, etc.) from a set of central image moments. The helper
 is used via composition; the host classes own a `_ShapeProperties`
 instance and delegate from their public properties.
 
-All values returned by the helper are unitless (raw `~numpy.ndarray`).
-The host class is responsible for applying any unit conventions.
+Geometry-bearing properties (``inertia_tensor``, ``semimajor_axis``,
+``fwhm``, ``covariance_xx``, ``ellipse_cxx``, ...) return
+`~astropy.units.Quantity` instances with appropriate ``u.pix`` powers.
+``covariance`` is intentionally returned without units.  Dimensionless
+ratios (``eccentricity``, ``elongation``, ``ellipticity``) and
+``orientation_radians`` are returned as plain `~numpy.ndarray` so host
+classes can apply their own angle-wrap conventions.
 """
 
 import warnings
 
+import astropy.units as u
 import numpy as np
 from astropy.utils import lazyproperty
 
@@ -63,7 +69,7 @@ class _ShapeProperties:
     def inertia_tensor(self):
         """
         The inertia tensor for rotation around the source center of
-        mass.
+        mass, in ``u.pix**2``.
 
         Shape: ``(n, 2, 2)``.
         """
@@ -72,7 +78,7 @@ class _ShapeProperties:
         mu_11 = -moments[:, 1, 1]
         mu_20 = moments[:, 2, 0]
         tensor = np.array([mu_02, mu_11, mu_11, mu_20]).swapaxes(0, 1)
-        return tensor.reshape((tensor.shape[0], 2, 2))
+        return tensor.reshape((tensor.shape[0], 2, 2)) * u.pix**2
 
     @lazyproperty
     def covariance(self):
@@ -122,14 +128,10 @@ class _ShapeProperties:
         return covar
 
     @lazyproperty
-    def covariance_eigvals(self):
+    def _covariance_eigvals_value(self):
         """
-        The two eigenvalues of `covariance`, sorted in decreasing order.
-
-        Shape: ``(n, 2)``.
-
-        NaN values are returned for sources with non-finite or
-        non-positive-semidefinite covariance matrices.
+        Raw (unitless) covariance eigenvalues used internally to
+        derive other shape properties.
         """
         eigvals = np.empty((self.n, 2))
         eigvals.fill(np.nan)
@@ -147,31 +149,57 @@ class _ShapeProperties:
         return np.fliplr(eigvals)
 
     @lazyproperty
+    def covariance_eigvals(self):
+        """
+        The two eigenvalues of `covariance`, sorted in decreasing
+        order, in ``u.pix**2``.
+
+        Shape: ``(n, 2)``.
+
+        NaN values are returned for sources with non-finite or
+        non-positive-semidefinite covariance matrices.
+        """
+        return self._covariance_eigvals_value * u.pix**2
+
+    @lazyproperty
+    def _semimajor_axis_value(self):
+        """Raw (unitless) ``semimajor_axis``."""
+        return np.sqrt(self._covariance_eigvals_value[:, 0])
+
+    @lazyproperty
+    def _semiminor_axis_value(self):
+        """Raw (unitless) ``semiminor_axis``."""
+        return np.sqrt(self._covariance_eigvals_value[:, 1])
+
+    @lazyproperty
     def semimajor_axis(self):
         """
-        The 1-sigma standard deviation along the semimajor axis.
+        The 1-sigma standard deviation along the semimajor axis, in
+        ``u.pix``.
         """
-        return np.sqrt(self.covariance_eigvals[:, 0])
+        return self._semimajor_axis_value * u.pix
 
     @lazyproperty
     def semiminor_axis(self):
         """
-        The 1-sigma standard deviation along the semiminor axis.
+        The 1-sigma standard deviation along the semiminor axis, in
+        ``u.pix``.
         """
-        return np.sqrt(self.covariance_eigvals[:, 1])
+        return self._semiminor_axis_value * u.pix
 
     @lazyproperty
     def fwhm(self):
         r"""
-        The circularized FWHM of the equivalent 2D Gaussian.
+        The circularized FWHM of the equivalent 2D Gaussian, in
+        ``u.pix``.
 
         .. math::
 
            \mathrm{FWHM} = 2 \sqrt{\ln(2) \, (a^2 + b^2)}
         """
-        return 2.0 * np.sqrt(np.log(2.0)
-                             * (self.semimajor_axis**2
-                                + self.semiminor_axis**2))
+        a = self._semimajor_axis_value
+        b = self._semiminor_axis_value
+        return 2.0 * np.sqrt(np.log(2.0) * (a**2 + b**2)) * u.pix
 
     @lazyproperty
     def orientation_radians(self):
@@ -196,7 +224,7 @@ class _ShapeProperties:
             e = \sqrt{1 - \frac{b^2}{a^2}}
         """
         semimajor_var, semiminor_var = np.transpose(
-            self.covariance_eigvals)
+            self._covariance_eigvals_value)
         return np.sqrt(1.0 - (semiminor_var / semimajor_var))
 
     @lazyproperty
@@ -204,35 +232,39 @@ class _ShapeProperties:
         """
         The ratio ``a / b`` of the semimajor and semiminor axes.
         """
-        return self.semimajor_axis / self.semiminor_axis
+        return self._semimajor_axis_value / self._semiminor_axis_value
 
     @lazyproperty
     def ellipticity(self):
         """
         ``1 - b/a`` (one minus the inverse of `elongation`).
         """
-        return 1.0 - (self.semiminor_axis / self.semimajor_axis)
+        return 1.0 - (self._semiminor_axis_value
+                      / self._semimajor_axis_value)
 
     @lazyproperty
     def covariance_xx(self):
         """
-        The ``(0, 0)`` element of `covariance` (sigma_x**2).
+        The ``(0, 0)`` element of `covariance` (sigma_x**2), in
+        ``u.pix**2``.
         """
-        return self.covariance[:, 0, 0]
+        return self.covariance[:, 0, 0] * u.pix**2
 
     @lazyproperty
     def covariance_yy(self):
         """
-        The ``(1, 1)`` element of `covariance` (sigma_y**2).
+        The ``(1, 1)`` element of `covariance` (sigma_y**2), in
+        ``u.pix**2``.
         """
-        return self.covariance[:, 1, 1]
+        return self.covariance[:, 1, 1] * u.pix**2
 
     @lazyproperty
     def covariance_xy(self):
         """
-        The ``(0, 1)`` element of `covariance` (sigma_x * sigma_y).
+        The ``(0, 1)`` element of `covariance` (sigma_x * sigma_y),
+        in ``u.pix**2``.
         """
-        return self.covariance[:, 0, 1]
+        return self.covariance[:, 0, 1] * u.pix**2
 
     @lazyproperty
     def _orientation_trig(self):
@@ -248,27 +280,33 @@ class _ShapeProperties:
     @lazyproperty
     def ellipse_cxx(self):
         """
-        Coefficient for ``x**2`` in the generalized ellipse equation.
+        Coefficient for ``x**2`` in the generalized ellipse equation,
+        in ``1 / u.pix**2``.
         """
         cos_t, sin_t = self._orientation_trig
-        return ((cos_t / self.semimajor_axis)**2
-                + (sin_t / self.semiminor_axis)**2)
+        a = self._semimajor_axis_value
+        b = self._semiminor_axis_value
+        return ((cos_t / a)**2 + (sin_t / b)**2) / u.pix**2
 
     @lazyproperty
     def ellipse_cyy(self):
         """
-        Coefficient for ``y**2`` in the generalized ellipse equation.
+        Coefficient for ``y**2`` in the generalized ellipse equation,
+        in ``1 / u.pix**2``.
         """
         cos_t, sin_t = self._orientation_trig
-        return ((sin_t / self.semimajor_axis)**2
-                + (cos_t / self.semiminor_axis)**2)
+        a = self._semimajor_axis_value
+        b = self._semiminor_axis_value
+        return ((sin_t / a)**2 + (cos_t / b)**2) / u.pix**2
 
     @lazyproperty
     def ellipse_cxy(self):
         """
-        Coefficient for ``x*y`` in the generalized ellipse equation.
+        Coefficient for ``x*y`` in the generalized ellipse equation,
+        in ``1 / u.pix**2``.
         """
         cos_t, sin_t = self._orientation_trig
+        a = self._semimajor_axis_value
+        b = self._semiminor_axis_value
         return (2.0 * cos_t * sin_t
-                * ((1.0 / self.semimajor_axis**2)
-                   - (1.0 / self.semiminor_axis**2)))
+                * ((1.0 / a**2) - (1.0 / b**2))) / u.pix**2

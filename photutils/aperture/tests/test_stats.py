@@ -423,9 +423,9 @@ class TestApertureStats:
         apstats = ApertureStats(data, aperture)
         assert_allclose(apstats.sum, (1.0, 0.0))
         assert_allclose(apstats[0].covariance,
-                        [(1 / 12, 0), (0, 1 / 12)] * u.pix**2)
+                        [(1 / 12, 0), (0, 1 / 12)])
         assert_allclose(apstats[1].covariance,
-                        [(np.nan, np.nan), (np.nan, np.nan)] * u.pix**2)
+                        [(np.nan, np.nan), (np.nan, np.nan)])
         assert_allclose(apstats.fwhm, [0.67977799, np.nan] * u.pix)
 
 

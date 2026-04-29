@@ -2458,7 +2458,7 @@ class SourceCatalog:
         The inertia tensor of the source for the rotation around its
         center of mass.
         """
-        return self._shape.inertia_tensor * u.pix**2
+        return self._shape.inertia_tensor
 
     @lazyproperty
     @use_detcat
@@ -2477,7 +2477,7 @@ class SourceCatalog:
         The covariance matrix of the 2D Gaussian function that has the
         same second-order moments as the source.
         """
-        return self._covariance * (u.pix**2)
+        return self._covariance
 
     @lazyproperty
     @use_detcat
@@ -2487,7 +2487,7 @@ class SourceCatalog:
         The two eigenvalues of the `covariance` matrix in decreasing
         order.
         """
-        return self._shape.covariance_eigvals * u.pix**2
+        return self._shape.covariance_eigvals
 
     @lazyproperty
     @use_detcat
@@ -2499,7 +2499,7 @@ class SourceCatalog:
         moments as the source.
         """
         # This matches SourceExtractor's A parameter
-        return self._shape.semimajor_axis * u.pix
+        return self._shape.semimajor_axis
 
     @lazyproperty
     @use_detcat
@@ -2511,7 +2511,7 @@ class SourceCatalog:
         moments as the source.
         """
         # This matches SourceExtractor's B parameter
-        return self._shape.semiminor_axis * u.pix
+        return self._shape.semiminor_axis
 
     @lazyproperty
     @use_detcat
@@ -2532,7 +2532,7 @@ class SourceCatalog:
         semimajor (`semimajor_axis`) and semiminor (`semiminor_axis`)
         axes, respectively.
         """
-        return self._shape.fwhm * u.pix
+        return self._shape.fwhm
 
     @lazyproperty
     @use_detcat
@@ -2609,7 +2609,7 @@ class SourceCatalog:
         The ``(0, 0)`` element of the `covariance` matrix, representing
         :math:`\sigma_x^2`, in units of pixel**2.
         """
-        return self._shape.covariance_xx * u.pix**2
+        return self._shape.covariance_xx
 
     @lazyproperty
     @use_detcat
@@ -2619,7 +2619,7 @@ class SourceCatalog:
         The ``(1, 1)`` element of the `covariance` matrix, representing
         :math:`\sigma_y^2`, in units of pixel**2.
         """
-        return self._shape.covariance_yy * u.pix**2
+        return self._shape.covariance_yy
 
     @lazyproperty
     @use_detcat
@@ -2630,7 +2630,7 @@ class SourceCatalog:
         matrix, representing :math:`\sigma_x \sigma_y`, in units of
         pixel**2.
         """
-        return self._shape.covariance_xy * u.pix**2
+        return self._shape.covariance_xy
 
     @lazyproperty
     @use_detcat
@@ -2653,7 +2653,7 @@ class SourceCatalog:
         `SourceExtractor`_ reports that the isophotal limit of a source
         is well represented by :math:`R \approx 3`.
         """
-        return self._shape.ellipse_cxx / u.pix**2
+        return self._shape.ellipse_cxx
 
     @lazyproperty
     @use_detcat
@@ -2676,7 +2676,7 @@ class SourceCatalog:
         `SourceExtractor`_ reports that the isophotal limit of a source
         is well represented by :math:`R \approx 3`.
         """
-        return self._shape.ellipse_cyy / u.pix**2
+        return self._shape.ellipse_cyy
 
     @lazyproperty
     @use_detcat
@@ -2699,7 +2699,7 @@ class SourceCatalog:
         `SourceExtractor`_ reports that the isophotal limit of a source
         is well represented by :math:`R \approx 3`.
         """
-        return self._shape.ellipse_cxy / u.pix**2
+        return self._shape.ellipse_cxy
 
     @lazyproperty
     @use_detcat

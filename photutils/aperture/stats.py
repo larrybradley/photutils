@@ -1420,7 +1420,7 @@ class ApertureStats:
         The inertia tensor of the source for the rotation around its
         center of mass.
         """
-        return self._shape.inertia_tensor * u.pix**2
+        return self._shape.inertia_tensor
 
     @lazyproperty
     def _covariance(self):
@@ -1437,7 +1437,7 @@ class ApertureStats:
         The covariance matrix of the 2D Gaussian function that has the
         same second-order moments as the source.
         """
-        return self._covariance * (u.pix**2)
+        return self._covariance
 
     @lazyproperty
     @as_scalar
@@ -1446,7 +1446,7 @@ class ApertureStats:
         The two eigenvalues of the `covariance` matrix in decreasing
         order.
         """
-        return self._shape.covariance_eigvals * u.pix**2
+        return self._shape.covariance_eigvals
 
     @lazyproperty
     @as_scalar
@@ -1456,7 +1456,7 @@ class ApertureStats:
         2D Gaussian function that has the same second-order central
         moments as the source.
         """
-        return self._shape.semimajor_axis * u.pix
+        return self._shape.semimajor_axis
 
     @lazyproperty
     @as_scalar
@@ -1466,7 +1466,7 @@ class ApertureStats:
         2D Gaussian function that has the same second-order central
         moments as the source.
         """
-        return self._shape.semiminor_axis * u.pix
+        return self._shape.semiminor_axis
 
     @lazyproperty
     @as_scalar
@@ -1486,7 +1486,7 @@ class ApertureStats:
         semimajor (`semimajor_axis`) and semiminor (`semiminor_axis`)
         axes, respectively.
         """
-        return self._shape.fwhm * u.pix
+        return self._shape.fwhm
 
     @lazyproperty
     @as_scalar
@@ -1557,7 +1557,7 @@ class ApertureStats:
         The ``(0, 0)`` element of the `covariance` matrix, representing
         :math:`\sigma_x^2`, in units of pixel**2.
         """
-        return self._shape.covariance_xx * u.pix**2
+        return self._shape.covariance_xx
 
     @lazyproperty
     @as_scalar
@@ -1566,7 +1566,7 @@ class ApertureStats:
         The ``(1, 1)`` element of the `covariance` matrix, representing
         :math:`\sigma_y^2`, in units of pixel**2.
         """
-        return self._shape.covariance_yy * u.pix**2
+        return self._shape.covariance_yy
 
     @lazyproperty
     @as_scalar
@@ -1576,7 +1576,7 @@ class ApertureStats:
         matrix, representing :math:`\sigma_x \sigma_y`, in units of
         pixel**2.
         """
-        return self._shape.covariance_xy * u.pix**2
+        return self._shape.covariance_xy
 
     @lazyproperty
     @as_scalar
@@ -1598,7 +1598,7 @@ class ApertureStats:
         `SourceExtractor`_ reports that the isophotal limit of a source
         is well represented by :math:`R \approx 3`.
         """
-        return self._shape.ellipse_cxx / u.pix**2
+        return self._shape.ellipse_cxx
 
     @lazyproperty
     @as_scalar
@@ -1620,7 +1620,7 @@ class ApertureStats:
         `SourceExtractor`_ reports that the isophotal limit of a source
         is well represented by :math:`R \approx 3`.
         """
-        return self._shape.ellipse_cyy / u.pix**2
+        return self._shape.ellipse_cyy
 
     @lazyproperty
     @as_scalar
@@ -1642,7 +1642,7 @@ class ApertureStats:
         `SourceExtractor`_ reports that the isophotal limit of a source
         is well represented by :math:`R \approx 3`.
         """
-        return self._shape.ellipse_cxy / u.pix**2
+        return self._shape.ellipse_cxy
 
     @lazyproperty
     @as_scalar
