@@ -32,6 +32,7 @@ from photutils.utils._deprecation import (_get_future_column_names,
 from photutils.utils._misc import _get_meta
 from photutils.utils._progress_bars import add_progress_bar
 from photutils.utils._quantity_helpers import process_quantities
+from photutils.utils._shape_properties import _ShapeProperties
 from photutils.utils.cutouts import CutoutImage
 
 __all__ = ['SourceCatalog']
@@ -666,6 +667,10 @@ class SourceCatalog:
         # Evaluated lazyproperty objects and extra properties
         keys = (set(self.__dict__.keys())
                 & (set(self._lazyproperties) | set(self._custom_properties)))
+        # `_shape` is a `_ShapeProperties` helper that depends on
+        # `moments_central`; let it be lazily rebuilt on the sliced
+        # instance from the (already-sliced) cached moments.
+        keys.discard('_shape')
         for key in keys:
             value = self.__dict__[key]
 
@@ -2689,20 +2694,25 @@ class SourceCatalog:
 
     @lazyproperty
     @use_detcat
+    def _shape(self):
+        """
+        The `_ShapeProperties` helper computing the morphology
+        properties from the central moments.
+        """
+        moments = self.moments_central
+        if self.isscalar:
+            moments = moments[np.newaxis, :]
+        return _ShapeProperties(moments)
+
+    @lazyproperty
+    @use_detcat
     @as_scalar
     def inertia_tensor(self):
         """
         The inertia tensor of the source for the rotation around its
         center of mass.
         """
-        moments = self.moments_central
-        if self.isscalar:
-            moments = moments[np.newaxis, :]
-        mu_02 = moments[:, 0, 2]
-        mu_11 = -moments[:, 1, 1]
-        mu_20 = moments[:, 2, 0]
-        tensor = np.array([mu_02, mu_11, mu_11, mu_20]).swapaxes(0, 1)
-        return tensor.reshape((tensor.shape[0], 2, 2)) * u.pix**2
+        return self._shape.inertia_tensor * u.pix**2
 
     @lazyproperty
     @use_detcat
@@ -2711,39 +2721,7 @@ class SourceCatalog:
         The covariance matrix of the 2D Gaussian function that has the
         same second-order moments as the source, always as an iterable.
         """
-        moments = self.moments_central
-        if self.isscalar:
-            moments = moments[np.newaxis, :]
-        # Ignore divide-by-zero RuntimeWarning
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore', RuntimeWarning)
-            mu_norm = moments / moments[:, 0, 0][:, np.newaxis, np.newaxis]
-
-        covar = np.array([mu_norm[:, 0, 2], mu_norm[:, 1, 1],
-                          mu_norm[:, 1, 1], mu_norm[:, 2, 0]]).swapaxes(0, 1)
-        covar = covar.reshape((covar.shape[0], 2, 2))
-
-        # Modify the covariance matrix in the case of "infinitely" thin
-        # detections. This follows SourceExtractor's prescription of
-        # incrementally increasing the diagonal elements by 1/12.
-        delta = 1.0 / 12
-        delta2 = delta**2
-        # Ignore RuntimeWarning from NaN values in covar
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore', RuntimeWarning)
-            covar_det = np.linalg.det(covar)
-
-            # Covariance should be positive semidefinite
-            idx = np.where(covar_det < 0)[0]
-            covar[idx] = np.array([[np.nan, np.nan], [np.nan, np.nan]])
-
-            idx = np.where(covar_det < delta2)[0]
-            while idx.size > 0:
-                covar[idx, 0, 0] += delta
-                covar[idx, 1, 1] += delta
-                covar_det = np.linalg.det(covar)
-                idx = np.where(covar_det < delta2)[0]
-        return covar
+        return self._shape.covariance
 
     @lazyproperty
     @use_detcat
@@ -2763,22 +2741,7 @@ class SourceCatalog:
         The two eigenvalues of the `covariance` matrix in decreasing
         order.
         """
-        eigvals = np.empty((self.n_labels, 2))
-        eigvals.fill(np.nan)
-        # np.linalg.eigvalsh requires finite input values
-        idx = np.unique(np.where(np.isfinite(self._covariance))[0])
-        eigvals[idx] = np.linalg.eigvalsh(self._covariance[idx])
-
-        # Check for negative variance
-        # (just in case covariance matrix is not positive semidefinite)
-        idx2 = np.unique(np.where(eigvals < 0)[0])
-        eigvals[idx2] = (np.nan, np.nan)
-
-        # Sort each eigenvalue pair in descending order
-        # (eigvalsh returns values in ascending order)
-        eigvals = np.fliplr(eigvals)
-
-        return eigvals * u.pix**2
+        return self._shape.covariance_eigvals * u.pix**2
 
     @lazyproperty
     @use_detcat
@@ -2789,11 +2752,8 @@ class SourceCatalog:
         2D Gaussian function that has the same second-order central
         moments as the source.
         """
-        eigvals = self.covariance_eigvals
-        if self.isscalar:
-            eigvals = eigvals[np.newaxis, :]
         # This matches SourceExtractor's A parameter
-        return np.sqrt(eigvals[:, 0])
+        return self._shape.semimajor_axis * u.pix
 
     @lazyproperty
     @use_detcat
@@ -2804,11 +2764,8 @@ class SourceCatalog:
         2D Gaussian function that has the same second-order central
         moments as the source.
         """
-        eigvals = self.covariance_eigvals
-        if self.isscalar:
-            eigvals = eigvals[np.newaxis, :]
         # This matches SourceExtractor's B parameter
-        return np.sqrt(eigvals[:, 1])
+        return self._shape.semiminor_axis * u.pix
 
     @lazyproperty
     @use_detcat
@@ -2829,8 +2786,7 @@ class SourceCatalog:
         semimajor (`semimajor_axis`) and semiminor (`semiminor_axis`)
         axes, respectively.
         """
-        return 2.0 * np.sqrt(np.log(2.0) * (self.semimajor_axis**2
-                                            + self.semiminor_axis**2))
+        return self._shape.fwhm * u.pix
 
     @lazyproperty
     @use_detcat
@@ -2844,10 +2800,7 @@ class SourceCatalog:
         The angle increases in the counter-clockwise direction and
         will be in the range [0, 360) degrees.
         """
-        covar = self._covariance
-        orient_radians = 0.5 * np.arctan2(2.0 * covar[:, 0, 1],
-                                          (covar[:, 0, 0] - covar[:, 1, 1]))
-        return (np.rad2deg(orient_radians) % 360) << u.deg
+        return (np.rad2deg(self._shape.orientation_radians) % 360) << u.deg
 
     @lazyproperty
     @use_detcat
@@ -2867,8 +2820,7 @@ class SourceCatalog:
         where :math:`a` and :math:`b` are the lengths of the semimajor
         and semiminor axes, respectively.
         """
-        semimajor_var, semiminor_var = np.transpose(self.covariance_eigvals)
-        return np.sqrt(1.0 - (semiminor_var / semimajor_var))
+        return self._shape.eccentricity
 
     @lazyproperty
     @use_detcat
@@ -2884,7 +2836,7 @@ class SourceCatalog:
         where :math:`a` and :math:`b` are the lengths of the semimajor
         and semiminor axes, respectively.
         """
-        return self.semimajor_axis / self.semiminor_axis
+        return self._shape.elongation
 
     @lazyproperty
     @use_detcat
@@ -2901,7 +2853,7 @@ class SourceCatalog:
         where :math:`a` and :math:`b` are the lengths of the semimajor
         and semiminor axes, respectively.
         """
-        return 1.0 - (self.semiminor_axis / self.semimajor_axis)
+        return self._shape.ellipticity
 
     @lazyproperty
     @use_detcat
@@ -2911,7 +2863,7 @@ class SourceCatalog:
         The ``(0, 0)`` element of the `covariance` matrix, representing
         :math:`\sigma_x^2`, in units of pixel**2.
         """
-        return self._covariance[:, 0, 0] * u.pix**2
+        return self._shape.covariance_xx * u.pix**2
 
     @lazyproperty
     @use_detcat
@@ -2921,7 +2873,7 @@ class SourceCatalog:
         The ``(1, 1)`` element of the `covariance` matrix, representing
         :math:`\sigma_y^2`, in units of pixel**2.
         """
-        return self._covariance[:, 1, 1] * u.pix**2
+        return self._shape.covariance_yy * u.pix**2
 
     @lazyproperty
     @use_detcat
@@ -2932,7 +2884,7 @@ class SourceCatalog:
         matrix, representing :math:`\sigma_x \sigma_y`, in units of
         pixel**2.
         """
-        return self._covariance[:, 0, 1] * u.pix**2
+        return self._shape.covariance_xy * u.pix**2
 
     @lazyproperty
     @use_detcat
@@ -2955,8 +2907,7 @@ class SourceCatalog:
         `SourceExtractor`_ reports that the isophotal limit of a source
         is well represented by :math:`R \approx 3`.
         """
-        return ((np.cos(self.orientation) / self.semimajor_axis)**2
-                + (np.sin(self.orientation) / self.semiminor_axis)**2)
+        return self._shape.ellipse_cxx / u.pix**2
 
     @lazyproperty
     @use_detcat
@@ -2979,8 +2930,7 @@ class SourceCatalog:
         `SourceExtractor`_ reports that the isophotal limit of a source
         is well represented by :math:`R \approx 3`.
         """
-        return ((np.sin(self.orientation) / self.semimajor_axis)**2
-                + (np.cos(self.orientation) / self.semiminor_axis)**2)
+        return self._shape.ellipse_cyy / u.pix**2
 
     @lazyproperty
     @use_detcat
@@ -3003,9 +2953,7 @@ class SourceCatalog:
         `SourceExtractor`_ reports that the isophotal limit of a source
         is well represented by :math:`R \approx 3`.
         """
-        return (2.0 * np.cos(self.orientation) * np.sin(self.orientation)
-                * ((1.0 / self.semimajor_axis**2)
-                   - (1.0 / self.semiminor_axis**2)))
+        return self._shape.ellipse_cxy / u.pix**2
 
     @lazyproperty
     @use_detcat
