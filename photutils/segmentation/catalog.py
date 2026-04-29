@@ -11,15 +11,17 @@ from copy import deepcopy
 
 import astropy.units as u
 import numpy as np
-from astropy.stats import SigmaClip
 from astropy.utils import lazyproperty
 from scipy.ndimage import map_coordinates
 
-from photutils.aperture import BoundingBox, RectangularAnnulus
-from photutils.background import SExtractorBackground
+from photutils.aperture import BoundingBox
 from photutils.morphology import gini as gini_func
 from photutils.segmentation._catalog_centroid_refine import (
     _compute_centroid_win, _compute_cutout_centroid_quad)
+from photutils.segmentation._catalog_local_bkg import (
+    _local_background as _local_background_helper)
+from photutils.segmentation._catalog_local_bkg import (
+    _local_background_apertures as _local_background_apertures_helper)
 from photutils.segmentation._catalog_photometry import (
     _aperture_photometry as _aperture_photometry_helper)
 from photutils.segmentation._catalog_photometry import (
@@ -2712,22 +2714,7 @@ class SourceCatalog:
         The `~photutils.aperture.RectangularAnnulus` aperture used to
         estimate the local background.
         """
-        if self.local_bkg_width == 0:
-            return self._null_objects
-
-        apertures = []
-        for bbox_ in self._bbox:
-            xpos = 0.5 * (bbox_.ixmin + bbox_.ixmax - 1)
-            ypos = 0.5 * (bbox_.iymin + bbox_.iymax - 1)
-            scale = 1.5
-            width_in = (bbox_.ixmax - bbox_.ixmin) * scale
-            width_out = width_in + 2 * self.local_bkg_width
-            height_in = (bbox_.iymax - bbox_.iymin) * scale
-            height_out = height_in + 2 * self.local_bkg_width
-            apertures.append(RectangularAnnulus((xpos, ypos), width_in,
-                                                width_out, height_out,
-                                                h_in=height_in, theta=0.0))
-        return apertures
+        return _local_background_apertures_helper(self)
 
     @lazyproperty
     @use_detcat
@@ -2754,46 +2741,7 @@ class SourceCatalog:
 
         This property is always an `~numpy.ndarray` without units.
         """
-        if self.local_bkg_width == 0:
-            local_bkgs = np.zeros(self.n_labels)
-        else:
-            sigma_clip = SigmaClip(sigma=3.0, cenfunc='median', maxiters=20)
-            bkg_func = SExtractorBackground(sigma_clip=sigma_clip)
-            bkg_apers = self._local_background_apertures
-
-            local_bkgs = []
-            for aperture in bkg_apers:
-                aperture_mask = aperture.to_mask(method='center')
-                slc_lg, slc_sm = aperture_mask.get_overlap_slices(
-                    self._data.shape)
-
-                data_cutout = self._data[slc_lg].astype(float, copy=True)
-                # All non-zero segment labels are masked
-                segm_mask_cutout = (
-                    self._segmentation_image.data[slc_lg].astype(bool))
-                if self._mask is None:
-                    mask_cutout = None
-                else:
-                    mask_cutout = self._mask[slc_lg]
-                data_mask_cutout = self._make_cutout_data_mask(data_cutout,
-                                                               mask_cutout)
-                data_mask_cutout |= segm_mask_cutout
-
-                aperweight_cutout = aperture_mask.data[slc_sm]
-                good_mask = (aperweight_cutout > 0) & ~data_mask_cutout
-
-                data_cutout *= aperweight_cutout
-                data_values = data_cutout[good_mask]  # 1D array
-
-                # Check not enough unmasked pixels
-                if len(data_values) < 10:
-                    local_bkgs.append(0.0)
-                    continue
-                local_bkgs.append(bkg_func(data_values))
-            local_bkgs = np.array(local_bkgs)
-
-        local_bkgs[self._all_masked] = np.nan
-        return local_bkgs
+        return _local_background_helper(self)
 
     @lazyproperty
     @as_scalar
