@@ -957,18 +957,6 @@ class SourceCatalog:
             data_mask |= mask_cutout
         return data_mask
 
-    def _make_cutout_data_masks(self, data_cutouts, mask_cutouts):
-        """
-        Make a list of cutout data masks, combining both the input
-        ``mask`` and non-finite ``data`` values for each source.
-        """
-        data_masks = []
-        for (data_cutout, mask_cutout) in zip(data_cutouts, mask_cutouts,
-                                              strict=True):
-            data_masks.append(self._make_cutout_data_mask(data_cutout,
-                                                          mask_cutout))
-        return data_masks
-
     @lazyproperty
     def _cutout_segment_masks(self):
         """
@@ -983,31 +971,41 @@ class SourceCatalog:
                        self._segmentation_image_cutouts,
                        strict=True)]
 
-    @lazyproperty
-    def _cutout_data_masks(self):
+    def _cutout_data_mask_for(self, idx):
         """
-        Cutout boolean mask of non-finite ``data`` values combined with
-        the input ``mask`` array.
+        Return the data-only cutout mask (non-finite ``data`` combined
+        with the input ``mask``) for source ``idx``.
 
-        The mask is `True` for non-finite ``data`` values and where the
-        input ``mask`` is `True`.
+        Computed on demand to avoid caching a third per-source mask
+        layer; ``_cutout_total_masks`` is the only mask layer that is
+        cached.
         """
-        return self._make_cutout_data_masks(self._data_cutouts,
-                                            self._mask_cutouts)
+        data_cutout = self._data_cutouts[idx]
+        mask_cutout = (None if self._mask is None
+                       else self._mask_cutouts[idx])
+        return self._make_cutout_data_mask(data_cutout, mask_cutout)
 
     @lazyproperty
     def _cutout_total_masks(self):
         """
-        Boolean mask representing the combination of
-        ``_cutout_segment_masks`` and ``_cutout_data_masks``.
+        Boolean mask combining the segment mask and the data mask
+        (non-finite ``data`` values plus any input ``mask``).
 
         This mask is applied to ``data``, ``error``, and ``background``
         inputs when calculating properties.
+
+        This is the single cached mask layer; the segment-only and
+        data-only sub-masks are computed on demand from this and the
+        underlying segmentation cutouts.
         """
         masks = []
-        for mask1, mask2 in zip(self._cutout_segment_masks,
-                                self._cutout_data_masks, strict=True):
-            masks.append(mask1 | mask2)
+        for segm_mask, data_cutout, mask_cutout in zip(
+                self._cutout_segment_masks,
+                self._data_cutouts,
+                self._mask_cutouts,
+                strict=True):
+            data_mask = self._make_cutout_data_mask(data_cutout, mask_cutout)
+            masks.append(segm_mask | data_mask)
         return masks
 
     @lazyproperty
