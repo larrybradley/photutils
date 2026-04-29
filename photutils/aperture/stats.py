@@ -25,7 +25,6 @@ from photutils.utils._deprecation import (create_empty_deprecated_qtable,
                                           deprecated_getattr,
                                           deprecated_positional_kwargs)
 from photutils.utils._misc import _get_meta
-from photutils.utils._moments import _image_moments
 from photutils.utils._quantity_helpers import process_quantities
 from photutils.utils._shape_properties import _ShapeProperties
 
@@ -984,8 +983,8 @@ class ApertureStats:
         """
         Spatial moments up to 3rd order of the source.
         """
-        return np.array([_image_moments(arr, order=3)
-                         for arr in self._moment_data_cutout])
+        from photutils.segmentation._moments import raw_moments_3rd_order
+        return raw_moments_3rd_order(list(self._moment_data_cutout))
 
     @lazyproperty
     @as_scalar
@@ -994,13 +993,14 @@ class ApertureStats:
         Central moments (translation invariant) of the source up to 3rd
         order.
         """
+        from photutils.segmentation._moments import central_moments_3rd_order
         cutout_centroid = self.cutout_centroid
         if self.isscalar:
             cutout_centroid = cutout_centroid[np.newaxis, :]
-        return np.array([_image_moments(arr, center=(xcen_, ycen_), order=3)
-                         for arr, xcen_, ycen_ in
-                         zip(self._moment_data_cutout, cutout_centroid[:, 0],
-                             cutout_centroid[:, 1], strict=True)])
+        # cutout_centroid columns are (x, y); kernel expects same.
+        cen = np.ascontiguousarray(cutout_centroid, dtype=float)
+        return central_moments_3rd_order(
+            list(self._moment_data_cutout), cen)
 
     @lazyproperty
     @as_scalar

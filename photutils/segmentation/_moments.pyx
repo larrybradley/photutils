@@ -159,6 +159,17 @@ def central_moments_3rd_order(list cutouts, np.ndarray[DTYPE_t, ndim=2] centroid
         xc = cen_v[i, 0]
         yc = cen_v[i, 1]
 
+        # Propagate a NaN centroid (e.g., for a completely-masked
+        # source whose raw moments are all zero) into all output
+        # entries so that downstream shape properties evaluate to
+        # NaN, matching the previous BLAS-based formulation where
+        # NaN * 0 = NaN.
+        if xc != xc or yc != yc:
+            for yi in range(4):
+                for xi in range(4):
+                    out_v[i, yi, xi] = float('nan')
+            continue
+
         for yi in range(ny):
             s0 = 0.0
             s1 = 0.0
