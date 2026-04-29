@@ -21,7 +21,7 @@ cdef extern from "math.h":
     double exp(double x)
 
 __all__ = ['raw_moments_3rd_order', 'central_moments_3rd_order',
-           'centroid_win_step']
+           'centroid_win_step', 'aperture_weighted_sum']
 
 DTYPE = np.float64
 ctypedef np.float64_t DTYPE_t
@@ -276,3 +276,81 @@ def centroid_win_step(np.ndarray[DTYPE_t, ndim=2] data,
             my += w * dy
 
     return total, mx, my
+
+
+def aperture_weighted_sum(np.ndarray[DTYPE_t, ndim=2] weights,
+                          np.ndarray[DTYPE_t, ndim=2] data,
+                          np.ndarray[np.uint8_t, ndim=2, cast=True] mask,
+                          error):
+    """
+    Compute aperture-weighted flux (and optional flux error) over the
+    good pixels of a cutout.
+
+    A pixel is considered good when its aperture weight is positive
+    *and* the corresponding ``mask`` value is `False`.  This matches
+    the per-source inner loop used by aperture photometry in
+    `~photutils.segmentation.SourceCatalog`.
+
+    Parameters
+    ----------
+    weights : 2D `~numpy.ndarray` of float64
+        The aperture overlap weights.
+
+    data : 2D `~numpy.ndarray` of float64
+        The (background-subtracted) cutout data.
+
+    mask : 2D `~numpy.ndarray` of bool
+        Boolean mask.  Pixels where ``mask`` is `True` are excluded.
+
+    error : 2D `~numpy.ndarray` of float64 or None
+        Optional per-pixel error array.  When `None`, ``flux_err``
+        is returned as ``NaN``.
+
+    Returns
+    -------
+    flux : float
+        ``sum_{good} weights * data``, or ``NaN`` if no good pixels.
+
+    flux_err : float
+        ``sqrt(sum_{good} weights * error**2)``, ``NaN`` if no good
+        pixels or if ``error`` is `None`.
+    """
+    cdef DTYPE_t[:, :] w_v = weights
+    cdef DTYPE_t[:, :] d_v = data
+    cdef np.uint8_t[:, :] m_v = mask
+    cdef DTYPE_t[:, :] e_v
+    cdef bint has_error = error is not None
+    cdef Py_ssize_t ny = w_v.shape[0]
+    cdef Py_ssize_t nx = w_v.shape[1]
+    cdef Py_ssize_t i, j
+    cdef Py_ssize_t n_good = 0
+    cdef double w
+    cdef double flux = 0.0
+    cdef double err_sq = 0.0
+    cdef double flux_err
+
+    if has_error:
+        e_v = error
+        for j in range(ny):
+            for i in range(nx):
+                w = w_v[j, i]
+                if w > 0.0 and not m_v[j, i]:
+                    flux += w * d_v[j, i]
+                    err_sq += w * e_v[j, i] * e_v[j, i]
+                    n_good += 1
+    else:
+        for j in range(ny):
+            for i in range(nx):
+                w = w_v[j, i]
+                if w > 0.0 and not m_v[j, i]:
+                    flux += w * d_v[j, i]
+                    n_good += 1
+
+    if n_good == 0:
+        return float('nan'), float('nan')
+
+    if has_error:
+        flux_err = err_sq ** 0.5
+    else:
+        flux_err = float('nan')
+    return flux, flux_err

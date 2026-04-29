@@ -21,6 +21,7 @@ from photutils.aperture import (BoundingBox, CircularAperture,
 from photutils.geometry import (circular_overlap_grid,
                                 circular_overlap_weighted_sum,
                                 elliptical_overlap_grid)
+from photutils.segmentation._moments import aperture_weighted_sum
 from photutils.segmentation.utils import _mask_to_mirrored_value
 from photutils.utils._progress_bars import add_progress_bar
 
@@ -467,23 +468,16 @@ class _Photometry:
                 label, xcen, ycen, aperture_mask.bbox, bkg)
 
             aperture_weights = aperture_mask.data[slc_sm]
-            pixel_mask = (aperture_weights > 0) & ~mask  # good pixels
-            # Ignore RuntimeWarning for invalid data or error values
-            with warnings.catch_warnings():
-                warnings.simplefilter('ignore', RuntimeWarning)
-                values = (aperture_weights * data)[pixel_mask]
-                flux_ = np.nan if values.shape == (0,) else np.sum(values)
-                flux.append(flux_)
-
-                if error is None:
-                    flux_err_ = np.nan
-                else:
-                    values = (aperture_weights * error**2)[pixel_mask]
-                    if values.shape == (0,):
-                        flux_err_ = np.nan
-                    else:
-                        flux_err_ = np.sqrt(np.sum(values))
-                flux_err.append(flux_err_)
+            # Compute flux/flux_err in C to avoid allocating boolean
+            # masks and intermediate weighted arrays.
+            flux_, flux_err_ = aperture_weighted_sum(
+                np.ascontiguousarray(aperture_weights, dtype=float),
+                np.ascontiguousarray(data, dtype=float),
+                np.ascontiguousarray(mask).view(np.uint8),
+                None if error is None
+                else np.ascontiguousarray(error, dtype=float))
+            flux.append(flux_)
+            flux_err.append(flux_err_)
 
         return np.array(flux), np.array(flux_err)
 
@@ -578,22 +572,14 @@ class _Photometry:
                 continue
 
             aperture_weights = mask_data[slc_sm]
-            pixel_mask = (aperture_weights > 0) & ~mask
-            with warnings.catch_warnings():
-                warnings.simplefilter('ignore', RuntimeWarning)
-                values = (aperture_weights * data)[pixel_mask]
-                flux_ = np.nan if values.shape == (0,) else np.sum(values)
-                flux.append(flux_)
-
-                if error is None:
-                    flux_err_ = np.nan
-                else:
-                    values = (aperture_weights * error ** 2)[pixel_mask]
-                    if values.shape == (0,):
-                        flux_err_ = np.nan
-                    else:
-                        flux_err_ = np.sqrt(np.sum(values))
-                flux_err.append(flux_err_)
+            flux_, flux_err_ = aperture_weighted_sum(
+                np.ascontiguousarray(aperture_weights, dtype=float),
+                np.ascontiguousarray(data, dtype=float),
+                np.ascontiguousarray(mask).view(np.uint8),
+                None if error is None
+                else np.ascontiguousarray(error, dtype=float))
+            flux.append(flux_)
+            flux_err.append(flux_err_)
 
         return np.array(flux), np.array(flux_err)
 
