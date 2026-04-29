@@ -18,7 +18,9 @@ from scipy.optimize import root_scalar
 
 from photutils.aperture import (BoundingBox, CircularAperture,
                                 EllipticalAperture)
-from photutils.geometry import circular_overlap_grid, elliptical_overlap_grid
+from photutils.geometry import (circular_overlap_grid,
+                                circular_overlap_weighted_sum,
+                                elliptical_overlap_grid)
 from photutils.segmentation.utils import _mask_to_mirrored_value
 from photutils.utils._progress_bars import add_progress_bar
 
@@ -644,14 +646,13 @@ class _Photometry:
         """
         Function whose root is found to compute the ``flux_radius``.
 
-        Uses ``circular_overlap_grid`` directly on pre-computed cutout data
-        (with masked pixels zeroed) to avoid per-call aperture object
-        overhead.
+        Uses ``circular_overlap_weighted_sum`` directly on pre-computed
+        cutout data (with masked pixels zeroed) to avoid allocating a
+        per-call ``(ny, nx)`` weight array.
         """
-        xmin_e, xmax_e, ymin_e, ymax_e, nx, ny, exact, subpx = grid_params
-        weights = circular_overlap_grid(xmin_e, xmax_e, ymin_e, ymax_e,
-                                        nx, ny, radius, exact, subpx)
-        flux = np.sum(clean_data * weights)
+        xmin_e, xmax_e, ymin_e, ymax_e, _nx, _ny, exact, subpx = grid_params
+        flux = circular_overlap_weighted_sum(
+            clean_data, xmin_e, xmax_e, ymin_e, ymax_e, radius, exact, subpx)
         return 1.0 - (flux / normflux)
 
     def _flux_radius_optimizer_args(self):

@@ -22,7 +22,7 @@ cimport numpy as np
 
 from .core cimport area_arc, area_triangle, floor_sqrt
 
-__all__ = ['circular_overlap_grid']
+__all__ = ['circular_overlap_grid', 'circular_overlap_weighted_sum']
 
 
 cdef extern from "math.h" nogil:
@@ -260,3 +260,88 @@ cdef double circle_overlap_core(double xmin, double ymin, double xmax,
                     area_triangle(x1, y1, x2, y2, xmin, ymin))
 
     return area
+
+
+def circular_overlap_weighted_sum(np.ndarray[DTYPE_t, ndim=2] data,
+                                  double xmin, double xmax,
+                                  double ymin, double ymax,
+                                  double r, int use_exact, int subpixels):
+    """
+    circular_overlap_weighted_sum(data, xmin, xmax, ymin, ymax, r, use_exact, subpixels)
+
+    Sum of ``data * fraction`` over a pixel grid, where ``fraction`` is the
+    overlap of each pixel with a circle of radius ``r`` centered on the
+    origin (same geometry as ``circular_overlap_grid``), without ever
+    allocating the per-pixel fraction array.
+
+    Used by `~photutils.segmentation.SourceCatalog.flux_radius` to
+    avoid the per-iteration allocation+sum that dominates the brentq
+    inner loop.
+
+    Parameters
+    ----------
+    data : 2D `~numpy.ndarray` of float64
+        Per-pixel weights.  Must have shape ``(ny, nx)`` matching the
+        grid implied by ``xmin/xmax/ymin/ymax``.
+
+    xmin, xmax, ymin, ymax : float
+        Extent of the grid in the x and y direction.
+
+    r : float
+        Circle radius.
+
+    use_exact : int
+        ``1`` for exact area-overlap, ``0`` for subpixel sampling.
+
+    subpixels : int
+        Subpixel sampling factor when ``use_exact = 0``.
+
+    Returns
+    -------
+    total : float
+        ``sum_{pixels} data[j, i] * fraction(pixel, circle)``.
+    """
+    cdef DTYPE_t[:, :] data_v = data
+    cdef Py_ssize_t ny = data_v.shape[0]
+    cdef Py_ssize_t nx = data_v.shape[1]
+    cdef Py_ssize_t i, j
+    cdef double dx, dy, pixel_radius
+    cdef double bxmin, bxmax, bymin, bymax
+    cdef double pxmin, pxcen, pxmax, pymin, pycen, pymax
+    cdef double d, frac, total
+
+    dx = (xmax - xmin) / nx
+    dy = (ymax - ymin) / ny
+    pixel_radius = 0.5 * sqrt(dx * dx + dy * dy)
+
+    bxmin = -r - 0.5 * dx
+    bxmax = +r + 0.5 * dx
+    bymin = -r - 0.5 * dy
+    bymax = +r + 0.5 * dy
+
+    cdef double inv_dxdy = 1.0 / (dx * dy)
+    total = 0.0
+
+    for i in range(nx):
+        pxmin = xmin + i * dx
+        pxcen = pxmin + dx * 0.5
+        pxmax = pxmin + dx
+        if pxmax > bxmin and pxmin < bxmax:
+            for j in range(ny):
+                pymin = ymin + j * dy
+                pycen = pymin + dy * 0.5
+                pymax = pymin + dy
+                if pymax > bymin and pymin < bymax:
+                    d = sqrt(pxcen * pxcen + pycen * pycen)
+                    if d < r - pixel_radius:
+                        total += data_v[j, i]
+                    elif d < r + pixel_radius:
+                        if use_exact:
+                            frac = circular_overlap_single_exact(
+                                pxmin, pymin, pxmax, pymax, r) * inv_dxdy
+                        else:
+                            frac = circular_overlap_single_subpixel(
+                                pxmin, pymin, pxmax, pymax, r, subpixels)
+                        total += data_v[j, i] * frac
+
+    return total
