@@ -16,12 +16,8 @@ from scipy.ndimage import map_coordinates
 
 from photutils.aperture import BoundingBox
 from photutils.morphology import gini as gini_func
-from photutils.segmentation._catalog_centroid_refine import (
-    _compute_centroid_win, _compute_cutout_centroid_quad)
-from photutils.segmentation._catalog_local_bkg import (
-    _local_background as _local_background_helper)
-from photutils.segmentation._catalog_local_bkg import (
-    _local_background_apertures as _local_background_apertures_helper)
+from photutils.segmentation._catalog_centroid_refine import _CentroidRefiner
+from photutils.segmentation._catalog_local_bkg import _LocalBackground
 from photutils.segmentation._catalog_photometry import (
     _aperture_photometry as _aperture_photometry_helper)
 from photutils.segmentation._catalog_photometry import (
@@ -656,6 +652,10 @@ class SourceCatalog:
         # `moments_central`; let it be lazily rebuilt on the sliced
         # instance from the (already-sliced) cached moments.
         keys.discard('_shape')
+        # Composition helpers hold a reference to ``self``; rebuild them
+        # lazily on the sliced instance.
+        keys.discard('_local_bkg')
+        keys.discard('_centroid_refiner')
         for key in keys:
             value = self.__dict__[key]
 
@@ -1621,7 +1621,7 @@ class SourceCatalog:
         (e.g., due to a non-finite Kron radius), then ``np.nan`` will be
         returned.
         """
-        return _compute_centroid_win(self)
+        return self._centroid_refiner.centroid_win
 
     @lazyproperty
     @use_detcat
@@ -1704,7 +1704,7 @@ class SourceCatalog:
         is at the edge of the source segment. In this case, the position
         of the maximum pixel will be returned.
         """
-        return _compute_cutout_centroid_quad(self)
+        return self._centroid_refiner.cutout_centroid_quad
 
     @lazyproperty
     @use_detcat
@@ -2709,12 +2709,28 @@ class SourceCatalog:
         return np.array([gini_func(arr) for arr in self._data_values])
 
     @lazyproperty
+    def _local_bkg(self):
+        """
+        Composition helper that computes the rectangular-annulus local
+        background apertures and per-source values.
+        """
+        return _LocalBackground(self)
+
+    @lazyproperty
+    def _centroid_refiner(self):
+        """
+        Composition helper that computes the windowed and quadratic
+        centroid refinements.
+        """
+        return _CentroidRefiner(self)
+
+    @lazyproperty
     def _local_background_apertures(self):
         """
         The `~photutils.aperture.RectangularAnnulus` aperture used to
         estimate the local background.
         """
-        return _local_background_apertures_helper(self)
+        return self._local_bkg.apertures
 
     @lazyproperty
     @use_detcat
@@ -2741,7 +2757,7 @@ class SourceCatalog:
 
         This property is always an `~numpy.ndarray` without units.
         """
-        return _local_background_helper(self)
+        return self._local_bkg.values
 
     @lazyproperty
     @as_scalar
