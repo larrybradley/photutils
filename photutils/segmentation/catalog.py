@@ -18,38 +18,7 @@ from photutils.aperture import BoundingBox
 from photutils.morphology import gini as gini_func
 from photutils.segmentation._catalog_centroid_refine import _CentroidRefiner
 from photutils.segmentation._catalog_local_bkg import _LocalBackground
-from photutils.segmentation._catalog_photometry import (
-    _aperture_photometry as _aperture_photometry_helper)
-from photutils.segmentation._catalog_photometry import (
-    _aperture_to_mask as _aperture_to_mask_helper)
-from photutils.segmentation._catalog_photometry import (
-    _calc_kron_photometry as _calc_kron_photometry_helper)
-from photutils.segmentation._catalog_photometry import (
-    _calc_kron_radius as _calc_kron_radius_helper)
-from photutils.segmentation._catalog_photometry import (
-    _circular_photometry as _circular_photometry_helper)
-from photutils.segmentation._catalog_photometry import (
-    _flux_radius as _flux_radius_helper)
-from photutils.segmentation._catalog_photometry import (
-    _flux_radius_optimizer_args as _flux_radius_optimizer_args_helper)
-from photutils.segmentation._catalog_photometry import (
-    _kron_photometry_table as _kron_photometry_table_helper)
-from photutils.segmentation._catalog_photometry import (
-    _make_aperture_data as _make_aperture_data_helper)
-from photutils.segmentation._catalog_photometry import (
-    _make_circular_apertures as _make_circular_apertures_helper)
-from photutils.segmentation._catalog_photometry import (
-    _make_elliptical_apertures as _make_elliptical_apertures_helper)
-from photutils.segmentation._catalog_photometry import (
-    _make_kron_apertures as _make_kron_apertures_helper)
-from photutils.segmentation._catalog_photometry import (
-    _max_circular_kron_radius as _max_circular_kron_radius_helper)
-from photutils.segmentation._catalog_photometry import (
-    _measured_kron_radius as _measured_kron_radius_helper)
-from photutils.segmentation._catalog_photometry import (
-    _plot_circular_apertures as _plot_circular_apertures_helper)
-from photutils.segmentation._catalog_photometry import (
-    _plot_kron_apertures as _plot_kron_apertures_helper)
+from photutils.segmentation._catalog_photometry import _Photometry
 from photutils.segmentation.core import SegmentationImage
 from photutils.utils._catalog_helpers import as_scalar, get_lazyproperties
 from photutils.utils._deprecation import (_get_future_column_names,
@@ -656,6 +625,7 @@ class SourceCatalog:
         # lazily on the sliced instance.
         keys.discard('_local_bkg')
         keys.discard('_centroid_refiner')
+        keys.discard('_photometry')
         for key in keys:
             value = self.__dict__[key]
 
@@ -2725,6 +2695,14 @@ class SourceCatalog:
         return _CentroidRefiner(self)
 
     @lazyproperty
+    def _photometry(self):
+        """
+        Composition helper that provides circular, Kron, and
+        flux-radius photometry implementations.
+        """
+        return _Photometry(self)
+
+    @lazyproperty
     def _local_background_apertures(self):
         """
         The `~photutils.aperture.RectangularAnnulus` aperture used to
@@ -2779,7 +2757,7 @@ class SourceCatalog:
 
         Returns `None` if the aperture mask would be unreasonably large.
         """
-        return _aperture_to_mask_helper(self, aperture, **kwargs)
+        return self._photometry._aperture_to_mask(aperture, **kwargs)
 
     def _make_aperture_data(self, label, x_centroid, y_centroid,
                             aperture_bbox, local_background, *,
@@ -2791,10 +2769,9 @@ class SourceCatalog:
         Neighboring sources can be included, masked, or corrected based
         on the ``aperture_mask_method`` keyword.
         """
-        return _make_aperture_data_helper(self, label, x_centroid,
-                                          y_centroid, aperture_bbox,
-                                          local_background,
-                                          make_error=make_error)
+        return self._photometry._make_aperture_data(
+            label, x_centroid, y_centroid, aperture_bbox,
+            local_background, make_error=make_error)
 
     @as_scalar
     def make_circular_apertures(self, radius):
@@ -2818,7 +2795,7 @@ class SourceCatalog:
             `None` where the source `centroid` position is not finite or
             where the source is completely masked.
         """
-        return _make_circular_apertures_helper(self, radius)
+        return self._photometry._make_circular_apertures(radius)
 
     @as_scalar
     @deprecated_positional_kwargs(since='3.0', until='4.0')
@@ -2860,8 +2837,8 @@ class SourceCatalog:
             The matplotlib patch for each plotted aperture. The patches
             can be used, for example, when adding a plot legend.
         """
-        return _plot_circular_apertures_helper(self, radius, ax, origin,
-                                               **kwargs)
+        return self._photometry._plot_circular_apertures(
+            radius, ax, origin, **kwargs)
 
     @deprecated_positional_kwargs(since='3.0', until='4.0')
     def circular_photometry(self, radius, name=None, overwrite=False):
@@ -2899,7 +2876,7 @@ class SourceCatalog:
             `centroid` position is not finite or the source is
             completely masked).
         """
-        return _circular_photometry_helper(self, radius, name, overwrite)
+        return self._photometry._circular_photometry(radius, name, overwrite)
 
     def _make_elliptical_apertures(self, *, scale=6.0):
         """
@@ -2929,7 +2906,7 @@ class SourceCatalog:
             `centroid` position or elliptical shape parameters are not
             finite or where the source is completely masked.
         """
-        return _make_elliptical_apertures_helper(self, scale=scale)
+        return self._photometry._make_elliptical_apertures(scale=scale)
 
     @lazyproperty
     @use_detcat
@@ -2941,7 +2918,7 @@ class SourceCatalog:
         The returned value is the measured Kron radius without applying
         any minimum Kron or circular radius.
         """
-        return _measured_kron_radius_helper(self)
+        return self._photometry._measured_kron_radius()
 
     @as_scalar
     def _calc_kron_radius(self, kron_params):
@@ -2952,7 +2929,7 @@ class SourceCatalog:
         Returned as a Quantity array or scalar (if self isscalar) with
         pixel units.
         """
-        return _calc_kron_radius_helper(self, kron_params)
+        return self._photometry._calc_kron_radius(kron_params)
 
     @lazyproperty
     @use_detcat
@@ -3024,7 +3001,7 @@ class SourceCatalog:
         """
         Make Kron apertures for each source, always returned as a list.
         """
-        return _make_kron_apertures_helper(self, kron_params)
+        return self._photometry._make_kron_apertures(kron_params)
 
     @lazyproperty
     @use_detcat
@@ -3158,8 +3135,8 @@ class SourceCatalog:
             A list of matplotlib patches for the plotted aperture. The
             patches can be used, for example, when adding a plot legend.
         """
-        return _plot_kron_apertures_helper(self, kron_params, ax, origin,
-                                           **kwargs)
+        return self._photometry._plot_kron_apertures(
+            kron_params, ax, origin, **kwargs)
 
     def _aperture_photometry(self, apertures, *, desc='', **kwargs):
         """
@@ -3186,8 +3163,8 @@ class SourceCatalog:
         flux, flux_err : 1D `~numpy.ndaray`
             The flux and flux error arrays.
         """
-        return _aperture_photometry_helper(self, apertures, desc=desc,
-                                           **kwargs)
+        return self._photometry._aperture_photometry(
+            apertures, desc=desc, **kwargs)
 
     def _calc_kron_photometry(self, *, kron_params=None):
         """
@@ -3208,7 +3185,7 @@ class SourceCatalog:
         kron_flux, kron_flux_err : tuple of `~numpy.ndarray`
             The Kron flux and flux error.
         """
-        return _calc_kron_photometry_helper(self, kron_params=kron_params)
+        return self._photometry._calc_kron_photometry(kron_params=kron_params)
 
     @deprecated_positional_kwargs(since='3.0', until='4.0')
     def kron_photometry(self, kron_params, name=None, overwrite=False):
@@ -3255,8 +3232,8 @@ class SourceCatalog:
             `centroid` position or elliptical shape parameters are not
             finite or where the source is completely masked).
         """
-        return _kron_photometry_table_helper(self, kron_params, name,
-                                             overwrite)
+        return self._photometry._kron_photometry_table(
+            kron_params, name, overwrite)
 
     @lazyproperty
     def _kron_photometry(self):
@@ -3318,7 +3295,7 @@ class SourceCatalog:
         The maximum circular Kron radius used as the upper limit of
         ``flux_radius``.
         """
-        return _max_circular_kron_radius_helper(self)
+        return self._photometry._max_circular_kron_radius()
 
     @lazyproperty
     @use_detcat
@@ -3327,7 +3304,7 @@ class SourceCatalog:
         Per-source pre-computed argument tuples used by ``flux_radius``
         root finding.
         """
-        return _flux_radius_optimizer_args_helper(self)
+        return self._photometry._flux_radius_optimizer_args()
 
     @as_scalar
     @deprecated_positional_kwargs(since='3.0', until='4.0')
@@ -3360,7 +3337,7 @@ class SourceCatalog:
             the Kron flux. NaN is returned where no solution was found
             or where the Kron flux is zero or non-finite.
         """
-        return _flux_radius_helper(self, fraction, name, overwrite)
+        return self._photometry._flux_radius(fraction, name, overwrite)
 
     @as_scalar
     def make_cutouts(self, shape, *, array=None, mode='partial',
