@@ -15,8 +15,7 @@ from astropy.utils import lazyproperty
 from astropy.utils.exceptions import AstropyUserWarning
 
 from photutils.aperture import Aperture, SkyAperture, region_to_aperture
-from photutils.aperture._stats_helpers import (
-    _make_aperture_cutouts as _make_aperture_cutouts_helper)
+from photutils.aperture._stats_helpers import _ApertureCutoutBuilder
 from photutils.aperture.core import (_aperture_metadata,
                                      _update_method_subpixels_docstring)
 from photutils.morphology import gini as gini_func
@@ -407,6 +406,10 @@ class ApertureStats:
         # `moments_central`; let it be lazily rebuilt on the sliced
         # instance from the (already-sliced) cached moments.
         keys.discard('_shape')
+        # `_cutout_builder` is a composition helper that holds a
+        # reference to ``self``; rebuild it lazily on the sliced
+        # instance.
+        keys.discard('_cutout_builder')
         for key in keys:
             value = self.__dict__[key]
 
@@ -692,7 +695,15 @@ class ApertureStats:
             A list of cutout arrays for the data, variance, mask and weight
             arrays for each source (aperture position).
         """
-        return _make_aperture_cutouts_helper(self, aperture_masks)
+        return self._cutout_builder.build(aperture_masks)
+
+    @lazyproperty
+    def _cutout_builder(self):
+        """
+        Composition helper that builds aperture-weighted cutouts for
+        an arbitrary list of aperture masks.
+        """
+        return _ApertureCutoutBuilder(self)
 
     @lazyproperty
     def _aperture_cutouts_center(self):

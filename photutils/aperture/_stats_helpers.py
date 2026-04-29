@@ -2,9 +2,10 @@
 """
 Helpers for `~photutils.aperture.ApertureStats`.
 
-Currently provides the aperture-cutout construction routine, which is
-the largest single piece of cutout machinery in
-`photutils.aperture.stats`.
+`_ApertureCutoutBuilder` is held by the `ApertureStats` instance via
+composition (a `@lazyproperty` accessor) and constructs the aperture-
+weighted data, variance, mask, and weight cutouts on demand for an
+arbitrary list of aperture masks.
 """
 
 import numpy as np
@@ -12,95 +13,108 @@ import numpy as np
 __all__ = []
 
 
-def _make_aperture_cutouts(stats, aperture_masks):
+class _ApertureCutoutBuilder:
     """
-    Make aperture-weighted cutouts for the data and variance, and
-    cutouts for the total mask and aperture mask weights.
+    Build aperture-weighted cutouts for an `ApertureStats` instance.
 
     Parameters
     ----------
     stats : `~photutils.aperture.ApertureStats`
-        The host catalog instance.
-
-    aperture_masks : list of `ApertureMask`
-        A list of `ApertureMask` objects.
-
-    Returns
-    -------
-    cutouts : list of tuple
-        A list of ``(data, variance, mask, weights, overlap)`` tuples
-        for each source/aperture position.
+        The host stats instance.
     """
-    data_cutouts = []
-    variance_cutouts = []
-    mask_cutouts = []
-    weight_cutouts = []
-    overlaps = []
 
-    for (data_cutout, apermask, slices) in zip(stats._data_cutouts,
-                                               aperture_masks,
-                                               stats._overlap_slices,
-                                               strict=True):
+    def __init__(self, stats):
+        self._stats = stats
 
-        slc_large, slc_small = slices
-        if slc_large is None:  # aperture does not overlap the data
-            overlap = False
-            data_cutout = np.array([np.nan])
-            variance_cutout = np.array([np.nan])
-            mask_cutout = np.array([False])
-            weight_cutout = np.array([np.nan])
-        else:
-            # Create a mask of non-finite ``data`` values combined with
-            # the input ``mask`` array
-            data_mask = ~np.isfinite(data_cutout)
-            if stats._mask is not None:
-                data_mask |= stats._mask[slc_large]
+    def build(self, aperture_masks):
+        """
+        Make aperture-weighted cutouts for the data and variance, and
+        cutouts for the total mask and aperture mask weights.
 
-            overlap = True
-            aperweight_cutout = apermask.data[slc_small]
-            weight_cutout = aperweight_cutout * ~data_mask
+        Parameters
+        ----------
+        aperture_masks : list of `ApertureMask`
+            A list of `ApertureMask` objects.
 
-            # Apply the aperture mask; for "exact" and "subpixel" this
-            # is an expanded boolean mask using the aperture mask zero
-            # values
-            mask_cutout = (aperweight_cutout == 0) | data_mask
+        Returns
+        -------
+        cutouts : list of tuple
+            A list of ``(data, variance, mask, weights, overlap)`` tuples
+            for each source/aperture position.
+        """
+        stats = self._stats
+        data_cutouts = []
+        variance_cutouts = []
+        mask_cutouts = []
+        weight_cutouts = []
+        overlaps = []
 
-            data_cutout = data_cutout.copy()
-            if stats.sigma_clip is None:
-                # data_cutout will have zeros where mask_cutout is True
-                data_cutout *= ~mask_cutout
+        for (data_cutout, apermask, slices) in zip(stats._data_cutouts,
+                                                   aperture_masks,
+                                                   stats._overlap_slices,
+                                                   strict=True):
+
+            slc_large, slc_small = slices
+            if slc_large is None:  # aperture does not overlap the data
+                overlap = False
+                data_cutout = np.array([np.nan])
+                variance_cutout = np.array([np.nan])
+                mask_cutout = np.array([False])
+                weight_cutout = np.array([np.nan])
             else:
-                # To input a mask, SigmaClip needs a MaskedArray
-                data_cutout_ma = np.ma.masked_array(data_cutout,
-                                                    mask=mask_cutout)
-                data_sigclip = stats.sigma_clip(data_cutout_ma)
+                # Create a mask of non-finite ``data`` values combined
+                # with the input ``mask`` array
+                data_mask = ~np.isfinite(data_cutout)
+                if stats._mask is not None:
+                    data_mask |= stats._mask[slc_large]
 
-                # Define a mask of only the sigma-clipped pixels
-                sigclip_mask = data_sigclip.mask & ~mask_cutout
-                weight_cutout *= ~sigclip_mask
+                overlap = True
+                aperweight_cutout = apermask.data[slc_small]
+                weight_cutout = aperweight_cutout * ~data_mask
 
-                mask_cutout = data_sigclip.mask
-                data_cutout = data_sigclip.filled(0.0)
+                # Apply the aperture mask; for "exact" and "subpixel"
+                # this is an expanded boolean mask using the aperture
+                # mask zero values
+                mask_cutout = (aperweight_cutout == 0) | data_mask
 
-            # Need to apply the aperture weights
-            data_cutout *= aperweight_cutout
+                data_cutout = data_cutout.copy()
+                if stats.sigma_clip is None:
+                    # data_cutout will have zeros where mask_cutout is
+                    # True
+                    data_cutout *= ~mask_cutout
+                else:
+                    # To input a mask, SigmaClip needs a MaskedArray
+                    data_cutout_ma = np.ma.masked_array(data_cutout,
+                                                        mask=mask_cutout)
+                    data_sigclip = stats.sigma_clip(data_cutout_ma)
 
-            if stats._error is None:
-                variance_cutout = None
-            else:
-                # Apply the exact weights and total mask;
-                # error_cutout will have zeros where mask_cutout is True
-                variance = stats._error[slc_large]**2
-                variance_cutout = (variance * aperweight_cutout
-                                   * ~mask_cutout)
+                    # Define a mask of only the sigma-clipped pixels
+                    sigclip_mask = data_sigclip.mask & ~mask_cutout
+                    weight_cutout *= ~sigclip_mask
 
-        data_cutouts.append(data_cutout)
-        variance_cutouts.append(variance_cutout)
-        mask_cutouts.append(mask_cutout)
-        weight_cutouts.append(weight_cutout)
-        overlaps.append(overlap)
+                    mask_cutout = data_sigclip.mask
+                    data_cutout = data_sigclip.filled(0.0)
 
-    # Use zip (instead of np.transpose) because these may contain arrays
-    # that have different shapes
-    return list(zip(data_cutouts, variance_cutouts, mask_cutouts,
-                    weight_cutouts, overlaps, strict=True))
+                # Need to apply the aperture weights
+                data_cutout *= aperweight_cutout
+
+                if stats._error is None:
+                    variance_cutout = None
+                else:
+                    # Apply the exact weights and total mask;
+                    # error_cutout will have zeros where mask_cutout is
+                    # True
+                    variance = stats._error[slc_large]**2
+                    variance_cutout = (variance * aperweight_cutout
+                                       * ~mask_cutout)
+
+            data_cutouts.append(data_cutout)
+            variance_cutouts.append(variance_cutout)
+            mask_cutouts.append(mask_cutout)
+            weight_cutouts.append(weight_cutout)
+            overlaps.append(overlap)
+
+        # Use zip (instead of np.transpose) because these may contain
+        # arrays that have different shapes
+        return list(zip(data_cutouts, variance_cutouts, mask_cutouts,
+                        weight_cutouts, overlaps, strict=True))
