@@ -766,6 +766,10 @@ Bug Fixes
     ``circular_photometry`` flux errors so that each pixel variance is
     weighted by the squared aperture overlap fraction. [#2398]
 
+  - Fixed a bug in ``SourceCatalog`` where the ``eccentricity``,
+    ``ellipticity``, and ``elongation`` properties were returned as
+    Quantity arrays with ``dimensionless_unscaled`` units. [#xxxx]
+
 - ``photutils.utils``
 
   - Fixed a thread-safety issue in ``ImageDepth`` by using a copy of the
