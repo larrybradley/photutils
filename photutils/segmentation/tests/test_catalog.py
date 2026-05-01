@@ -3676,6 +3676,17 @@ def test_sky_orientation_column():
     assert_allclose(tbl['sky_orientation'], cat.sky_orientation)
 
 
+def test_ellipse_units(gauss_101_catalog):
+    """
+    Test that the eccentricity, ellipticity, and elongation values are
+    not Quantity objects (with dimensionless_unscaled unit).
+    """
+    _data, _segm, cat = gauss_101_catalog
+    assert not isinstance(cat.eccentricity, u.Quantity)
+    assert not isinstance(cat.ellipticity, u.Quantity)
+    assert not isinstance(cat.elongation, u.Quantity)
+
+
 class TestPartialPixelErrorWeights:
     """
     Tests that aperture flux errors weight the pixel variances by the
