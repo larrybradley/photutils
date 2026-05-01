@@ -4058,7 +4058,7 @@ class SourceCatalog:
         and semiminor axes, respectively.
         """
         semimajor_var, semiminor_var = np.transpose(self.covariance_eigvals)
-        return np.sqrt(1.0 - (semiminor_var / semimajor_var))
+        return np.sqrt(1.0 - (semiminor_var / semimajor_var).value)
 
     @cached_property
     @use_detcat
@@ -4073,7 +4073,7 @@ class SourceCatalog:
         where :math:`a` and :math:`b` are the lengths of the semimajor
         and semiminor axes, respectively.
         """
-        return self.semimajor_axis / self.semiminor_axis
+        return (self.semimajor_axis / self.semiminor_axis).value
 
     @cached_property
     @use_detcat
@@ -4089,7 +4089,7 @@ class SourceCatalog:
         where :math:`a` and :math:`b` are the lengths of the semimajor
         and semiminor axes, respectively.
         """
-        return 1.0 - (self.semiminor_axis / self.semimajor_axis)
+        return 1.0 - (1.0 / self.elongation)
 
     @cached_property
     @use_detcat
