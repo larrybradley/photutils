@@ -981,6 +981,10 @@ Bug Fixes
     It is now calculated in ``float64``, as are all of the other source
     properties. [#2446]
 
+  - Fixed a bug in ``SourceCatalog`` where the ``eccentricity``,
+    ``ellipticity``, and ``elongation`` properties were returned as
+    Quantity arrays with ``dimensionless_unscaled`` units. [#xxxx]
+
 - ``photutils.utils``
 
   - Fixed a thread-safety issue in ``ImageDepth`` by using a copy of the
