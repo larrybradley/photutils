@@ -308,8 +308,6 @@ using the :meth:`~photutils.aperture.AperturePhotometry.to_table`
 method::
 
     >>> phot_table = phot.to_table()
-    >>> phot_table['flux'].info.format = '%.8g'  # for consistent table output
-    >>> phot_table['area'].info.format = '%.8g'  # for consistent table output
     >>> phot_table.pprint(max_width=-1)
      id x_center y_center    flux   flux_err    area   flags
                                                 pix2
@@ -375,8 +373,6 @@ by a factor of 5 (``subpixels=5``) in each dimension::
     >>> phot = AperturePhotometry(data, aperture, method='subpixel',
     ...                           subpixels=5)
     >>> phot_table = phot.to_table()
-    >>> for col in phot_table.colnames:
-    ...     phot_table[col].info.format = '%.8g'  # for consistent table output
     >>> phot_table.pprint(max_width=-1)
      id x_center y_center  flux flux_err  area flags
                                           pix2
@@ -421,8 +417,6 @@ been calculated and stored in the array ``error``::
 
     >>> phot = AperturePhotometry(data, aperture, error=error)
     >>> phot_table = phot.to_table()
-    >>> for col in phot_table.colnames:
-    ...     phot_table[col].info.format = '%.8g'  # for consistent table output
     >>> phot_table.pprint(max_width=-1)
      id x_center y_center    flux    flux_err     area   flags
                                                   pix2
@@ -467,8 +461,6 @@ units of electrons/s, we use the exposure time as the effective gain::
     >>> error = calc_total_error(data, bkg_error, effective_gain)
     >>> phot = AperturePhotometry(data, aperture, error=error)
     >>> phot_table = phot.to_table()
-    >>> for col in phot_table.colnames:
-    ...     phot_table[col].info.format = '%.8g'  # for consistent table output
     >>> phot_table.pprint(max_width=-1)
      id x_center y_center    flux    flux_err     area   flags
                                                   pix2
@@ -506,8 +498,6 @@ that the ``'flux_err'`` columns are populated::
     >>> apertures = [CircularAperture(positions, r=r) for r in radii]
     >>> phot = AperturePhotometry(data, apertures, error=error)
     >>> phot_table = phot.to_table()
-    >>> for col in phot_table.colnames:
-    ...     phot_table[col].info.format = '%.8g'  # for consistent table output
     >>> phot_table.pprint(max_width=-1)
      id x_center y_center   flux_0    flux_1    flux_2  flux_err_0 flux_err_1 flux_err_2   area_0    area_1    area_2  flags_0 flags_1 flags_2
                                                                                             pix2      pix2      pix2
@@ -533,8 +523,6 @@ size and orientation. For example, an elliptical aperture requires
     >>> apertures = EllipticalAperture(positions, a, b, theta=theta)
     >>> phot = AperturePhotometry(data, apertures, error=error)
     >>> phot_table = phot.to_table()
-    >>> for col in phot_table.colnames:
-    ...     phot_table[col].info.format = '%.8g'  # for consistent table output
     >>> phot_table.pprint(max_width=-1)
      id x_center y_center   flux    flux_err    area   flags
                                                 pix2
@@ -554,8 +542,6 @@ list of aperture objects with identical positions, but with different
     ...              for (ai, bi) in zip(a, b, strict=True)]
     >>> phot = AperturePhotometry(data, apertures, error=error)
     >>> phot_table = phot.to_table()
-    >>> for col in phot_table.colnames:
-    ...     phot_table[col].info.format = '%.8g'  # for consistent table output
     >>> phot_table.pprint(max_width=-1)
      id x_center y_center  flux_0    flux_1    flux_2  flux_err_0 flux_err_1 flux_err_2  area_0    area_1    area_2  flags_0 flags_1 flags_2
                                                                                           pix2      pix2      pix2
@@ -930,8 +916,6 @@ results as arrays::
     >>> columns = ('id', 'x_centroid', 'y_centroid', 'mean', 'median', 'std',
     ...            'var', 'sum')
     >>> stats_table = aperstats2.to_table(columns=columns)
-    >>> for col in stats_table.colnames:
-    ...     stats_table[col].info.format = '%.8g'  # for consistent table output
     >>> stats_table.pprint(max_width=-1)
      id x_centroid y_centroid    mean     median     std       var       sum
     --- ---------- ---------- --------- --------- --------- --------- ---------
@@ -1046,8 +1030,6 @@ the source fluxes in the circular apertures::
     >>> from photutils.aperture import AperturePhotometry
     >>> phot = AperturePhotometry(data, aperture, error=error)
     >>> phot_table = phot.to_table()
-    >>> for col in phot_table.colnames:
-    ...     phot_table[col].info.format = '%.8g'  # for consistent table output
     >>> phot_table.pprint(max_width=-1)
      id x_center y_center    flux    flux_err     area   flags
                                                   pix2
@@ -1082,8 +1064,6 @@ output table::
 
     >>> phot_table['total_bkg'] = total_bkg
     >>> phot_table['flux_bkgsub'] = phot_bkgsub
-    >>> for col in phot_table.colnames:
-    ...     phot_table[col].info.format = '%.8g'  # for consistent table output
     >>> phot_table.pprint(max_width=-1)
      id x_center y_center    flux    flux_err     area   flags total_bkg flux_bkgsub
                                                   pix2
