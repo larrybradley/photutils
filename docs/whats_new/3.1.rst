@@ -604,7 +604,9 @@ failures, and Kron-aperture issues).
 `~photutils.segmentation.SegmentationImage` exposes the per-label
 provenance flags via a new ``flags`` attribute, and a new
 :func:`~photutils.segmentation.decode_segmentation_flags` function
-decodes flag values into names. Flags describing the same
+decodes flag values into names.
+:meth:`~photutils.segmentation.SourceCatalog.decode_flags` is a
+convenience method that decodes the catalog's own flag values. Flags describing the same
 condition as an aperture flag share the aperture flag's name; the
 bit values are package-specific, so always decode a flag column
 with the decoder of the package that produced it.
