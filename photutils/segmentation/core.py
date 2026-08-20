@@ -142,8 +142,9 @@ class SegmentationImage:
         images not produced by
         :func:`~photutils.segmentation.deblend_sources`. Use
         :func:`~photutils.segmentation.decode_segmentation_flags`
-        to decode the values. The flags are reset to zero when the
-        ``data`` attribute is reassigned.
+        to decode the values. The flags are reset to zero when
+        the ``data`` attribute is reassigned, and slicing returns
+        a new instance with all flags reset to zero.
 
     info : dict
         A dictionary containing auxiliary information about the
@@ -210,7 +211,6 @@ class SegmentationImage:
         segm._set_data(data, labels=labels, areas=areas, slices=slices)
         if deblend_label_map is not None:
             segm._deblend_label_map = deblend_label_map
-        segm._flags_map = {}
         return segm
 
     def __str__(self):
@@ -357,7 +357,9 @@ class SegmentationImage:
         of `~photutils.segmentation.detect_sources`. Use
         `~photutils.segmentation.decode_segmentation_flags` to
         decode the values. The flags are reset to zero when the
-        ``data`` attribute is reassigned.
+        ``data`` attribute is reassigned. Slicing the segmentation
+        image (e.g., ``segm[10:50, 10:50]``) returns a new instance
+        with all flags reset to zero as well.
         """
         return np.array([self._flags_map.get(int(label), 0)
                          for label in self.labels], dtype=int)
