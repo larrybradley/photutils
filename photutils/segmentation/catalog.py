@@ -1559,8 +1559,10 @@ class SourceCatalog:
         # source segment); the moment-derived shape properties are
         # undefined. Fully-masked sources and sources with no positive
         # (convolved) data values have a zero net flux, so they are
-        # also flagged here. The ``~(m00 > 0)`` form additionally
-        # catches a non-finite net flux.
+        # also flagged here. The ``~(m00 > 0)`` form is defensive
+        # against a non-finite net flux, which cannot currently occur
+        # because the moment cutouts are zero-filled for masked and
+        # non-finite pixels, but the form would still catch it.
         m00 = self._array('moments')[:, 0, 0]
         flags[~(m00 > 0)] |= SEGMENTATION_FLAGS.UNDEFINED_SHAPE
 
@@ -2417,6 +2419,7 @@ class SourceCatalog:
             x_centroid, y_centroid)
 
     @cached_property
+    @use_detcat
     def _centroid_win_fallback(self):
         """
         A boolean array that is `True` where the windowed centroid is
