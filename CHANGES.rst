@@ -26,7 +26,7 @@ General
 
 - SciPy is now also a build-time dependency. Its Cython interface to
   the Brent root finder is used by the compiled code that computes the
-  ``SourceCatalog`` flux radii. [#xxxx]
+  ``SourceCatalog`` flux radii. [#2403]
 
 - Added serialization to ASDF for all PSF models. [#2335]
 
@@ -281,7 +281,7 @@ New Features
     call into compiled code. The ``flags`` attribute and the default
     ``to_table()`` output are about 5 times faster for large catalogs.
     No property displays a progress bar any more; the ``progress_bar``
-    keyword is retained for backwards compatibility. [#xxxx]
+    keyword is retained for backwards compatibility. [#2403]
 
 - ``photutils.utils``
 
@@ -997,7 +997,7 @@ API Changes
   - The ``SourceCatalog`` ``progress_bar`` keyword is now deprecated
     and will be removed in version 4.0. All property calculations are
     now computed for all sources at once in compiled code, so no
-    progress bar is displayed and the keyword has no effect. [#xxxx]
+    progress bar is displayed and the keyword has no effect. [#2403]
 
 - ``photutils.utils``
 
