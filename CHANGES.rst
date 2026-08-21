@@ -993,6 +993,11 @@ API Changes
     windowed covariance determinant is negative. Previously, only the
     ellipse condition was applied. [#2397]
 
+  - The ``SourceCatalog`` ``progress_bar`` keyword is now deprecated
+    and will be removed in version 4.0. All property calculations are
+    now computed for all sources at once in compiled code, so no
+    progress bar is displayed and the keyword has no effect. [#xxxx]
+
 - ``photutils.utils``
 
   - The ``ShepardIDWInterpolator`` ``ncoords`` attribute has been
