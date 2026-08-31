@@ -607,11 +607,12 @@ cdef Py_ssize_t _source_markers(const data_t* data, const segm_t* segm,
     Build the deblending markers for one source of a chunk.
 
     Computes the source minimum and maximum over the segment (NaN
-    pixels excluded), applies the exponential-mode fallback for
-    non-positive minima and the too-many-markers fallback to linear
-    mode (recording both in ``flag``), quantizes the cutout, and runs
-    the component-tree core. Returns the number of markers (0 means
-    the source does not split) or -1 if a memory allocation failed.
+    pixels excluded), applies the exponential-mode fallback to sinh
+    for non-positive minima and the too-many-markers fallback to
+    linear mode (recording both in ``flag``), quantizes the cutout,
+    and runs the component-tree core. Returns the number of markers
+    (0 means the source does not split) or -1 if a memory allocation
+    failed.
     """
     cdef Py_ssize_t ny_c = y1 - y0
     cdef Py_ssize_t nx_c = x1 - x0
@@ -647,9 +648,11 @@ cdef Py_ssize_t _source_markers(const data_t* data, const segm_t* segm,
 
     use_mode = mode
     if mode == MODE_EXPONENTIAL and smin <= 0:
-        # Fall back to linear mode for non-positive minima
+        # The exponential spacing is undefined for non-positive
+        # minima; fall back to sinh mode, which keeps the levels
+        # concentrated near the source minimum
         flag[0] |= FLAG_NONPOSMIN
-        use_mode = MODE_LINEAR
+        use_mode = MODE_SINH
 
     # The maximum/minimum ratio and difference scalars are rounded
     # in the data dtype, exactly as NumPy computes them from the
