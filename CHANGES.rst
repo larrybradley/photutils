@@ -321,7 +321,7 @@ New Features
 
   - Added a ``contrast_method`` keyword to ``deblend_sources`` and
     ``SourceFinder`` to select the flux used by the deblending
-    contrast criterion. The default ``'basin'`` preserves the
+    contrast criterion. The ``'basin'`` method preserves the
     existing behavior (the fraction is the total flux in the
     source's watershed basin, with iterative removal of
     below-contrast basins). The new ``'saddle'`` method instead
@@ -330,7 +330,9 @@ New Features
     SourceExtractor ``DEBLEND_MINCONT`` criterion; it is evaluated
     once in the component tree during marker construction, is
     independent of how much envelope territory a source would
-    inherit, and requires only a single watershed pass. [#xxxx]
+    inherit, and requires only a single watershed pass. The default
+    of `None` currently resolves to ``'basin'``; the default is
+    planned to change to ``'saddle'`` in version 4.0. [#xxxx]
 
 - ``photutils.utils``
 
