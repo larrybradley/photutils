@@ -150,7 +150,7 @@ that a local peak must have to be considered as a separate object.
 
 Here's a simple example of source deblending:
 
-.. doctest-requires:: skimage
+::
 
     >>> from photutils.segmentation import deblend_sources
     >>> segment_map2 = deblend_sources(convolved_data, segment_map,
@@ -249,7 +249,7 @@ of `~photutils.segmentation.detect_sources` and
 with the desired detection and deblending parameters, you call it with
 the background-subtracted (convolved) image and threshold:
 
-.. doctest-requires:: skimage
+::
 
     >>> from photutils.segmentation import SourceFinder
     >>> finder = SourceFinder(n_pixels=10)
@@ -291,7 +291,7 @@ measuring source photometry and other source properties, including:
 Here's a simple example of removing border labels and relabeling the
 result:
 
-.. doctest-requires:: skimage
+::
 
     >>> segment_map3 = segment_map.copy()
     >>> segment_map3.remove_border_labels(border_width=10, relabel=True)
@@ -313,14 +313,14 @@ be dilated using the ``size`` or ``footprint`` keyword to mask a
 larger area around each source. Dilating the source mask is useful for
 excluding the faint wings of sources when estimating the background:
 
-.. doctest-requires:: skimage
+::
 
     >>> mask = segment_map.make_source_mask()
     >>> dilated_mask = segment_map.make_source_mask(size=11)
 
 A circular footprint can also be used to dilate the source mask:
 
-.. doctest-requires:: skimage
+::
 
     >>> from photutils.utils import circular_footprint
     >>> footprint = circular_footprint(radius=5)
@@ -490,7 +490,7 @@ measured (if not input, the unconvolved image is used instead).
 Let's continue our example from above and measure the properties of the
 detected sources:
 
-.. doctest-requires:: skimage
+::
 
     >>> from photutils.segmentation import SourceCatalog
     >>> cat = SourceCatalog(data, segment_map, convolved_data=convolved_data)
@@ -515,7 +515,7 @@ properties. The ``label`` column corresponds to the label value in the
 input segmentation image. Note that only a small subset of the source
 properties are shown below:
 
-.. doctest-requires:: skimage
+::
 
     >>> tbl = cat.to_table()
     >>> tbl['x_centroid'].info.format = '.2f'  # optional format
@@ -609,7 +609,7 @@ We can also create a `~photutils.segmentation.SourceCatalog` object
 containing only a specific subset of sources, defined by their
 label numbers in the segmentation image:
 
-.. doctest-requires:: skimage
+::
 
     >>> cat = SourceCatalog(data, segment_map, convolved_data=convolved_data)
     >>> labels = [1, 5, 20, 50, 75, 80]
@@ -634,7 +634,7 @@ includes only a small subset of source properties. The output table
 properties can be customized in the `~astropy.table.QTable` using the
 ``columns`` keyword:
 
-.. doctest-requires:: skimage
+::
 
     >>> cat = SourceCatalog(data, segment_map, convolved_data=convolved_data)
     >>> labels = [1, 5, 20, 50, 75, 80]
@@ -671,7 +671,7 @@ that was subtracted from the data into the ``background`` keyword
 of :class:`~photutils.segmentation.SourceCatalog`, the background
 properties for each source will also be calculated:
 
-.. doctest-requires:: skimage
+::
 
     >>> cat = SourceCatalog(data, segment_map, background=bkg.background)
     >>> labels = [1, 5, 20, 50, 75, 80]
@@ -724,7 +724,7 @@ calculated. `~photutils.segmentation.SourceCatalog.segment_flux`
 and `~photutils.segmentation.SourceCatalog.segment_flux_err` are the
 instrumental flux and propagated flux error within the source segments:
 
-.. doctest-requires:: skimage
+::
 
     >>> from photutils.utils import calc_total_error
     >>> effective_gain = 500.0
@@ -765,7 +765,7 @@ properties and their per-axis
 `~photutils.segmentation.SourceCatalog.y_centroid_quad_err`
 equivalents:
 
-.. doctest-requires:: skimage
+::
 
     >>> columns = ['label', 'x_centroid', 'x_centroid_err', 'y_centroid',
     ...            'y_centroid_err']
@@ -839,7 +839,7 @@ when ``detection_catalog`` is input. Note that the segmentation image
 used to create the detection catalog must be the same one input to the
 measurement catalog:
 
-.. doctest-requires:: skimage
+::
 
     >>> det_cat = SourceCatalog(data, segment_map,
     ...                         convolved_data=convolved_data)
