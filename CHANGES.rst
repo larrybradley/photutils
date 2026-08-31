@@ -1012,6 +1012,15 @@ API Changes
     now computed for all sources at once in compiled code, so no
     progress bar is displayed and the keyword has no effect. [#2403]
 
+  - The ``deblend_sources`` and ``SourceFinder`` ``progress_bar``
+    and ``n_processes`` keywords are now deprecated and will be
+    removed in version 4.0, and both keywords no longer have any
+    effect. Deblending is now dominated by compiled code, so no
+    progress bar is displayed, and the multiprocessing
+    implementation has been removed because its process startup and
+    data-pickling overheads made it slower than the serial
+    implementation at any number of sources. [#xxxx]
+
 - ``photutils.utils``
 
   - The ``ShepardIDWInterpolator`` ``ncoords`` attribute has been
