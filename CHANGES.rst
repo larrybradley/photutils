@@ -283,6 +283,17 @@ New Features
     No property displays a progress bar any more; the ``progress_bar``
     keyword is retained for backwards compatibility. [#2403]
 
+  - Improved the performance of source deblending in
+    ``deblend_sources`` and ``SourceFinder``, producing identical
+    results. The multithreshold marker-merging step is now
+    vectorized, small segments at each threshold level are removed
+    with a bincount-based area filter, obsolete per-level warnings
+    handling was removed, and below-contrast markers are removed in
+    batches when doing so is equivalent to the one-at-a-time
+    removal. Deblending is typically ~1.2 times faster for fields
+    of small blended sources and up to ~2.5 times faster for large
+    segments with many markers. [#xxxx]
+
 - ``photutils.utils``
 
   - Added a new ``DeblendWarning`` class, a subclass of astropy's
