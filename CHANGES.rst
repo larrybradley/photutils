@@ -297,13 +297,26 @@ New Features
   - Significantly improved the performance of source deblending in
     ``deblend_sources`` and ``SourceFinder``, producing identical
     results. The multithreshold watershed markers are now built by
-    compiled code that computes the quantized component tree of each
-    source in a single pass, instead of one detection pass plus a
-    marker-merging pass per threshold level. In addition, below-contrast
-    markers are removed in batches when doing so is equivalent to the
-    one-at-a-time removal. Deblending is typically ~5 times faster, both
-    for fields of many small blended sources and for large segments with
-    many markers. [#2408]
+    compiled code that computes the quantized component tree of
+    each source in a single pass, instead of one detection pass
+    plus a marker-merging pass per threshold level, and the whole
+    marker phase (thresholds, quantization, and mode fallbacks) is
+    batched over chunks of sources in compiled code that releases
+    the GIL. In addition, obsolete per-level warnings handling was
+    removed and below-contrast markers are removed in batches when
+    doing so is equivalent to the one-at-a-time removal. Deblending
+    is typically ~5-7 times faster, both for fields of many small
+    blended sources and for large segments with many markers; the
+    watershed step now dominates the remaining runtime. [#2408]
+
+  - Added an ``n_threads`` keyword to ``deblend_sources`` and
+    ``SourceFinder`` to deblend the sources using multiple threads.
+    The sources are divided into chunks and processed concurrently,
+    producing results identical to the single-threaded computation.
+    The marker-building kernels release the GIL, as do the
+    watershed and most of the array operations, so multithreading
+    can significantly speed up deblending, especially for large
+    sources. [#2408]
 
 - ``photutils.utils``
 
