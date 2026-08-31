@@ -319,6 +319,19 @@ New Features
     can significantly speed up deblending, especially for large
     sources. [#xxxx]
 
+  - Added a ``contrast_method`` keyword to ``deblend_sources`` and
+    ``SourceFinder`` to select the flux used by the deblending
+    contrast criterion. The default ``'basin'`` preserves the
+    existing behavior (the fraction is the total flux in the
+    source's watershed basin, with iterative removal of
+    below-contrast basins). The new ``'saddle'`` method instead
+    measures the flux a source holds above the saddle level where
+    it separates from its neighbors, equivalent to the
+    SourceExtractor ``DEBLEND_MINCONT`` criterion; it is evaluated
+    once in the component tree during marker construction, is
+    independent of how much envelope territory a source would
+    inherit, and requires only a single watershed pass. [#xxxx]
+
 - ``photutils.utils``
 
   - Added a new ``DeblendWarning`` class, a subclass of astropy's
