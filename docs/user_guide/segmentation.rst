@@ -148,6 +148,27 @@ and ``contrast``. ``n_levels`` is the number of multi-thresholding
 levels to use. ``contrast`` is the fraction of the total source flux
 that a local peak must have to be considered as a separate object.
 
+The ``contrast_method`` keyword selects the flux to which the
+``contrast`` fraction refers. With the ``'basin'`` method, it is
+the total flux in the source's watershed basin, i.e., everything
+the watershed assigns to the source, including its share of any
+surrounding envelope; basins below the contrast are removed
+iteratively and their territory is re-flooded. With the
+``'saddle'`` method, it is only the flux the source holds above the
+saddle level where it separates from its neighbors, which is
+equivalent to the `SourceExtractor`_ ``DEBLEND_MINCONT`` criterion.
+The saddle flux measures the significance of the peak itself,
+independently of how much envelope territory the source would
+inherit, which makes it stricter for faint peaks sitting on bright
+envelopes; because it excludes the flux below the saddle, the same
+``contrast`` value selects sources differently between the two
+methods. The saddle method is evaluated once during marker
+construction and needs only a single watershed pass, so it is never
+slower than the basin method and is substantially faster when many
+below-contrast basins would otherwise be removed one at a time. The
+default of `None` currently resolves to ``'basin'``; the default is
+planned to change to ``'saddle'`` in version 4.0.
+
 Here's a simple example of source deblending:
 
 ::
