@@ -5,7 +5,7 @@ Benchmarks for the photutils.segmentation subpackage.
 
 The benchmarks cover source detection (detect_threshold and
 detect_sources), source deblending (deblend_sources) across the
-threshold modes and process counts, the combined SourceFinder class,
+threshold modes and thread counts, the combined SourceFinder class,
 SegmentationImage operations (relabeling, border-label removal,
 source masks, and polygons), SourceCatalog property calculations, and
 concurrent SourceCatalog runs across thread counts.
@@ -32,8 +32,7 @@ from photutils.segmentation import (SegmentationImage, SourceCatalog,
                                     detect_sources, detect_threshold,
                                     make_2dgaussian_kernel)
 from photutils.utils import circular_footprint
-from photutils.utils._optional_deps import (HAS_RASTERIO, HAS_SHAPELY,
-                                            HAS_SKIMAGE)
+from photutils.utils._optional_deps import HAS_RASTERIO, HAS_SHAPELY
 
 FWHM = 4.0
 THRESHOLD = 5.0
@@ -187,10 +186,6 @@ def bench_deblend(*, n_sources=1000, thread_counts=(1, 4), repeats=3,
     seed : int, optional
         The random number generator seed.
     """
-    if not HAS_SKIMAGE:
-        print('\n== deblend_sources: skipped (scikit-image required) ==')
-        return
-
     data, convolved_data, segm = make_inputs(n_sources, seed=seed)
 
     print(f'\n== deblend_sources ({n_sources} sources, '
@@ -241,10 +236,7 @@ def bench_finder(*, n_sources=1000, repeats=3, seed=0):
           f'{data.shape[0]}x{data.shape[1]} image) ==')
     print(f'{"benchmark":>24}{"time":>12}{"n_labels":>10}')
 
-    deblend_options = [False]
-    if HAS_SKIMAGE:
-        deblend_options.append(True)
-    for deblend in deblend_options:
+    for deblend in (False, True):
         finder = SourceFinder(n_pixels=N_PIXELS, deblend=deblend)
         segm = finder(convolved_data, THRESHOLD)
         bench = partial(finder, convolved_data, THRESHOLD)
@@ -484,7 +476,7 @@ def main():
     parser.add_argument('--n-sources', type=int, default=1000,
                         help='total number of Gaussian sources in the '
                              'image (default: %(default)s)')
-    parser.add_argument('--deblend-threads', type=parse_int_list,
+    parser.add_argument('--deblend-n-threads', type=parse_int_list,
                         default=[1, 4],
                         help='comma-separated n_threads values for the '
                              'deblending benchmark (default: 1,4)')
@@ -492,7 +484,7 @@ def main():
                         help='number of concurrent catalog jobs for the '
                              'thread-scaling benchmark '
                              '(default: %(default)s)')
-    parser.add_argument('--threads', type=parse_thread_counts,
+    parser.add_argument('--n-threads', type=parse_thread_counts,
                         default=[1, 2, 4, 8],
                         help='comma-separated thread counts for the '
                              'thread-scaling benchmark (default: 1,2,4,8)')
@@ -516,7 +508,7 @@ def main():
                      seed=args.seed)
     if args.which in ('all', 'deblend'):
         bench_deblend(n_sources=args.n_sources,
-                      thread_counts=args.deblend_threads,
+                      thread_counts=args.deblend_n_threads,
                       repeats=args.repeats, seed=args.seed)
     if args.which in ('all', 'finder'):
         bench_finder(n_sources=args.n_sources, repeats=args.repeats,
@@ -530,7 +522,7 @@ def main():
     if args.which in ('all', 'threads'):
         bench_catalog_threads(n_sources=args.n_sources,
                               n_calls=args.n_calls,
-                              thread_counts=args.threads,
+                              thread_counts=args.n_threads,
                               repeats=args.repeats, seed=args.seed)
 
 

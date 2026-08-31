@@ -570,7 +570,7 @@ def main():
                         help='comma-separated peak counts for the '
                              'many-peak benchmark '
                              '(default: 10,25,50,100)')
-    parser.add_argument('--threads', type=parse_thread_counts,
+    parser.add_argument('--n-threads', type=parse_thread_counts,
                         default=[1, 2, 4, 8],
                         help='comma-separated n_threads values for the '
                              'thread-scaling benchmark '
@@ -605,7 +605,7 @@ def main():
         bench_stages(contrast=0.03, repeats=args.repeats,
                      seed=args.seed)
     if args.which in ('all', 'threads'):
-        bench_threads(thread_counts=args.threads,
+        bench_threads(thread_counts=args.n_threads,
                       repeats=args.repeats, seed=args.seed)
     if args.which == 'profile':
         bench_profile(seed=args.seed)
