@@ -5,6 +5,7 @@ image.
 """
 
 import warnings
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from functools import cached_property
 
@@ -50,7 +51,7 @@ class _DeblendParams:
 @deprecated_renamed_argument('progress_bar', None, '3.1', until='4.0')
 def deblend_sources(data, segmentation_image, n_pixels, *, labels=None,
                     n_levels=32, contrast=0.001, mode='exponential',
-                    connectivity=8, relabel=True,
+                    connectivity=8, relabel=True, n_threads=1,
                     n_processes=1,  # noqa: ARG001
                     progress_bar=True):  # noqa: ARG001
     """
@@ -123,12 +124,24 @@ def deblend_sources(data, segmentation_image, n_pixels, *, labels=None,
         relabeled such that the labels are in consecutive order starting
         from 1.
 
+    n_threads : int, optional
+        The number of threads to use to deblend the sources. The
+        default is 1 (no multithreading). When ``n_threads`` > 1,
+        the sources are divided into chunks and processed
+        concurrently. The per-source results are independent and are
+        assembled in the input-label order, so they are identical to
+        the single-threaded computation. The marker-building kernels
+        release the Python global interpreter lock (GIL), as do the
+        watershed and most of the array operations, so
+        multithreading can significantly speed up the deblending,
+        especially for large sources.
+
     n_processes : int, optional
         This keyword is deprecated and has no effect. Multiprocessing
         no longer provides any benefit: the deblending computation is
         now dominated by compiled code and its process startup and
         data-pickling overheads made it slower than the serial
-        implementation.
+        implementation. Use the ``n_threads`` keyword instead.
 
         .. deprecated:: 3.1
             The ``n_processes`` keyword is deprecated and will be
@@ -199,6 +212,10 @@ def deblend_sources(data, segmentation_image, n_pixels, *, labels=None,
         msg = "mode must be 'exponential', 'linear', or 'sinh'"
         raise ValueError(msg)
 
+    if not isinstance(n_threads, (int, np.integer)) or n_threads < 1:
+        msg = 'n_threads must be a positive integer'
+        raise ValueError(msg)
+
     if contrast == 1:  # no deblending
         segm_img = segmentation_image.copy()
         if relabel:
@@ -240,9 +257,28 @@ def deblend_sources(data, segmentation_image, n_pixels, *, labels=None,
     else:
         driver_segm = np.ascontiguousarray(segm_data, dtype=np.int64)
 
-    results = _deblend_sources_chunk(data, segm_data, driver_data,
-                                     driver_segm, labels, all_slices,
-                                     deblend_params)
+    n_chunks = min(int(n_threads), len(labels))
+    if n_chunks > 1:
+        # The sources are divided into chunks processed concurrently;
+        # the results are assembled in the input order, so they are
+        # identical to the single-threaded computation
+        chunk_indices = np.array_split(np.arange(len(labels)), n_chunks)
+
+        def _run_chunk(indices):
+            chunk_slices = [all_slices[idx] for idx in indices]
+            return _deblend_sources_chunk(data, segm_data, driver_data,
+                                          driver_segm, labels[indices],
+                                          chunk_slices, deblend_params)
+
+        with ThreadPoolExecutor(max_workers=n_chunks) as executor:
+            results = [result
+                       for chunk in executor.map(_run_chunk,
+                                                 chunk_indices)
+                       for result in chunk]
+    else:
+        results = _deblend_sources_chunk(data, segm_data, driver_data,
+                                         driver_segm, labels,
+                                         all_slices, deblend_params)
 
     deblend_label_map = {}
     max_label = segmentation_image.max_label
