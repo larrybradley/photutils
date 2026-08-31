@@ -304,10 +304,14 @@ New Features
     batched over chunks of sources in compiled code that releases
     the GIL. In addition, obsolete per-level warnings handling was
     removed and below-contrast markers are removed in batches when
-    doing so is equivalent to the one-at-a-time removal. Deblending
-    is typically ~5-7 times faster, both for fields of many small
-    blended sources and for large segments with many markers; the
-    watershed step now dominates the remaining runtime. [#2408]
+    doing so is equivalent to the one-at-a-time removal. The
+    watershed step itself now uses a compiled kernel that produces
+    results identical to ``skimage.segmentation.watershed``
+    (including its plateau tie-breaking) without the per-call
+    validation, padding, and cropping overhead, so scikit-image is
+    no longer needed for source deblending. Deblending is typically
+    ~6-16 times faster, both for fields of many small blended
+    sources and for large segments with many markers. [#2408]
 
   - Added an ``n_threads`` keyword to ``deblend_sources`` and
     ``SourceFinder`` to deblend the sources using multiple threads.
