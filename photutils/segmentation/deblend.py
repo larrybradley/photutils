@@ -452,21 +452,21 @@ def _deblend_sources_chunk(data, segm_data, driver_data, driver_segm,
         # same reductions as the per-source Python path and passed to
         # the compiled contrast loop. With the saddle criterion, the
         # markers are already contrast-selected, so the basin removal is
-        # disabled by an unreachable contrast.
+        # disabled.
         if use_saddle:
             source_sum, source_min = source_stats[index]
-            contrast = -np.inf
         else:
             values = data[slc][segm_data[slc] == label]
             source_sum = float(nansum(values))
             source_min = float(nanmin(values))
-            contrast = float(deblend_params.contrast)
 
         source_deblended = deblend_source_contrast(
             driver_data, driver_segm, int(label), int(y0[index]),
             int(y1[index]), int(x0[index]), int(x1[index]), markers,
-            connectivity=connectivity, contrast=contrast,
-            source_sum=source_sum, source_min=source_min)
+            connectivity=connectivity,
+            contrast=float(deblend_params.contrast),
+            source_sum=source_sum, source_min=source_min,
+            apply_contrast=not use_saddle)
         results.append((source_deblended, warns))
 
     return results
