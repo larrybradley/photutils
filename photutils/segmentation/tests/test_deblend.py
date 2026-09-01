@@ -15,8 +15,8 @@ from numpy.testing import assert_allclose, assert_equal
 
 from photutils.segmentation import (SegmentationImage, deblend_sources,
                                     detect_sources)
-from photutils.segmentation.deblend import (_DeblendParams,
-                                            _SingleSourceDeblender)
+from photutils.segmentation._deblend_reference import _SingleSourceDeblender
+from photutils.segmentation.deblend import _DeblendParams
 from photutils.segmentation.flags import SEGMENTATION_FLAGS
 from photutils.utils._optional_deps import HAS_SKIMAGE
 from photutils.utils.exceptions import DeblendWarning
