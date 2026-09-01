@@ -266,8 +266,8 @@ cdef int _contrast_core(const double* posimg, const double* negimg,
                         unsigned char* mask, int* output,
                         Py_ssize_t ny, Py_ssize_t nx, bint conn8,
                         double contrast, double source_sum,
-                        double source_min,
-                        Py_ssize_t n_max_labels) noexcept nogil:
+                        double source_min, Py_ssize_t n_max_labels,
+                        bint apply_contrast) noexcept nogil:
     """
     Run the watershed contrast loop for one source in place.
 
@@ -275,7 +275,8 @@ cdef int _contrast_core(const double* posimg, const double* negimg,
     (consecutive from 1) basins on output. Returns the number of
     final labels, or -1 if a memory allocation failed, or -2 if the
     flooded basins do not cover the segment mask (a connectivity
-    mismatch).
+    mismatch). When ``apply_contrast`` is false, the below-contrast
+    basin removal is skipped and a single watershed pass is run.
 
     The loop replicates the NumPy implementation operation for
     operation: the basin fluxes are accumulated in raster order in
@@ -341,10 +342,11 @@ cdef int _contrast_core(const double* posimg, const double* negimg,
             break
 
         remove_marker = False
-        for i in range(n_labels):
-            if frac[i] < contrast:
-                remove_marker = True
-                break
+        if apply_contrast:
+            for i in range(n_labels):
+                if frac[i] < contrast:
+                    remove_marker = True
+                    break
         if not remove_marker:
             break
 
@@ -444,7 +446,8 @@ def deblend_source_contrast(const data_t[:, ::1] data,
                             Py_ssize_t y1, Py_ssize_t x0,
                             Py_ssize_t x1, markers, *,
                             int connectivity, double contrast,
-                            double source_sum, double source_min):
+                            double source_sum, double source_min,
+                            bint apply_contrast=True):
     """
     Apply the watershed contrast loop to one source's markers.
 
@@ -485,6 +488,12 @@ def deblend_source_contrast(const data_t[:, ::1] data,
     source_min : float
         The minimum data value of the source segment (NaN pixels
         excluded).
+
+    apply_contrast : bool, optional
+        Whether to apply the contrast criterion. If `False`, a
+        single watershed pass is run with no basin removal. This is
+        used with the saddle contrast criterion, where the markers
+        are already contrast-selected.
 
     Returns
     -------
@@ -538,7 +547,8 @@ def deblend_source_contrast(const data_t[:, ::1] data,
                     n_max_labels = output[p]
         status = _contrast_core(posimg, negimg, mask, output, ny_c,
                                 nx_c, conn8, contrast, source_sum,
-                                source_min, n_max_labels)
+                                source_min, n_max_labels,
+                                apply_contrast)
 
     if status == -1:
         raise MemoryError
