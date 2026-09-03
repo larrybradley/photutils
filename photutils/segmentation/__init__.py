@@ -6,6 +6,7 @@ morphological properties.
 """
 
 from .catalog import *  # noqa: F403
+from .clean import *  # noqa: F403
 from .core import *  # noqa: F403
 from .deblend import *  # noqa: F403
 from .detect import *  # noqa: F403
