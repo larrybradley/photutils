@@ -9,6 +9,14 @@ General
 New Features
 ^^^^^^^^^^^^
 
+- ``photutils.segmentation``
+
+  - Added a ``get_spurious_labels`` function implementing the
+    SourceExtractor CLEAN test. It identifies the segments that are
+    likely spurious detections in the wings of a brighter neighbor
+    and reports the source that absorbs each one, without modifying
+    the segmentation image. [#XXXX]
+
 Bug Fixes
 ^^^^^^^^^
 
