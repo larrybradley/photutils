@@ -837,7 +837,7 @@ def python_saddle_markers(data, segment_mask, thresholds, n_pixels,
     Reference implementation of the saddle-criterion marker selection.
 
     Builds the per-level component tree with per-level labeling and
-    selects the markers with a global junction scan: a junction splits
+    selects the markers with a global junction scan. A junction splits
     where at least two children with at least ``n_pixels`` pixels each
     hold more flux above the junction level than ``limit``, and the
     markers are the passing children of splitting junctions that contain
@@ -1031,7 +1031,7 @@ def test_saddle_deblend():
                             & SEGMENTATION_FLAGS.DEBLENDED) == 4
 
     # Higher contrast drops the faint basins entirely (they cannot
-    # combine and survive; there is no removal iteration).
+    # combine and survive, as there is no removal iteration).
     result2 = deblend_sources(image, segm, 5, contrast=0.1,
                               contrast_method='saddle')
     assert result2.n_labels == 3
@@ -1237,8 +1237,8 @@ def test_flags_fallback_without_deblending(relabel):
                                 relabel=relabel)
 
     bit = SEGMENTATION_FLAGS.DEBLEND_NONPOSMIN
-    # Both remaining sources fell back (both have negative minima);
-    # neither splits, so each output label carries the fallback bit
+    # Both remaining sources fell back (both have negative minima).
+    # Neither splits, so each output label carries the fallback bit
     # but not the deblended bit
     assert_equal(segm2.flags & bit, [bit] * segm2.n_labels)
     assert_equal(segm2.flags & SEGMENTATION_FLAGS.DEBLENDED,
