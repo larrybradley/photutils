@@ -43,6 +43,45 @@ def make_scene(sources, shape=(100, 60)):
     return data
 
 
+def labels_at(segm, sources):
+    """
+    Return the segment label at the center of each source.
+
+    Parameters
+    ----------
+    segm : `~photutils.segmentation.SegmentationImage`
+        The segmentation image.
+
+    sources : list of tuple
+        The ``(amplitude, x, y, sigma)`` of each source.
+
+    Returns
+    -------
+    labels : list of int
+        The labels.
+    """
+    return [int(segm.data[int(y), int(x)]) for _, x, y, _ in sources]
+
+
+def as_dict(result):
+    """
+    Return the result table as a label to absorber dictionary.
+
+    Parameters
+    ----------
+    result : `~astropy.table.QTable`
+        The ``get_spurious_labels`` result.
+
+    Returns
+    -------
+    mapping : dict
+        The mapping of each spurious label to its absorber.
+    """
+    return {int(label): int(absorber)
+            for label, absorber in zip(result['label'],
+                                       result['absorbed_by'], strict=True)}
+
+
 # A bright star with a faint blob inside its cleaning zone. The blob
 # is well outside the star's isophote (its own segment) but the star's
 # model wing at the blob exceeds the blob's n_pixels-th brightest
@@ -50,9 +89,9 @@ def make_scene(sources, shape=(100, 60)):
 STAR = (1000.0, 30.0, 70.0, 3.5)
 NEAR_BLOB = (7.0, 30.0, 52.0, 2.5)
 
-# A very faint blob within the near blob's cleaning zone. It is
-# absorbed by the near blob, which is in turn absorbed by the star.
-CHAIN_BLOB = (5.3, 30.0, 40.0, 3.0)
+# A very faint blob within the near blob's cleaning zone and within
+# the star's cleaning zone.
+FAINT_BLOB = (5.3, 30.0, 40.0, 3.0)
 
 # A faint blob far from everything.
 FAR_BLOB = (7.0, 30.0, 12.0, 2.5)
@@ -65,13 +104,6 @@ def star_scene():
     return data, segm
 
 
-def labels_at(segm, sources):
-    """
-    Return the segment label at the center of each source.
-    """
-    return [int(segm.data[int(y), int(x)]) for _, x, y, _ in sources]
-
-
 class TestGetSpuriousLabels:
     def test_near_blob_is_absorbed(self, star_scene):
         data, segm = star_scene
@@ -79,8 +111,7 @@ class TestGetSpuriousLabels:
         result = get_spurious_labels(data, segm, THRESHOLD, N_PIXELS)
         assert isinstance(result, QTable)
         assert result.colnames == ['label', 'absorbed_by']
-        assert_equal(result['label'], [blob])
-        assert_equal(result['absorbed_by'], [star])
+        assert as_dict(result) == {blob: star}
 
     def test_far_blob_survives(self):
         data = make_scene([STAR, FAR_BLOB])
@@ -97,43 +128,80 @@ class TestGetSpuriousLabels:
         result = get_spurious_labels(data, segm, THRESHOLD, N_PIXELS)
         assert len(result) == 0
 
-    def test_absorbed_by_resolves_chain(self):
-        data = make_scene([STAR, NEAR_BLOB, CHAIN_BLOB])
+    def test_faint_neighbor_absorbs(self):
+        # Without the star, the near blob survives and its own wing
+        # absorbs the faint blob
+        data = make_scene([NEAR_BLOB, FAINT_BLOB])
         segm = detect_sources(data, THRESHOLD, N_PIXELS)
-        star, near, chain = labels_at(segm, [STAR, NEAR_BLOB, CHAIN_BLOB])
-        # The raster label order matters for the sequential pass
-        assert chain < near < star
+        near, faint = labels_at(segm, [NEAR_BLOB, FAINT_BLOB])
         result = get_spurious_labels(data, segm, THRESHOLD, N_PIXELS)
-        assert_equal(result['label'], [chain, near])
-        assert_equal(result['absorbed_by'], [star, star])
+        assert as_dict(result) == {faint: near}
+
+    def test_absorber_is_a_survivor(self):
+        # The near blob is absorbed by the star, so it cannot absorb
+        # the faint blob. The star's wing reaches the faint blob, so
+        # both blobs are assigned to the star.
+        data = make_scene([STAR, NEAR_BLOB, FAINT_BLOB])
+        segm = detect_sources(data, THRESHOLD, N_PIXELS)
+        star, near, faint = labels_at(segm, [STAR, NEAR_BLOB, FAINT_BLOB])
+        result = get_spurious_labels(data, segm, THRESHOLD, N_PIXELS)
+        assert as_dict(result) == {near: star, faint: star}
 
     def test_absorbed_source_does_not_absorb(self):
-        # The star is labeled first and absorbs both blobs. The near
-        # blob's wing would absorb the faint blob, but the near blob is
-        # already absorbed when its own pairs are tested.
-        star = (1000.0, 30.0, 20.0, 3.5)
-        near = (7.0, 30.0, 38.0, 2.5)
-        faint = (5.3, 30.0, 50.0, 3.0)
-        data = make_scene([star, near, faint])
+        # A broad faint blob is absorbed by the star. A very faint
+        # blob within the broad blob's cleaning zone but outside the
+        # star's zone is not absorbed, because its only potential
+        # absorber does not survive.
+        broad = (5.5, 30.0, 40.0, 6.0)
+        faint = (5.3, 30.0, 21.0, 3.0)
+        data = make_scene([STAR, broad, faint])
         segm = detect_sources(data, THRESHOLD, N_PIXELS)
-        assert labels_at(segm, [star, near, faint]) == [1, 2, 3]
+        star, broad_label, faint_label = labels_at(segm,
+                                                   [STAR, broad, faint])
         result = get_spurious_labels(data, segm, THRESHOLD, N_PIXELS)
-        assert_equal(result['label'], [2, 3])
-        assert_equal(result['absorbed_by'], [1, 1])
+        assert as_dict(result) == {broad_label: star}
+        assert faint_label not in result['label']
+
+    def test_label_order_independence(self):
+        data = make_scene([STAR, NEAR_BLOB, FAINT_BLOB])
+        segm = detect_sources(data, THRESHOLD, N_PIXELS)
+        expected = as_dict(get_spurious_labels(data, segm, THRESHOLD,
+                                               N_PIXELS))
+
+        # Reverse the label order
+        new_labels = segm.labels[::-1]
+        reversed_data = np.zeros_like(segm.data)
+        for old, new in zip(segm.labels, new_labels, strict=True):
+            reversed_data[segm.data == old] = new
+        reversed_segm = SegmentationImage(reversed_data)
+        result = as_dict(get_spurious_labels(data, reversed_segm,
+                                             THRESHOLD, N_PIXELS))
+        mapping = dict(zip(segm.labels, new_labels, strict=True))
+        assert result == {mapping[label]: mapping[absorber]
+                          for label, absorber in expected.items()}
+
+    def test_non_consecutive_labels(self, star_scene):
+        data, segm = star_scene
+        star, blob = labels_at(segm, [STAR, NEAR_BLOB])
+        segm = segm.copy()
+        segm.reassign_label(star, 17)
+        segm.reassign_label(blob, 5)
+        result = get_spurious_labels(data, segm, THRESHOLD, N_PIXELS)
+        assert as_dict(result) == {5: 17}
 
     def test_result_sorted_by_label(self):
-        data = make_scene([STAR, NEAR_BLOB, CHAIN_BLOB])
+        data = make_scene([STAR, NEAR_BLOB, FAINT_BLOB])
         segm = detect_sources(data, THRESHOLD, N_PIXELS)
         result = get_spurious_labels(data, segm, THRESHOLD, N_PIXELS)
         assert_equal(result['label'], np.sort(result['label']))
 
     def test_threshold_array(self, star_scene):
         data, segm = star_scene
-        expected = get_spurious_labels(data, segm, THRESHOLD, N_PIXELS)
+        expected = as_dict(get_spurious_labels(data, segm, THRESHOLD,
+                                               N_PIXELS))
         threshold = np.full(data.shape, THRESHOLD)
         result = get_spurious_labels(data, segm, threshold, N_PIXELS)
-        assert_equal(result['label'], expected['label'])
-        assert_equal(result['absorbed_by'], expected['absorbed_by'])
+        assert as_dict(result) == expected
 
     def test_convolved_data(self):
         data = make_scene([STAR, NEAR_BLOB])
@@ -143,8 +211,7 @@ class TestGetSpuriousLabels:
         star, blob = labels_at(segm, [STAR, NEAR_BLOB])
         result = get_spurious_labels(data, segm, THRESHOLD, N_PIXELS,
                                      convolved_data=convolved_data)
-        assert_equal(result['label'], [blob])
-        assert_equal(result['absorbed_by'], [star])
+        assert as_dict(result) == {blob: star}
 
     def test_clean_param(self, star_scene):
         # A very steep model wing lets the blob survive
@@ -155,25 +222,13 @@ class TestGetSpuriousLabels:
 
     def test_quantity_inputs(self, star_scene):
         data, segm = star_scene
-        expected = get_spurious_labels(data, segm, THRESHOLD, N_PIXELS)
+        expected = as_dict(get_spurious_labels(data, segm, THRESHOLD,
+                                               N_PIXELS))
         unit = u.Jy
         result = get_spurious_labels(data << unit, segm, THRESHOLD << unit,
                                      N_PIXELS,
                                      convolved_data=data << unit)
-        assert_equal(result['label'], expected['label'])
-        assert_equal(result['absorbed_by'], expected['absorbed_by'])
-
-    def test_quantity_mismatch(self, star_scene):
-        data, segm = star_scene
-        match = 'must all have the same units'
-        with pytest.raises(ValueError, match=match):
-            get_spurious_labels(data << u.Jy, segm, THRESHOLD << u.m,
-                                N_PIXELS)
-        with pytest.raises(ValueError, match=match):
-            get_spurious_labels(data << u.Jy, segm, THRESHOLD, N_PIXELS)
-        with pytest.raises(ValueError, match=match):
-            get_spurious_labels(data << u.Jy, segm, THRESHOLD << u.Jy,
-                                N_PIXELS, convolved_data=data)
+        assert as_dict(result) == expected
 
     def test_nonpositive_flux_segment_survives(self, star_scene):
         # A segment whose moment-image flux is not positive has no
@@ -192,8 +247,42 @@ class TestGetSpuriousLabels:
         data, segm = star_scene
         star, blob = labels_at(segm, [STAR, NEAR_BLOB])
         result = get_spurious_labels(data, segm, THRESHOLD, 1000)
-        assert_equal(result['label'], [blob])
-        assert_equal(result['absorbed_by'], [star])
+        assert as_dict(result) == {blob: star}
+
+    @pytest.mark.parametrize('value', [np.nan, np.inf])
+    def test_non_finite_pixels_ignored(self, star_scene, value):
+        # A non-finite pixel in a segment is excluded from every
+        # measurement rather than poisoning it
+        data, segm = star_scene
+        star, blob = labels_at(segm, [STAR, NEAR_BLOB])
+        expected = {blob: star}
+
+        # The faintest pixel of the star segment
+        star_pixels = np.flatnonzero(segm.data == star)
+        faintest = star_pixels[np.argmin(data.ravel()[star_pixels])]
+        bad_data = data.copy()
+        bad_data.ravel()[faintest] = value
+        result = get_spurious_labels(bad_data, segm, THRESHOLD, N_PIXELS)
+        assert as_dict(result) == expected
+        result = get_spurious_labels(data, segm, THRESHOLD, N_PIXELS,
+                                     convolved_data=bad_data)
+        assert as_dict(result) == expected
+
+    def test_non_finite_pixels_not_counted(self, star_scene):
+        # Non-finite pixels do not count toward the n_pixels brightest
+        # pixels that set the comparison level
+        data, segm = star_scene
+        star, blob = labels_at(segm, [STAR, NEAR_BLOB])
+        n_blob = np.count_nonzero(segm.data == blob)
+        convolved_data = data.copy()
+        blob_pixels = np.flatnonzero(segm.data == blob)
+        convolved_data.ravel()[blob_pixels[:-2]] = np.nan
+        # With only two finite pixels, the level is zero for
+        # n_pixels=3 and the blob is absorbed
+        result = get_spurious_labels(data, segm, THRESHOLD, 3,
+                                     convolved_data=convolved_data)
+        assert as_dict(result) == {blob: star}
+        assert n_blob > 3
 
 
 class TestGetSpuriousLabelsInputs:
@@ -244,12 +333,31 @@ class TestGetSpuriousLabelsInputs:
         with pytest.raises(ValueError, match=match):
             get_spurious_labels(data, segm, np.ones(3), N_PIXELS)
 
-    @pytest.mark.parametrize('threshold', [0.0, -1.0])
-    def test_nonpositive_threshold(self, star_scene, threshold):
+    @pytest.mark.parametrize('threshold', [0.0, -1.0, np.nan, np.inf])
+    def test_invalid_threshold_values(self, star_scene, threshold):
         data, segm = star_scene
-        match = 'threshold must be positive'
+        match = 'threshold must be positive and finite'
         with pytest.raises(ValueError, match=match):
             get_spurious_labels(data, segm, threshold, N_PIXELS)
         with pytest.raises(ValueError, match=match):
             get_spurious_labels(data, segm, np.full(data.shape, threshold),
                                 N_PIXELS)
+
+    @pytest.mark.parametrize(
+        ('data_unit', 'threshold_unit', 'convolved_unit'),
+        [(u.Jy, u.m, u.Jy), (u.Jy, None, u.Jy), (u.Jy, u.Jy, None),
+         (None, u.Jy, None)])
+    def test_quantity_mismatch(self, star_scene, data_unit, threshold_unit,
+                               convolved_unit):
+        data, segm = star_scene
+
+        def with_unit(value, unit):
+            return value if unit is None else value << unit
+
+        match = 'must all have the same units'
+        with pytest.raises(ValueError, match=match):
+            get_spurious_labels(with_unit(data, data_unit), segm,
+                                with_unit(THRESHOLD, threshold_unit),
+                                N_PIXELS,
+                                convolved_data=with_unit(data,
+                                                         convolved_unit))
