@@ -688,6 +688,30 @@ be removed iteratively. The default of `None` currently resolves to
 ``'basin'``. The default may change to ``'saddle'`` in version 4.0.
 
 
+Spurious Detections in the Wings of Bright Sources
+==================================================
+
+A new :func:`~photutils.segmentation.get_spurious_labels` function
+implements the SourceExtractor CLEAN test. Bright sources can produce
+spurious detections in their wings, such as fragments of a stellar
+halo or a diffraction spike that rise above the detection threshold
+as separate segments or deblended children. Each source is described
+by a Moffat-like wing model built from its isophotal measurements, and
+a fainter source is judged spurious when the wing model of a brighter
+neighbor, evaluated at its centroid, exceeds the height of its
+``n_pixels``-th brightest pixel above the threshold. The
+``clean_param`` keyword sets the wing model exponent (the
+SourceExtractor ``CLEAN_PARAM`` parameter).
+
+The function returns a table of the spurious labels and the label of
+the surviving source that absorbs each one, and it does not modify the
+segmentation image. Merge each spurious segment into its absorber with
+:meth:`~photutils.segmentation.SegmentationImage.reassign_labels` to
+match SourceExtractor, or drop the spurious segments with
+:meth:`~photutils.segmentation.SegmentationImage.remove_labels` to
+match the SEP package.
+
+
 ``GriddedPSFModel`` Performance Improvements
 ============================================
 
