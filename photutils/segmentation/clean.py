@@ -44,12 +44,16 @@ def get_spurious_labels(data, segmentation_image, threshold, n_pixels, *,
     source would not have been detected on its own and is flagged as
     spurious.
 
-    The pairs are tested sequentially in increasing label order, as in
-    the SEP implementation of the test. A source that has already been
-    absorbed is never tested against later sources as the brighter
-    member of a pair, and is never absorbed again. When an absorbing
-    source is itself absorbed by a brighter one, the reported absorber
-    is the surviving source at the end of the chain.
+    The sources are considered in order of decreasing flux, with ties
+    broken by label. A source is spurious if the wing model of any
+    brighter surviving source exceeds its comparison level, and it is
+    assigned to the surviving source whose wing model is highest at
+    its centroid. A spurious source never absorbs another one, so
+    every reported absorber is a surviving source and the result does
+    not depend on the label order. The SourceExtractor and SEP
+    implementations instead test the sources in label order and let a
+    source that has already been absorbed absorb later ones, so the
+    two codes can differ when three or more sources interact.
 
     The function does not modify the segmentation image. Use
     :meth:`~photutils.segmentation.SegmentationImage.reassign_labels`
@@ -130,6 +134,16 @@ def get_spurious_labels(data, segmentation_image, threshold, n_pixels, *,
     decision boundary can therefore survive in those codes but be
     flagged here.
 
+    Non-finite pixels are ignored. They are excluded from the moments,
+    the fluxes, the pixel counts, and the comparison levels. Negative
+    pixels within a segment are set to zero for the moments (as in
+    `~photutils.segmentation.SourceCatalog`) but are included in the
+    fluxes, whereas SourceExtractor weights the moments by the pixel
+    values as they are. The two agree whenever the segmentation image
+    was made from ``convolved_data`` (or ``data``) with the given
+    ``threshold``, since every segment pixel then exceeds a positive
+    threshold.
+
     Examples
     --------
     >>> import numpy as np
@@ -177,8 +191,8 @@ def get_spurious_labels(data, segmentation_image, threshold, n_pixels, *,
     if threshold.ndim != 0 and threshold.shape != data.shape:
         msg = 'threshold must be a scalar or have the same shape as data'
         raise ValueError(msg)
-    if np.any(threshold <= 0):
-        msg = 'threshold must be positive'
+    if not np.all(np.isfinite(threshold)) or np.any(threshold <= 0):
+        msg = 'threshold must be positive and finite'
         raise ValueError(msg)
 
     if (n_pixels <= 0) or (int(n_pixels) != n_pixels):
@@ -230,6 +244,7 @@ def _measure_segments(data, convolved_data, segmentation_image, threshold,
         label order, with the keys ``'label'``, ``'x'``, ``'y'``,
         ``'a'``, ``'b'``, ``'cxx'``, ``'cyy'``, ``'cxy'``, ``'flux'``,
         ``'npix'``, ``'thresh'``, ``'abcor'``, and ``'mthresh'``.
+        Non-finite pixels are ignored in every quantity.
     """
     catalog = SourceCatalog(convolved_data, segmentation_image)
     props = {'label': np.asarray(catalog.labels),
@@ -240,8 +255,7 @@ def _measure_segments(data, convolved_data, segmentation_image, threshold,
              'cxx': np.asarray(catalog.ellipse_cxx.value),
              'cyy': np.asarray(catalog.ellipse_cyy.value),
              'cxy': np.asarray(catalog.ellipse_cxy.value),
-             'flux': np.asarray(catalog.segment_flux),
-             'npix': np.asarray(catalog.segment_area.value)}
+             'flux': np.asarray(catalog.segment_flux)}
 
     # Gather the segment pixels grouped by label, with the pixels of
     # each segment ordered by decreasing height above the threshold
@@ -252,15 +266,21 @@ def _measure_segments(data, convolved_data, segmentation_image, threshold,
     else:
         pixel_thresh = threshold.ravel()[idx]
     excess = convolved_data.ravel()[idx] - pixel_thresh
-    order = np.argsort(-excess, kind='stable')
+    finite_excess = np.isfinite(excess)
+    excess = np.where(finite_excess, excess, -np.inf)
+    order = np.argsort(-excess)
     order = order[np.argsort(labels_flat[idx][order], kind='stable')]
     idx = idx[order]
     pixel_thresh = pixel_thresh[order]
     excess = excess[order]
+    finite_excess = finite_excess[order]
     _, starts, counts = np.unique(labels_flat[idx], return_index=True,
                                   return_counts=True)
+    n_finite = np.add.reduceat(finite_excess.astype(np.intp), starts)
+    props['npix'] = n_finite
 
     values = data.ravel()[idx]
+    values = np.where(np.isfinite(values), values, -np.inf)
 
     # The per-object threshold is the mean over the segment pixels
     thresh = np.add.reduceat(pixel_thresh, starts) / counts
@@ -280,7 +300,7 @@ def _measure_segments(data, convolved_data, segmentation_image, threshold,
     # The comparison level is the height of the n_pixels-th brightest
     # pixel above the threshold (zero for segments with fewer pixels)
     mthresh = np.zeros(len(starts))
-    enough = counts >= n_pixels
+    enough = n_finite >= n_pixels
     mthresh[enough] = excess[starts[enough] + n_pixels - 1]
     props['mthresh'] = mthresh
 
@@ -349,6 +369,7 @@ def _find_absorbers(props, clean_param):
     x = props['x']
     y = props['y']
     a = props['a']
+    flux = props['flux']
     n_sources = len(x)
     absorbed_by = np.full(n_sources, -1, dtype=np.intp)
 
@@ -358,95 +379,125 @@ def _find_absorbers(props, clean_param):
     if len(finite_idx) < 2:
         return absorbed_by
 
-    # Gather the pairs within the largest possible cleaning zone and
-    # then apply the exact per-pair zone
-    radius = 2.0 * CLEAN_ZONE * np.max(a[finite])
-    tree = cKDTree(np.column_stack((x[finite], y[finite])))
-    pairs = tree.query_pairs(radius, output_type='ndarray')
-    i = finite_idx[pairs[:, 0]]
-    j = finite_idx[pairs[:, 1]]
-    dx = x[i] - x[j]
-    dy = y[i] - y[j]
-    in_zone = dx**2 + dy**2 <= (CLEAN_ZONE * (a[i] + a[j]))**2
-    i = i[in_zone]
-    j = j[in_zone]
-    dx = dx[in_zone]
-    dy = dy[in_zone]
+    i, j = _candidate_pairs(x[finite], y[finite], a[finite])
+    i = finite_idx[i]
+    j = finite_idx[j]
 
-    # The brighter source of each pair may absorb the fainter one. For
-    # equal fluxes, the later source may absorb the earlier one.
-    flux = props['flux']
-    brighter_first = flux[j] < flux[i]
-    eater = np.where(brighter_first, i, j)
-    victim = np.where(brighter_first, j, i)
+    # The brighter source of each pair may absorb the fainter one.
+    # Equal fluxes are ordered by label.
+    rank = np.empty(n_sources, dtype=np.intp)
+    rank[np.lexsort((np.arange(n_sources), -flux))] = np.arange(n_sources)
+    first = rank[i] < rank[j]
+    eater = np.where(first, i, j)
+    victim = np.where(first, j, i)
+    model = _wing_model(props, eater, victim, clean_param)
+    absorbs = model > props['mthresh'][victim]
+    eater = eater[absorbs]
+    victim = victim[absorbs]
+    model = model[absorbs]
 
+    # Resolve the victims in order of decreasing flux. Every absorber
+    # of a victim is brighter and so has already been resolved, and
+    # only surviving absorbers count. A victim with several surviving
+    # absorbers is assigned to the one whose wing is highest.
+    order = np.argsort(rank[victim], kind='stable')
+    eater = eater[order]
+    victim = victim[order]
+    model = model[order]
+    starts = np.flatnonzero(np.r_[True, victim[1:] != victim[:-1]])
+    stops = np.r_[starts[1:], len(victim)]
+    for start, stop in zip(starts, stops, strict=True):
+        eaters = eater[start:stop]
+        alive = absorbed_by[eaters] < 0
+        if np.any(alive):
+            best = np.argmax(np.where(alive, model[start:stop], -np.inf))
+            absorbed_by[victim[start]] = eaters[best]
+
+    return absorbed_by
+
+
+def _candidate_pairs(x, y, a):
+    """
+    Return the index pairs of sources within each other's cleaning
+    zone.
+
+    A pair lies within the zone only if its separation is at most
+    ``CLEAN_ZONE`` times the sum of the two semimajor axes, which is at
+    most twice ``CLEAN_ZONE`` times the larger axis. A neighbor query
+    around each source with that radius therefore finds every pair in
+    which the source is the larger member, and the cost scales with
+    the number of sources within each source's own zone rather than
+    with the largest source in the field.
+
+    Parameters
+    ----------
+    x, y : 1D `~numpy.ndarray`
+        The source centroids.
+
+    a : 1D `~numpy.ndarray`
+        The source semimajor axes.
+
+    Returns
+    -------
+    i, j : 1D `~numpy.ndarray`
+        The indices of the pairs, with ``i < j``. Each pair appears
+        once.
+    """
+    xy = np.column_stack((x, y))
+    neighbors = cKDTree(xy).query_ball_point(xy, 2.0 * CLEAN_ZONE * a)
+    counts = np.array([len(nbrs) for nbrs in neighbors], dtype=np.intp)
+    i = np.repeat(np.arange(len(x)), counts)
+    j = np.concatenate(neighbors).astype(np.intp)
+    # Each pair can be found from both sides, so keep one copy of
+    # each, with i < j, and drop the self pairs
+    lo = np.minimum(i, j)
+    hi = np.maximum(i, j)
+    keys = np.unique((lo * len(x) + hi)[lo != hi])
+    i = keys // len(x)
+    j = keys % len(x)
+    in_zone = ((x[i] - x[j])**2 + (y[i] - y[j])**2
+               <= (CLEAN_ZONE * (a[i] + a[j]))**2)
+    return i[in_zone], j[in_zone]
+
+
+def _wing_model(props, eater, victim, clean_param):
+    """
+    Evaluate the wing model of each absorbing source at the centroid
+    of its potential victim.
+
+    The model is ``amp * (1 + alpha * r**2)**(-clean_param)``, where
+    ``r`` is measured in the elliptical metric of the absorbing
+    source, and it is zero beyond ``MAX_MODEL_ARG`` or where the
+    radial argument is not above 1 (the victim lies at the center).
+    Sources without a positive wing amplitude have a NaN model, which
+    never absorbs.
+
+    Parameters
+    ----------
+    props : dict
+        The per-segment quantities from `_measure_segments`.
+
+    eater, victim : 1D `~numpy.ndarray`
+        The indices of the absorbing and potential victim sources of
+        each pair.
+
+    clean_param : float
+        The wing model exponent.
+
+    Returns
+    -------
+    model : 1D `~numpy.ndarray`
+        The wing model values.
+    """
+    dx = props['x'][eater] - props['x'][victim]
+    dy = props['y'][eater] - props['y'][victim]
     with np.errstate(divide='ignore', invalid='ignore', over='ignore'):
-        unit_area = np.pi * a * props['b']
-        amp = flux / (2.0 * unit_area * props['abcor'])
+        unit_area = np.pi * props['a'] * props['b']
+        amp = props['flux'] / (2.0 * unit_area * props['abcor'])
         alpha = (((amp / props['thresh'])**(1.0 / clean_param) - 1.0)
                  * unit_area / props['npix'])
         arg = 1.0 + alpha[eater] * (props['cxx'][eater] * dx**2
                                     + props['cyy'][eater] * dy**2
                                     + props['cxy'][eater] * dx * dy)
-        model = np.where(arg < MAX_MODEL_ARG,
-                         amp[eater] * arg**(-clean_param), 0.0)
-        # The model and level are compared as float32 values, as in
-        # SourceExtractor
-        absorbs = ((arg > 1.0)
-                   & (model.astype(np.float32)
-                      > props['mthresh'][victim].astype(np.float32)))
-
-    _apply_sequential_pass(i[absorbs], j[absorbs], eater[absorbs],
-                           victim[absorbs], absorbed_by)
-    _resolve_chains(absorbed_by)
-    return absorbed_by
-
-
-def _apply_sequential_pass(i, j, eater, victim, absorbed_by):
-    """
-    Apply the passing pair tests in the SourceExtractor order.
-
-    The pairs are visited in increasing order of the earlier source
-    and then the later source. A source that is already absorbed when
-    its own pairs begin is skipped as the earlier member, an absorbed
-    later member is skipped, and a source is absorbed at most once.
-
-    Parameters
-    ----------
-    i, j : 1D `~numpy.ndarray`
-        The earlier and later source indices of each passing pair.
-
-    eater, victim : 1D `~numpy.ndarray`
-        The absorbing and absorbed source indices of each pair.
-
-    absorbed_by : 1D `~numpy.ndarray`
-        The absorber index of each source, updated in place.
-    """
-    order = np.lexsort((j, i))
-    current = -1
-    skip_current = False
-    for k in order:
-        if i[k] != current:
-            current = i[k]
-            skip_current = absorbed_by[current] >= 0
-        if skip_current or absorbed_by[j[k]] >= 0:
-            continue
-        if absorbed_by[victim[k]] < 0:
-            absorbed_by[victim[k]] = eater[k]
-
-
-def _resolve_chains(absorbed_by):
-    """
-    Replace each absorber by the surviving source at the end of its
-    chain of absorptions, in place.
-
-    Parameters
-    ----------
-    absorbed_by : 1D `~numpy.ndarray`
-        The absorber index of each source, or -1 for survivors.
-    """
-    for k in np.flatnonzero(absorbed_by >= 0):
-        root = absorbed_by[k]
-        while absorbed_by[root] >= 0:
-            root = absorbed_by[root]
-        absorbed_by[k] = root
+        return np.where((arg > 1.0) & (arg < MAX_MODEL_ARG),
+                        amp[eater] * arg**(-clean_param), 0.0)
