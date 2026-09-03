@@ -104,8 +104,8 @@ def test_concurrent_make_noise_image():
 
 def test_concurrent_make_noise_image_unseeded_streams():
     """
-    Test that concurrent unseeded make_noise_image calls use
-    independent random streams (no shared global state).
+    Test that concurrent unseeded make_noise_image calls use independent
+    random streams (no shared global state).
     """
     shape = (10, 10)
 

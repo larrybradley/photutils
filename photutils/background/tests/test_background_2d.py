@@ -77,6 +77,7 @@ class TestBackground2D:
     """
     Test the Background2D class.
     """
+
     @pytest.mark.parametrize('filter_size', [(1, 1), (3, 3)])
     def test_background(self, filter_size, test_data, bkg_rms, bkg_mesh,
                         bkg_rms_mesh):
@@ -158,8 +159,8 @@ class TestBackground2D:
 
     def test_background_nonconstant_data(self, test_data, bkg_mesh):
         """
-        Test on non-constant data to ensure that the background mesh
-        is computed correctly and that the background is properly
+        Test on non-constant data to ensure that the background mesh is
+        computed correctly and that the background is properly
         interpolated.
         """
         data = np.copy(test_data)
@@ -266,8 +267,8 @@ class TestBackground2D:
     @pytest.mark.parametrize('n_threads', [2, 8])
     def test_n_threads(self, n_threads):
         """
-        Test that multithreaded box statistics give identical results
-        to the single-threaded computation.
+        Test that multithreaded box statistics give identical results to
+        the single-threaded computation.
 
         The data shape is not an integer multiple of the box size, so
         the extra row, column, and corner boxes are also exercised.
@@ -339,6 +340,7 @@ class TestBackground2D:
         Test with user-defined functions for bkg_estimator and
         bkg_rms_estimator.
         """
+
         def bkg_func(data, *, axis=None):
             return np.nanmean(data, axis=axis)
 
@@ -705,8 +707,8 @@ class TestBackground2D:
 
     def test_invalid_exclude_percentile(self, test_data):
         """
-        Test that an error is raised if exclude_percentile is outside the
-        range [0, 100].
+        Test that an error is raised if exclude_percentile is outside
+        the range [0, 100].
         """
         match = 'exclude_percentile must be between 0 and 100'
         with pytest.raises(ValueError, match=match):
@@ -761,8 +763,8 @@ class TestBackground2D:
     @pytest.mark.parametrize('dtype', [float, int])
     def test_invalid_mask_dtype(self, name, dtype, test_data):
         """
-        Test that an error is raised if the mask or coverage_mask is
-        not a boolean array.
+        Test that an error is raised if the mask or coverage_mask is not
+        a boolean array.
         """
         mask = np.zeros(test_data.shape, dtype=dtype)
         match = f'{name} must be a boolean array'
@@ -1158,8 +1160,8 @@ class TestFastBoxStatistics:
     def test_estimators_match_generic(self, bkg_estimator, rms_estimator,
                                       monkeypatch):
         """
-        Test that all supported estimator combinations match the
-        generic path.
+        Test that all supported estimator combinations match the generic
+        path.
         """
         self._compare_paths(monkeypatch, bkg_estimator=bkg_estimator,
                             bkg_rms_estimator=rms_estimator)
@@ -1177,10 +1179,10 @@ class TestFastBoxStatistics:
         constants and scalar location anchors match the generic path.
 
         The test data include constant boxes, for which the biweight
-        statistics are defined by the location anchor (zero MAD).
-        The data are trimmed to an integer number of boxes because
-        the generic path raises an ``AttributeError`` for a float
-        ``M`` anchor when a corner box is computed (an astropy
+        statistics are defined by the location anchor (zero MAD). The
+        data are trimmed to an integer number of boxes because the
+        generic path raises an ``AttributeError`` for a float ``M``
+        anchor when a corner box is computed (an astropy
         ``biweight_location`` bug for scalar ``M`` with ``axis=None``).
         The fast path handles it.
         """
@@ -1306,8 +1308,8 @@ class TestFastBoxStatistics:
 
     def test_float32_matches_generic(self, monkeypatch):
         """
-        Test that float32 input uses the fast path, preserves the
-        dtype, and matches the generic path.
+        Test that float32 input uses the fast path, preserves the dtype,
+        and matches the generic path.
         """
         data = self.data.astype(np.float32)
         bkg_fast = Background2D(data, (25, 25), filter_size=(1, 1),
@@ -1326,8 +1328,8 @@ class TestFastBoxStatistics:
 
     def test_n_threads_fast_path(self):
         """
-        Test that the multithreaded fast path gives identical results
-        to the single-threaded fast path.
+        Test that the multithreaded fast path gives identical results to
+        the single-threaded fast path.
         """
         bkg1 = Background2D(self.data, (25, 25), mask=self.mask,
                             exclude_percentile=100.0)
@@ -1339,8 +1341,8 @@ class TestFastBoxStatistics:
 
     def test_masked_array_data_mask(self):
         """
-        Test that the mask of masked-array input data is respected
-        and combined with the input mask.
+        Test that the mask of masked-array input data is respected and
+        combined with the input mask.
         """
         data_values = np.ones((100, 100))
         data_values[0:25, 0:25] = 1e6

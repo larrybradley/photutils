@@ -25,8 +25,8 @@ def test_deprecated_attribute_access(name):
 
 def test_deprecated_from_import():
     """
-    Test that a from-import of a name public in photutils < 3.0 emits
-    a deprecation warning.
+    Test that a from-import of a name public in photutils < 3.0 emits a
+    deprecation warning.
     """
     with pytest.warns(AstropyDeprecationWarning, match=DEPRECATION_MATCH):
         from photutils.psf.matching import resize_psf

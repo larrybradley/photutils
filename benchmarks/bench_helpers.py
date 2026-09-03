@@ -105,8 +105,7 @@ def parse_thread_counts(text):
 
 def format_sweep_cells(times):
     """
-    Format thread-sweep times, with speedups relative to the first
-    time.
+    Format thread-sweep times, with speedups relative to the first time.
 
     Parameters
     ----------
@@ -125,8 +124,8 @@ def format_sweep_cells(times):
 
 def make_apertures(positions):
     """
-    Return all of the pixel-based aperture types at the given
-    positions, with roughly comparable sizes.
+    Return all of the pixel-based aperture types at the given positions,
+    with roughly comparable sizes.
 
     Parameters
     ----------

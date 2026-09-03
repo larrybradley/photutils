@@ -328,8 +328,8 @@ class TestResizePSF:
 class TestApplyWindowToFourier:
     def test_basic(self):
         """
-        Test that _apply_window_to_fourier applies a window to a
-        Fourier array.
+        Test that _apply_window_to_fourier applies a window to a Fourier
+        array.
         """
         shape = (11, 11)
         fourier_array = np.ones(shape, dtype=complex)

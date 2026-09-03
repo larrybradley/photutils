@@ -582,8 +582,8 @@ class ImageDepth:
     @staticmethod
     def _make_coords(xycoords, n_apertures, *, rng):
         """
-        Randomly choose ``n_apertures`` (without replacement) coordinates
-        from the input ``xycoords``.
+        Randomly choose ``n_apertures`` (without replacement)
+        coordinates from the input ``xycoords``.
 
         This function also adds < +/-0.5 pixel random shifts so that the
         coordinates are not all integers.

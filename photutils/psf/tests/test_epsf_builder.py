@@ -385,6 +385,7 @@ class TestEPSFValidator:
         """
         Test validate_stars with star missing cutout_center.
         """
+
         # Create mock star without cutout_center
         class MockStar:
             def __init__(self):
@@ -401,6 +402,7 @@ class TestEPSFValidator:
         """
         Test validate_stars with validation error during processing.
         """
+
         # Create mock star that raises error during validation
         class MockStar:
             def __init__(self):
@@ -421,6 +423,7 @@ class TestEPSFValidator:
         """
         Test validate_stars with multiple invalid stars.
         """
+
         # Create multiple mock stars with different issues
         class MockStar1:
             def __init__(self):
@@ -441,6 +444,7 @@ class TestEPSFValidator:
         """
         Test validate_stars with more than 5 invalid stars.
         """
+
         # Create 7 mock stars with missing data
         class MockStar:
             def __init__(self):
@@ -456,6 +460,7 @@ class TestEPSFValidator:
         """
         Test validate_stars with context and invalid stars.
         """
+
         class MockStar:
             def __init__(self):
                 self.data = None
@@ -819,8 +824,8 @@ class TestEPSFFitter:
     """
     Tests for the EPSFFitter class.
 
-    EPSFFitter is deprecated since 3.0.0. These tests verify that
-    it still functions correctly while emitting a deprecation warning.
+    EPSFFitter is deprecated since 3.0.0. These tests verify that it
+    still functions correctly while emitting a deprecation warning.
     """
 
     def test_deprecation_warning(self):
@@ -1273,8 +1278,8 @@ class TestEPSFBuilder:
 
     def test_fitter_options_deprecated_epsf_fitter(self):
         """
-        Test that passing an EPSFFitter to EPSFBuilder works but
-        emits a deprecation warning.
+        Test that passing an EPSFFitter to EPSFBuilder works but emits a
+        deprecation warning.
         """
         epsf_fitter = _make_epsf_fitter(fit_boxsize=7)
 
@@ -1289,9 +1294,10 @@ class TestEPSFBuilder:
 
     def test_fitter_maxiters_ignored(self):
         """
-        Test that fitter_maxiters is ignored if fitter doesn't
-        support maxiter.
+        Test that fitter_maxiters is ignored if fitter doesn't support
+        maxiter.
         """
+
         # Create a mock fitter without maxiter support
         class SimpleFitter:
             def __call__(self, model, x, y, z):  # noqa: ARG002
@@ -1437,8 +1443,8 @@ class TestEPSFBuilder:
 
     def test_even_shape_made_odd(self, epsf_test_data):
         """
-        Test that an even input shape is made odd by adding one, with
-        a warning, as documented.
+        Test that an even input shape is made odd by adding one, with a
+        warning, as documented.
         """
         stars = extract_stars(epsf_test_data['nddata'],
                               epsf_test_data['init_stars'][:3], size=11)
@@ -1518,8 +1524,8 @@ class TestEPSFBuilder:
 
     def test_numpy_scalar_parameters(self):
         """
-        Test that NumPy scalar center_accuracy and maxiters values
-        are accepted, while bool maxiters values are rejected.
+        Test that NumPy scalar center_accuracy and maxiters values are
+        accepted, while bool maxiters values are rejected.
         """
         builder = EPSFBuilder(center_accuracy=np.float32(0.01),
                               maxiters=np.int64(5))
@@ -1539,8 +1545,7 @@ class TestEPSFBuilder:
 
     def test_coord_transformer_deprecated(self):
         """
-        Test that the public coord_transformer attribute is
-        deprecated.
+        Test that the public coord_transformer attribute is deprecated.
         """
         builder = EPSFBuilder(maxiters=1, progress_bar=False)
         with pytest.warns(AstropyDeprecationWarning,
@@ -1659,8 +1664,8 @@ class TestEPSFBuilder:
     @pytest.mark.parametrize('id_label', [None, 'star_a'])
     def test_star_exclusion_id_label(self, epsf_test_data, id_label):
         """
-        Regression test that the exclusion warning works for the
-        default (None) and string star id labels.
+        Regression test that the exclusion warning works for the default
+        (None) and string star id labels.
         """
         tbl = epsf_test_data['init_stars'][:5].copy()
         tbl['x'][0] = 465
@@ -1907,8 +1912,8 @@ class TestEPSFBuilder:
         """
         Test early exit in _recenter_epsf when shift increases.
 
-        Uses mock to force the centroid function to return values
-        that cause shift to increase on second iteration.
+        Uses mock to force the centroid function to return values that
+        cause shift to increase on second iteration.
         """
         builder = EPSFBuilder(oversampling=1, maxiters=2, progress_bar=False,
                               recentering_maxiters=10)
@@ -1996,8 +2001,8 @@ class TestEPSFBuilder:
         space, not the oversampled ePSF space.
 
         With oversampling=4 and recentering_boxsize=(5, 5), the centroid
-        cutout on the oversampled ePSF grid should be approximately
-        5 * 4=20 -> 21 pixels (made odd), NOT 5 pixels.
+        cutout on the oversampled ePSF grid should be approximately 5 *
+        4=20 -> 21 pixels (made odd), NOT 5 pixels.
         """
         oversampling = 4
 
@@ -2179,7 +2184,8 @@ class TestEPSFBuilder:
 
     def test_fit_star_with_fit_shape_none(self, epsf_test_data):
         """
-        Test EPSFBuilder._fit_star with fit_shape=None (use entire star).
+        Test EPSFBuilder._fit_star with fit_shape=None (use entire
+        star).
         """
         stars = extract_stars(epsf_test_data['nddata'],
                               epsf_test_data['init_stars'][:2], size=11)
@@ -2691,8 +2697,8 @@ def test_build_epsf_initial_epsf_too_small():
 
 def test_build_epsf_fully_excluded_linked_star():
     """
-    Regression test that a fully excluded LinkedEPSFStar does not
-    emit a constrain-centers warning on every build iteration.
+    Regression test that a fully excluded LinkedEPSFStar does not emit a
+    constrain-centers warning on every build iteration.
     """
     star_data = _make_gaussian_star_data()
     good_stars = [EPSFStar(star_data.copy(), cutout_center=(5.0, 5.0))

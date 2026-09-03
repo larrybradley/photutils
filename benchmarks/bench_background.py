@@ -3,10 +3,10 @@
 """
 Benchmarks for the photutils.background subpackage.
 
-The benchmarks cover Background2D construction across image sizes,
-box sizes, and n_threads values; full-size background and background
-RMS map generation; the scalar background and background RMS
-estimator classes; and LocalBackground.
+The benchmarks cover Background2D construction across image sizes, box
+sizes, and n_threads values; full-size background and background RMS map
+generation; the scalar background and background RMS estimator classes;
+and LocalBackground.
 
 Run ``python benchmarks/bench_background.py --help`` to see the
 available options.
@@ -167,8 +167,7 @@ def bench_estimators(*, size=2048, repeats=3, seed=0):
 def bench_local_background(n_threads_list, *, size=2048, n_positions=1000,
                            repeats=3, seed=0):
     """
-    Benchmark LocalBackground at many positions for each thread
-    count.
+    Benchmark LocalBackground at many positions for each thread count.
 
     Speedups are relative to the first thread count.
 

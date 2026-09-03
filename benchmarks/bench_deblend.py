@@ -109,8 +109,8 @@ def make_blended_image(size, n_peaks, *, amp_range=(3.0, 100.0), seed=0):
 
 def make_blended_inputs(size, n_peaks, *, amp_range=(3.0, 100.0), seed=0):
     """
-    Return the image and segmentation image for a single large
-    blended source.
+    Return the image and segmentation image for a single large blended
+    source.
 
     Parameters
     ----------
@@ -261,8 +261,7 @@ def bench_many_peaks(*, size=1000, n_peaks_sweep=(10, 25, 50, 100),
                      contrast_sweep=(0.0, 0.001, 0.01, 0.03),
                      repeats=3, seed=0):
     """
-    Benchmark deblend_sources versus the number of peaks in one
-    segment.
+    Benchmark deblend_sources versus the number of peaks in one segment.
 
     The contrast criterion applies to the flux in each watershed
     basin (which includes a share of the envelope flux), so larger

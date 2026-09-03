@@ -26,8 +26,9 @@ def test_add_progress_bar_no_tqdm():
 
 def test_add_progress_bar_text():
     """
-    Test add_progress_bar with text=True. When tqdm is available, a tqdm
-    progress bar is returned.
+    Test add_progress_bar with text=True.
+
+    When tqdm is available, a tqdm progress bar is returned.
     """
     items = range(5)
     result = add_progress_bar(items, desc='test', text=True)
@@ -43,7 +44,9 @@ def test_add_progress_bar_text():
 def test_add_progress_bar_no_text():
     """
     Test add_progress_bar with text=False (default) when tqdm is
-    available. This exercises the ipywidgets try/except branch.
+    available.
+
+    This exercises the ipywidgets try/except branch.
     """
     items = range(5)
     result = add_progress_bar(items, desc='test', text=False)
@@ -74,7 +77,9 @@ def test_add_progress_bar_no_ipywidgets():
 def test_dummy_tqdm_class():
     """
     Test the dummy tqdm class that is defined when tqdm is not
-    installed. We reload the module with tqdm mocked as unavailable.
+    installed.
+
+    We reload the module with tqdm mocked as unavailable.
     """
     real_import = builtins.__import__
 

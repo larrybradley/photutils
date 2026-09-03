@@ -60,8 +60,8 @@ def test_make_psf_model_image_custom():
 
 def test_make_psf_model_image_flux_mapping():
     """
-    Test that the flux kwarg maps to the flux parameter name of a
-    model made with make_psf_model.
+    Test that the flux kwarg maps to the flux parameter name of a model
+    made with make_psf_model.
     """
     shape = (100, 100)
     n_sources = 5

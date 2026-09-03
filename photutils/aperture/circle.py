@@ -273,8 +273,8 @@ class CircularAperture(PixelAperture):
 
     def to_polygon(self, *, n_vertices=100):
         """
-        Return a `~photutils.aperture.PolygonAperture` that
-        approximates this circular aperture.
+        Return a `~photutils.aperture.PolygonAperture` that approximates
+        this circular aperture.
 
         Parameters
         ----------

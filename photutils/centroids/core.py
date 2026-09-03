@@ -702,8 +702,7 @@ def centroid_sources(data, xpos, ypos, box_size=11, footprint=None,
 
     def _centroid_source(xypos):
         """
-        Compute the centroid of the source at the given (x, y)
-        position.
+        Compute the centroid of the source at the given (x, y) position.
         """
         xp, yp = xypos
         slices_large, slices_small = overlap_slices(data.shape,

@@ -628,14 +628,14 @@ class ApertureStats:
         axis is then restored (``ndarray`` values are reshaped, while
         other objects are wrapped in a length-1 list).
 
-        Reading the collapsed value rather than the raw stored value
-        is important. A per-source value can be stored either with
-        its leading length-1 axis intact (when computed directly
-        for a scalar instance) or with that axis already removed
-        (when a multi-source value is cached and then sliced to a
-        scalar via ``__getitem__``). Going through the scalar collapse
-        normalizes both cases to the same shape, so this method is
-        robust regardless of how the value was produced.
+        Reading the collapsed value rather than the raw stored value is
+        important. A per-source value can be stored either with its
+        leading length-1 axis intact (when computed directly for a
+        scalar instance) or with that axis already removed (when a
+        multi-source value is cached and then sliced to a scalar via
+        ``__getitem__``). Going through the scalar collapse normalizes
+        both cases to the same shape, so this method is robust
+        regardless of how the value was produced.
         """
         value = getattr(self, name)
         if not self.isscalar:
@@ -855,7 +855,8 @@ class ApertureStats:
     @cached_property
     def _batch_inputs(self):
         """
-        The validated inputs for the fast Cython batch driver, or `None`.
+        The validated inputs for the fast Cython batch driver, or
+        `None`.
 
         Returns a tuple of the contiguous arrays and scalar parameters
         shared by the center-value and ``sum_method`` gathers (see
@@ -986,9 +987,10 @@ class ApertureStats:
         expensive exact/subpixel overlap fractions are not evaluated for
         the value-statistics-only use cases.
 
-        When a supported ``sigma_clip`` is set, the packed ``sum_method``
-        members are sigma-clipped per source and the aperture sum,
-        variance, and area are recomputed over the survivors.
+        When a supported ``sigma_clip`` is set, the packed
+        ``sum_method`` members are sigma-clipped per source and the
+        aperture sum, variance, and area are recomputed over the
+        survivors.
 
         `None` is returned (and the mask-based code path is used) when
         the fast batch driver is unavailable (see `_batch_inputs`).
@@ -1077,10 +1079,10 @@ class ApertureStats:
         `_BatchGather` equivalent to a single-chunk gather.
 
         The packed buffers (``values``, ``local_x``, ``local_y``, and
-        ``sorted_values`` when sigma clipping is applied) and the
-        per-source arrays are concatenated. The per-source ``starts``
-        are offset by the cumulative packed-buffer length of the
-        preceding chunks.
+        ``sorted_values`` when sigma clipping is applied) and the per-
+        source arrays are concatenated. The per-source ``starts`` are
+        offset by the cumulative packed-buffer length of the preceding
+        chunks.
         """
         starts = []
         offset = 0
@@ -1237,10 +1239,12 @@ class ApertureStats:
 
     def _apply_sum_clip(self, gather, clip_spec):
         """
-        Sigma-clip the packed ``sum_method`` member buffers and return
-        a `_BatchGather` whose aperture sum, variance, and area reflect
-        the per-source clipped data. The packed member buffers are
-        dropped (set to `None`) so their memory can be reclaimed.
+        Sigma-clip the packed ``sum_method`` member buffers and return a
+        `_BatchGather` whose aperture sum, variance, and area reflect
+        the per-source clipped data.
+
+        The packed member buffers are dropped (set to `None`) so their
+        memory can be reclaimed.
         """
         sigma_lower, sigma_upper, maxiters, cenfunc, stdfunc = clip_spec
 
@@ -1678,8 +1682,8 @@ class ApertureStats:
         """
         Boolean mask cutouts representing the total mask.
 
-        The total mask is a combination of the input ``mask``,
-        non-finite ``data`` values, the cutout aperture mask using the
+        The total mask is a combination of the input ``mask``, non-
+        finite ``data`` values, the cutout aperture mask using the
         "center" method, and the sigma-clip mask.
         """
         fast = self._fast_cutouts_center
@@ -1692,8 +1696,8 @@ class ApertureStats:
         """
         Boolean mask cutouts representing the total mask.
 
-        The total mask is a combination of the input ``mask``,
-        non-finite ``data`` values, the cutout aperture mask using the
+        The total mask is a combination of the input ``mask``, non-
+        finite ``data`` values, the cutout aperture mask using the
         ``sum_method`` method, and the sigma-clip mask.
         """
         return list(zip(*self._aperture_cutouts, strict=True))[2]
@@ -1704,20 +1708,20 @@ class ApertureStats:
         The center-method cutout arrays reconstructed from the packed
         gather buffers, or `None`.
 
-        Returns a ``(data, variance, mask, weight)`` tuple of
-        per-source cutout lists identical to the mask-based
+        Returns a ``(data, variance, mask, weight)`` tuple of per-source
+        cutout lists identical to the mask-based
         `_aperture_cutouts_center` values. The packed buffer holds
         exactly the surviving pixels (unmasked, finite, inside the
         center-method aperture, segmentation-kept, and sigma-clip
         surviving) together with their cutout coordinates, so the total
         mask is `True` for every pixel absent from the buffer, and the
-        data, variance, and weight cutouts are zero there (matching
-        the mask-based arrays). Sources whose bounding box does not
-        overlap the data get the same single-NaN sentinel arrays as the
-        mask-based path.
+        data, variance, and weight cutouts are zero there (matching the
+        mask-based arrays). Sources whose bounding box does not overlap
+        the data get the same single-NaN sentinel arrays as the mask-
+        based path.
 
-        `None` is returned (and the mask-based path is used) when
-        the fast gather is unavailable or when segmentation neighbor
+        `None` is returned (and the mask-based path is used) when the
+        fast gather is unavailable or when segmentation neighbor
         correction is applied, since ``mask_method='correct'`` replaces
         neighbor-pixel data *and error* values with their mirrored
         values, and the mirrored error values are not recoverable from
@@ -1826,8 +1830,8 @@ class ApertureStats:
         The cutout does not have units due to current limitations of
         masked quantity arrays.
 
-        The mask is `True` for pixels from the input ``mask``,
-        non-finite ``data`` values (NaN and inf), sigma-clipped pixels
+        The mask is `True` for pixels from the input ``mask``, non-
+        finite ``data`` values (NaN and inf), sigma-clipped pixels
         within the aperture, and pixels where the aperture mask has zero
         weight.
         """
@@ -1847,8 +1851,8 @@ class ApertureStats:
         The cutout does not have units due to current limitations of
         masked quantity arrays.
 
-        The mask is `True` for pixels from the input ``mask``,
-        non-finite ``data`` values (NaN and inf), sigma-clipped pixels
+        The mask is `True` for pixels from the input ``mask``, non-
+        finite ``data`` values (NaN and inf), sigma-clipped pixels
         within the aperture, and pixels where the aperture mask has zero
         weight.
         """
@@ -1865,8 +1869,8 @@ class ApertureStats:
         The cutout does not have units due to current limitations of
         masked quantity arrays.
 
-        The mask is `True` for pixels from the input ``mask``,
-        non-finite ``data`` values (NaN and inf), sigma-clipped pixels
+        The mask is `True` for pixels from the input ``mask``, non-
+        finite ``data`` values (NaN and inf), sigma-clipped pixels
         within the aperture, and pixels where the aperture mask has zero
         weight.
         """
@@ -1888,8 +1892,8 @@ class ApertureStats:
         The cutout does not have units due to current limitations of
         masked quantity arrays.
 
-        The mask is `True` for pixels from the input ``mask``,
-        non-finite ``data`` values (NaN and inf), sigma-clipped pixels
+        The mask is `True` for pixels from the input ``mask``, non-
+        finite ``data`` values (NaN and inf), sigma-clipped pixels
         within the aperture, and pixels where the aperture mask has zero
         weight.
         """
@@ -1911,8 +1915,8 @@ class ApertureStats:
         The cutout does not have units due to current limitations of
         masked quantity arrays.
 
-        The mask is `True` for pixels from the input ``mask``,
-        non-finite ``data`` values (NaN and inf), sigma-clipped pixels
+        The mask is `True` for pixels from the input ``mask``, non-
+        finite ``data`` values (NaN and inf), sigma-clipped pixels
         within the aperture, and pixels where the aperture mask has zero
         weight.
         """
@@ -2114,8 +2118,8 @@ class ApertureStats:
 
         A source is flagged when the minor-axis variance (the smaller
         eigenvalue of its normalized second-moment covariance matrix)
-        falls below ``1/12``. This flags both unresolved, nearly
-        point-like sources, where the covariance determinant drops below
+        falls below ``1/12``. This flags both unresolved, nearly point-
+        like sources, where the covariance determinant drops below
         ``(1/12)**2``, and rank-1 degenerate sources, where one axis is
         unresolved while the other is extended (which the determinant
         alone would miss). Sources with undefined moments (no overlap or
@@ -2154,11 +2158,11 @@ class ApertureStats:
         The bitwise quality flags.
 
         The footprint-based flags (e.g., ``'masked_pixels'``,
-        ``'non_finite_data'``, and the overlap flags) are evaluated
-        on the union of the "center"-method footprint used by the
-        value statistics and the ``sum_method`` footprint used by the
-        sum properties. The ``'non_finite_error'`` flag is evaluated
-        on the ``sum_method`` footprint. The ``'sigma_clipped'``,
+        ``'non_finite_data'``, and the overlap flags) are evaluated on
+        the union of the "center"-method footprint used by the value
+        statistics and the ``sum_method`` footprint used by the sum
+        properties. The ``'non_finite_error'`` flag is evaluated on the
+        ``sum_method`` footprint. The ``'sigma_clipped'``,
         ``'all_clipped'``, and ``'too_few_pixels'`` flags are evaluated
         on the value-statistics footprint. The ``'undefined_shape'`` and
         ``'singular_covariance'`` flags are always evaluated. Accessing
@@ -2401,14 +2405,14 @@ class ApertureStats:
     @cached_property
     def _bbox_bounds(self):
         """
-        The bounding box x and y minimum and maximum (inclusive)
-        bounds, as an ``(n_positions, 4)`` array.
+        The bounding box x and y minimum and maximum (inclusive) bounds,
+        as an ``(n_positions, 4)`` array.
 
-        When the aperture uses the default ``bbox`` implementation,
-        the bounds are taken from the aperture's vectorized integer
-        bounds, so no per-position `~photutils.aperture.BoundingBox`
-        objects are created. An aperture subclass that overrides
-        ``bbox`` falls back to reading the per-position objects.
+        When the aperture uses the default ``bbox`` implementation, the
+        bounds are taken from the aperture's vectorized integer bounds,
+        so no per-position `~photutils.aperture.BoundingBox` objects are
+        created. An aperture subclass that overrides ``bbox`` falls back
+        to reading the per-position objects.
         """
         aper = self._pixel_aperture
         if type(aper).bbox is PixelAperture.bbox:
@@ -2788,8 +2792,8 @@ class ApertureStats:
         The biweight location of the unmasked pixel values within the
         aperture.
 
-        The tuning constant is fixed at ``c=6``, the default value
-        used by `astropy.stats.biweight_location`.
+        The tuning constant is fixed at ``c=6``, the default value used
+        by `astropy.stats.biweight_location`.
         """
         fast = None if self._biweight is None else self._biweight[0]
         return self._finalize_value_stat(fast, biweight_location)
@@ -2800,8 +2804,8 @@ class ApertureStats:
         The biweight midvariance of the unmasked pixel values within the
         aperture.
 
-        The tuning constant is fixed at ``c=9``, the default value
-        used by `astropy.stats.biweight_midvariance`.
+        The tuning constant is fixed at ``c=9``, the default value used
+        by `astropy.stats.biweight_midvariance`.
         """
         fast = None if self._biweight is None else self._biweight[1]
         return self._finalize_value_stat(fast, biweight_midvariance,
@@ -2962,8 +2966,8 @@ class ApertureStats:
         Gaussian function that has the same second-order moments as the
         source.
 
-        The angle increases in the counter-clockwise direction and is
-        in the range (-90, 90] degrees.
+        The angle increases in the counter-clockwise direction and is in
+        the range (-90, 90] degrees.
         """
         covar = self._covariance
         orient_radians = 0.5 * np.arctan2(2.0 * covar[:, 0, 1],

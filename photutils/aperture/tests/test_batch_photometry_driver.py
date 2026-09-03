@@ -63,13 +63,13 @@ class TestBatchApertureSums:
     @pytest.mark.parametrize('use_exact', [1, 0])
     def test_readonly_arrays(self, use_exact):
         """
-        Test that the batch driver accepts read-only (non-writeable) data,
-        error, positions, and params arrays and returns results identical to
-        writeable arrays.
+        Test that the batch driver accepts read-only (non-writeable)
+        data, error, positions, and params arrays and returns results
+        identical to writeable arrays.
 
         The data, error, positions, and params arguments are declared as
-        ``const`` typed memoryviews so that read-only arrays do not raise a
-        ``ValueError``.
+        ``const`` typed memoryviews so that read-only arrays do not
+        raise a ``ValueError``.
         """
         data, error, mask, positions = _batch_inputs()
         params = np.array([8.0], dtype=np.float64)
@@ -112,9 +112,9 @@ class TestBatchApertureSums:
         """
         Run every aperture shape through the batch driver concurrently.
 
-        Mixing shapes within the thread pool surfaces interference between
-        calls if any shared mutable state (e.g., a module-level scratch
-        buffer) were introduced into the ``nogil`` source loop.
+        Mixing shapes within the thread pool surfaces interference
+        between calls if any shared mutable state (e.g., a module-level
+        scratch buffer) were introduced into the ``nogil`` source loop.
         """
         data, error, mask, positions = _batch_inputs()
 
@@ -284,8 +284,8 @@ _OUTSIDE_WEIGHT_APERTURES = [
 
 def _outside_weight_positions():
     """
-    Positions on and just beyond every edge and corner of the 40x40
-    test data, plus interior and far off-image positions.
+    Positions on and just beyond every edge and corner of the 40x40 test
+    data, plus interior and far off-image positions.
     """
     rng = np.random.default_rng(7)
     edge = np.array([-8.0, -3.0, -0.4, 0.3, 2.0, 5.0, 37.0, 39.2, 39.6,
@@ -309,9 +309,9 @@ def test_weights_out_matches_mask(make_aperture, method, use_exact,
     """
     Test the outside-weight indicator against the aperture mask.
 
-    The reference is the aperture's own unclipped ``to_mask`` array
-    with the part inside the data zeroed. The indicator must be set
-    exactly when a nonzero mask value remains.
+    The reference is the aperture's own unclipped ``to_mask`` array with
+    the part inside the data zeroed. The indicator must be set exactly
+    when a nonzero mask value remains.
     """
     data = np.ones((40, 40))
     positions = _outside_weight_positions()
@@ -351,9 +351,9 @@ def test_weights_out_aperture_entirely_outside():
     bounding box.
 
     The L-shaped polygon centered at (-3, -3) has its bounding box
-    overlapping the data but no area inside it, so the exact-method
-    ring test (which assumes weight on both sides of the data edge)
-    does not apply and every outside pixel is scanned instead.
+    overlapping the data but no area inside it, so the exact-method ring
+    test (which assumes weight on both sides of the data edge) does not
+    apply and every outside pixel is scanned instead.
     """
     data = np.ones((40, 40))
     aperture = PolygonAperture((-3.0, -3.0), [(-6, -6), (6, -6), (6, -1),

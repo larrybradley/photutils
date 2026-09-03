@@ -6,8 +6,8 @@ Benchmarks for the photutils.segmentation subpackage.
 The benchmarks cover source detection (detect_threshold and
 detect_sources), source deblending (deblend_sources) across the
 threshold modes and thread counts, the combined SourceFinder class,
-SegmentationImage operations (relabeling, border-label removal,
-source masks, and polygons), SourceCatalog property calculations, the
+SegmentationImage operations (relabeling, border-label removal, source
+masks, and polygons), SourceCatalog property calculations, the
 SourceCatalog n_threads keyword, and concurrent SourceCatalog runs
 across thread counts.
 
@@ -391,6 +391,7 @@ def run_catalog_concurrent(make_catalog, n_calls, n_threads):
     n_threads : int
         The number of worker threads.
     """
+
     def _job():
         make_catalog().to_table()
 

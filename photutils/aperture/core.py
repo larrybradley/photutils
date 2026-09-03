@@ -247,8 +247,8 @@ def _validate_mask(mask, shape):
 
 def _enable_batch_photometry(cls):
     """
-    Class decorator that opts a `PixelAperture` subclass in to the
-    batch Cython photometry driver.
+    Class decorator that opts a `PixelAperture` subclass in to the batch
+    Cython photometry driver.
 
     The decorator records the decorated class itself, and the batch
     driver is used only when an instance's own class was decorated
@@ -413,9 +413,9 @@ class Aperture(metaclass=abc.ABCMeta):
         """
         A list of all class cached properties (even in superclasses).
 
-        The result depends only on the class, so it is computed once
-        per class and cached (it is looked up on every aperture
-        parameter reassignment).
+        The result depends only on the class, so it is computed once per
+        class and cached (it is looked up on every aperture parameter
+        reassignment).
         """
         cls = self.__class__
         cached = cls.__dict__.get('_cached_properties_cache')

@@ -180,8 +180,8 @@ def test_to_aperture_array():
 
 class TestFastLocalBackground:
     """
-    Tests that the batched ApertureStats-based fast path gives the
-    same results as the per-aperture estimator loop.
+    Tests that the batched ApertureStats-based fast path gives the same
+    results as the per-aperture estimator loop.
     """
 
     @classmethod
@@ -218,8 +218,8 @@ class TestFastLocalBackground:
     def test_matches_slow_path(self, estimator, monkeypatch):
         """
         Test that all supported estimator classes match the per-aperture
-        loop, including for edge-clipped, fully-masked, and
-        non-overlapping apertures (NaN).
+        loop, including for edge-clipped, fully-masked, and non-
+        overlapping apertures (NaN).
         """
         local_bkg = LocalBackground(5, 10, bkg_estimator=estimator)
         fast, slow = self._run_both_paths(local_bkg, monkeypatch)
@@ -245,9 +245,9 @@ class TestFastLocalBackground:
 
     def test_nonfinite_data_matches_slow_path(self, monkeypatch):
         """
-        Test that non-finite data values are excluded, matching the
-        per-aperture loop (where sigma clipping removes them with a
-        warning, while the fast path masks them silently).
+        Test that non-finite data values are excluded, matching the per-
+        aperture loop (where sigma clipping removes them with a warning,
+        while the fast path masks them silently).
         """
         data = self.data.copy()
         data[30:34, 36:40] = np.nan  # inside the annulus at (30, 30)

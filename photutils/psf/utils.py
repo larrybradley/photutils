@@ -47,6 +47,7 @@ def _make_mask(image, mask):
         The mask for the input image. A `True` value indicates the
         corresponding element of ``image`` is masked.
     """
+
     def warn_nonfinite():
         msg = ('Input data contains unmasked non-finite values '
                '(NaN or inf), which were automatically ignored.')
@@ -610,6 +611,7 @@ def _create_call_docstring(*, iterative=False):
     decorator : callable
         A method decorator that updates the method's docstring.
     """
+
     def decorator(func):
         """
         Method decorator that updates the method's docstring.

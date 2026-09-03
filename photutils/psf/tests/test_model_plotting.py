@@ -24,8 +24,8 @@ pytestmark = pytest.mark.skipif(not HAS_MATPLOTLIB,
 @pytest.fixture(autouse=True)
 def close_figures():
     """
-    Close all matplotlib figures after each test so that the open
-    figure limit is not exceeded.
+    Close all matplotlib figures after each test so that the open figure
+    limit is not exceeded.
     """
     yield
 
@@ -63,8 +63,8 @@ class TestPlotGrid:
 
     def test_plot_grid_blank_epsfs(self, psfmodel):
         """
-        Test a grid where one or more ePSFs are blank (all zeros), as
-        is the case for MIRI with its non-square FOV.
+        Test a grid where one or more ePSFs are blank (all zeros), as is
+        the case for MIRI with its non-square FOV.
         """
         model = psfmodel.deepcopy()
         model._data[0] = 0.0
@@ -84,8 +84,8 @@ class TestPlotGrid:
 
     def test_plot_grid_deltas_peak_norm(self, psfmodel):
         """
-        Test that deltas with peak_norm normalizes by the mean-ePSF
-        peak instead of the maximum delta value.
+        Test that deltas with peak_norm normalizes by the mean-ePSF peak
+        instead of the maximum delta value.
         """
         fig = psfmodel.plot_grid(deltas=True, peak_norm=True)
         image = fig.axes[0].images[0].get_array()
@@ -158,8 +158,8 @@ class TestPlotGrid:
 
     def test_plot_grid_no_metadata(self, psfmodel):
         """
-        Test that no leading space is added when there is no
-        instrument, detector, or filter metadata.
+        Test that no leading space is added when there is no instrument,
+        detector, or filter metadata.
         """
         fig = psfmodel.plot_grid()
         assert fig.axes[0].get_title() == 'ePSFs'

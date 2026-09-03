@@ -212,6 +212,7 @@ def test_prepare_uncertainty_info_no_represent_as():
     Test uncertainty preparation for a duck-typed uncertainty that
     cannot be converted to a standard deviation.
     """
+
     class PlainUncertainty:
         uncertainty_type = 'std'
 
@@ -519,8 +520,9 @@ class TestEPSFStar:
         Test that all-zero data emits a warning when EPSFStar is called
         directly, but flag is set for extract_stars to handle.
 
-        All-zero unmasked data is unusual and likely indicates a problem,
-        but it's not technically invalid, so we allow star creation.
+        All-zero unmasked data is unusual and likely indicates a
+        problem, but it's not technically invalid, so we allow star
+        creation.
         """
         data = np.zeros((5, 5))
 
@@ -589,8 +591,10 @@ class TestEPSFStar:
     def test_slices_bbox_rectangular_roundtrip(self):
         """
         Regression test that slices/bbox are correct for non-square
-        cutouts. Indexing the parent image with star.slices must
-        return the cutout.
+        cutouts.
+
+        Indexing the parent image with star.slices must return the
+        cutout.
         """
         img = np.arange(60 * 80, dtype=float).reshape(60, 80)
         stars = extract_stars(NDData(img),
@@ -602,9 +606,9 @@ class TestEPSFStar:
 
     def test_flux_update_invalidates_normalization(self):
         """
-        Regression test that updating flux (including on a shallow
-        copy, as the ePSF builder does) refreshes the cached
-        normalized data values.
+        Regression test that updating flux (including on a shallow copy,
+        as the ePSF builder does) refreshes the cached normalized data
+        values.
         """
         star = EPSFStar(np.ones((5, 5)))
         norm = star._data_values_normalized.copy()
@@ -675,8 +679,8 @@ class TestEPSFStar:
 
     def test_flux_estimation_exception_handling(self):
         """
-        Test flux estimation exception handling when estimate_flux returns
-        invalid values.
+        Test flux estimation exception handling when estimate_flux
+        returns invalid values.
         """
         # Test with data that results in zero flux - this is now ALLOWED
         # since zero flux is a valid (though not useful) value
@@ -797,8 +801,8 @@ class TestEPSFStars:
 
     def test_delitem_invalidates_caches(self):
         """
-        Regression test that deleting a star invalidates the cached
-        star counts and flat star list.
+        Regression test that deleting a star invalidates the cached star
+        counts and flat star list.
         """
         stars = [EPSFStar(np.ones((5, 5))) for _ in range(3)]
         stars_obj = EPSFStars(stars)
@@ -913,8 +917,8 @@ class TestEPSFStars:
     def test_getattr_with_linked_stars(self, simple_wcs):
         """
         Regression test that attribute delegation works for a mix of
-        EPSFStar and multi-star LinkedEPSFStar objects (ragged
-        per-star values return an object array).
+        EPSFStar and multi-star LinkedEPSFStar objects (ragged per-star
+        values return an object array).
         """
         star = EPSFStar(np.ones((5, 5)))
         linked_star1 = EPSFStar(np.ones((7, 7)), wcs_large=simple_wcs)
@@ -1172,8 +1176,8 @@ class TestLinkedEPSFStar:
 
     def test_excluded_from_fit_delegation(self, simple_wcs):
         """
-        Regression test that _excluded_from_fit returns a per-star
-        array instead of raising AttributeError.
+        Regression test that _excluded_from_fit returns a per-star array
+        instead of raising AttributeError.
         """
         star1 = EPSFStar(np.ones((5, 5)), wcs_large=simple_wcs)
         star2 = EPSFStar(np.ones((7, 7)), wcs_large=simple_wcs)
@@ -1668,10 +1672,11 @@ class TestExtractStars:
 
     def test_extract_stars_weights_input_not_modified(self):
         """
-        Regression test that extract_stars does not modify a
-        user-supplied float weights uncertainty array when masking is
+        Regression test that extract_stars does not modify a user-
+        supplied float weights uncertainty array when masking is
         applied, and that masked pixels get zero weight in the star.
         """
+
         class WeightsUncertainty(StdDevUncertainty):
             @property
             def uncertainty_type(self):
@@ -1783,12 +1788,12 @@ class TestExtractStars:
 
     def test_validate_multiple_catalogs_mixed_wcs(self, simple_wcs):
         """
-        Test validation with multiple catalogs where each catalog
-        pairs with a usable image.
+        Test validation with multiple catalogs where each catalog pairs
+        with a usable image.
 
         A missing WCS is allowed on an image whose catalog has pixel
-        coordinates. A skycoord-only catalog requires a WCS only on
-        its corresponding image.
+        coordinates. A skycoord-only catalog requires a WCS only on its
+        corresponding image.
         """
         nddata1 = NDData(np.ones((50, 50)))
         # nddata1 intentionally has no WCS
@@ -1845,10 +1850,11 @@ class TestExtractStars:
 
     def test_extract_stars_nonfinite_weights(self, epsf_test_data):
         """
-        Test extract_stars with sparse zero uncertainty values that create
-        non-finite weights at specific locations. The stars should still
-        be extracted successfully, with only the expected warning about
-        non-finite weights being set to zero.
+        Test extract_stars with sparse zero uncertainty values that
+        create non-finite weights at specific locations.
+
+        The stars should still be extracted successfully, with only the
+        expected warning about non-finite weights being set to zero.
         """
         shape = epsf_test_data['nddata'].data.shape
         init = epsf_test_data['init_stars']
@@ -1883,9 +1889,10 @@ class TestExtractStars:
         """
         Test extract_stars with all-zero uncertainty values.
 
-        When all uncertainty values are zero, all weights become infinite
-        and are then set to zero, resulting in fully-masked cutouts. This
-        causes flux estimation to fail because there is no valid data.
+        When all uncertainty values are zero, all weights become
+        infinite and are then set to zero, resulting in fully-masked
+        cutouts. This causes flux estimation to fail because there is no
+        valid data.
         """
         shape = epsf_test_data['nddata'].data.shape
 
@@ -1910,8 +1917,8 @@ class TestExtractStars:
 
 def test_star_nonfinite_flux_raises():
     """
-    Regression test that a non-finite flux raises a clear error
-    instead of crashing later deep inside the ePSF fitter.
+    Regression test that a non-finite flux raises a clear error instead
+    of crashing later deep inside the ePSF fitter.
     """
     match = 'flux must be a finite value'
     with pytest.raises(ValueError, match=match):
@@ -1923,8 +1930,8 @@ def test_star_nonfinite_flux_raises():
 
 def test_extract_stars_nonfinite_flux_column():
     """
-    Regression test that non-finite catalog flux values are skipped
-    with a warning, like non-finite positions.
+    Regression test that non-finite catalog flux values are skipped with
+    a warning, like non-finite positions.
     """
     data = np.ones((50, 50))
     catalog = Table({'x': [25.0, 10.0], 'y': [25.0, 10.0],
@@ -1968,8 +1975,8 @@ def test_non_integral_origin_raises():
 def test_container_getattr_private_and_empty():
     """
     Regression test that EPSFStars matches LinkedEPSFStar in not
-    delegating private attributes (except _excluded_from_fit) and
-    that empty containers raise AttributeError.
+    delegating private attributes (except _excluded_from_fit) and that
+    empty containers raise AttributeError.
     """
     star = EPSFStar(np.ones((5, 5)))
     stars = EPSFStars([star])

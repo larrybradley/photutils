@@ -223,6 +223,7 @@ def fixture_make_catalog(minimal_catalog_cls):
     Factory fixture for minimal catalogs with common single-source
     (11x11 image) and three-source (21x21 image) layouts.
     """
+
     def _make(n_sources=1, **kwargs):
         kernel = np.ones((3, 3))
         if n_sources == 1:
@@ -286,9 +287,9 @@ class TestStarFinderCatalogBase:
 
     def test_to_table_invalid_column(self, make_catalog):
         """
-        Regression test for invalid column names not being validated
-        in to_table (e.g., ``data`` is an attribute, but not a valid
-        column name).
+        Regression test for invalid column names not being validated in
+        to_table (e.g., ``data`` is an attribute, but not a valid column
+        name).
         """
         cat = make_catalog()
         match = 'Invalid column name'
@@ -297,8 +298,8 @@ class TestStarFinderCatalogBase:
 
     def test_to_table_scalar_column(self, make_catalog):
         """
-        Regression test to ensure that ``isscalar`` (a scalar value
-        for the whole object, not a per-source value) is not a valid
+        Regression test to ensure that ``isscalar`` (a scalar value for
+        the whole object, not a per-source value) is not a valid
         ``to_table`` column.
         """
         cat = make_catalog()
@@ -464,7 +465,8 @@ class TestStarFinderCatalogBase:
 
     def test_select_brightest_none(self, make_catalog):
         """
-        Test that select_brightest with n_brightest=None keeps all sources.
+        Test that select_brightest with n_brightest=None keeps all
+        sources.
         """
         cat = make_catalog(n_sources=3, n_brightest=None)
         newcat = cat.select_brightest()
@@ -528,10 +530,10 @@ class TestStarFinderCatalogBase:
         Regression test for integer indexing with cached
         multidimensional per-source arrays.
 
-        Previously, an integer index dropped the leading source axis
-        of cached >=2D per-source arrays (e.g., moments and cutouts),
-        and accessing dependent properties on the indexed catalog
-        raised an IndexError.
+        Previously, an integer index dropped the leading source axis of
+        cached >=2D per-source arrays (e.g., moments and cutouts), and
+        accessing dependent properties on the indexed catalog raised an
+        IndexError.
         """
         cat = make_catalog(n_sources=3)
         # Cache multidimensional per-source arrays before indexing
@@ -554,8 +556,7 @@ class TestStarFinderCatalogBase:
 
     def test_filter_finite_skip_attrs(self, make_catalog):
         """
-        Test that _filter_finite skips attributes listed in
-        skip_attrs.
+        Test that _filter_finite skips attributes listed in skip_attrs.
         """
         cat = make_catalog(n_sources=3)
         # Inject a cached flux with a non-finite value
@@ -630,9 +631,9 @@ class TestThreadSafety:
         Test concurrent first access of cached properties on a shared
         catalog.
 
-        cached_property does not lock, so concurrent first accesses
-        may run a getter more than once, but every thread must see
-        values identical to the serial computation.
+        cached_property does not lock, so concurrent first accesses may
+        run a getter more than once, but every thread must see values
+        identical to the serial computation.
         """
         expected = make_catalog(n_sources=3)
         cat = make_catalog(n_sources=3)

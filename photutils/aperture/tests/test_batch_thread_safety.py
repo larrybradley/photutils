@@ -11,6 +11,7 @@ statistics pipeline (which drives the ``_batch_stats`` order/moment/
 sigma-clip nogil kernels), and the free-threading opt-in of the compiled
 modules.
 """
+
 import importlib
 import sys
 import sysconfig
@@ -70,9 +71,9 @@ def _assert_gather_equal(result, expected):
 
     The packed ``values``/``local_x``/``local_y`` buffers are allocated
     with an upper-bound length (the sum of the bounding-box areas), so
-    only the valid per-source region ``[starts[k]:starts[k] + counts[k]]``
-    is meaningful. The trailing entries are uninitialized and must not be
-    compared.
+    only the valid per-source region ``[starts[k]:starts[k] +
+    counts[k]]`` is meaningful. The trailing entries are uninitialized
+    and must not be compared.
     """
     values, lx, ly, starts, counts, overlap, fcounts = result
     (e_values, e_lx, e_ly, e_starts, e_counts, e_overlap,
@@ -97,8 +98,8 @@ _STATS_PROPERTIES = ('mean', 'median', 'std', 'mad_std', 'biweight_location',
 
 class TestFreeThreadingSupport:
     """
-    The compiled aperture modules must not re-enable the GIL on a
-    free-threaded build.
+    The compiled aperture modules must not re-enable the GIL on a free-
+    threaded build.
     """
 
     @pytest.mark.parametrize('modname', APERTURE_MODULES)
@@ -106,10 +107,10 @@ class TestFreeThreadingSupport:
         """
         Test that each compiled aperture batch module imports cleanly.
 
-        On a free-threaded build, importing a module that was not compiled
-        with ``freethreading_compatible=True`` emits a ``RuntimeWarning``
-        and reenables the GIL. This import check is the entry point for the
-        free-threading verification below.
+        On a free-threaded build, importing a module that was not
+        compiled with ``freethreading_compatible=True`` emits a
+        ``RuntimeWarning`` and reenables the GIL. This import check is
+        the entry point for the free-threading verification below.
         """
         module = importlib.import_module(f'photutils.aperture.{modname}')
         assert module is not None
@@ -121,11 +122,11 @@ class TestFreeThreadingSupport:
         Test that importing the aperture Cython batch modules does not
         reenable the GIL on a free-threaded build.
 
-        Each module is compiled with the ``freethreading_compatible=True``
-        directive, which marks it as free-threading compatible
-        (``Py_MOD_GIL_NOT_USED``). A module lacking that directive would
-        force the runtime to reenable the GIL on import, which this test
-        detects.
+        Each module is compiled with the
+        ``freethreading_compatible=True`` directive, which marks it as
+        free-threading compatible (``Py_MOD_GIL_NOT_USED``). A module
+        lacking that directive would force the runtime to reenable the
+        GIL on import, which this test detects.
         """
         for modname in APERTURE_MODULES:
             importlib.import_module(f'photutils.aperture.{modname}')
@@ -139,12 +140,12 @@ class TestBatchApertureGather:
 
     def test_accepts_none_local_bkg(self):
         """
-        Test that ``batch_aperture_gather`` accepts ``local_bkg=None`` and
-        matches an all-zero local background.
+        Test that ``batch_aperture_gather`` accepts ``local_bkg=None``
+        and matches an all-zero local background.
 
         The per-pixel background subtraction is guarded by a ``has_bkg``
-        check so that a `None` ``local_bkg`` is treated as no subtraction
-        rather than dereferencing a NULL memoryview.
+        check so that a `None` ``local_bkg`` is treated as no
+        subtraction rather than dereferencing a NULL memoryview.
         """
         data, mask, positions = _gather_inputs()
         params = np.array([8.0], dtype=np.float64)
@@ -182,9 +183,9 @@ class TestBatchApertureGather:
         """
         Run every aperture shape through the gatherer concurrently.
 
-        Mixing shapes within the thread pool surfaces interference between
-        calls if any shared mutable state (e.g., a module-level scratch
-        buffer) were introduced into the ``nogil`` gather loop.
+        Mixing shapes within the thread pool surfaces interference
+        between calls if any shared mutable state (e.g., a module-level
+        scratch buffer) were introduced into the ``nogil`` gather loop.
         """
         data, mask, positions = _gather_inputs()
         local_bkg = np.linspace(0.0, 0.5, positions.shape[0])
@@ -215,8 +216,8 @@ class TestApertureStatsThreadSafety:
     def test_concurrent_stats(self, use_sigma_clip):
         """
         Test that `ApertureStats` releases the GIL and is thread-safe by
-        running many concurrent calls that drive the ``_batch_stats`` nogil
-        kernels and checking that they all give identical results.
+        running many concurrent calls that drive the ``_batch_stats``
+        nogil kernels and checking that they all give identical results.
         """
         data = make_100gaussians_image()
         error = np.sqrt(np.abs(data))
@@ -247,10 +248,9 @@ class TestApertureStatsThreadSafety:
         Test that a single shared ApertureStats instance can be read
         concurrently.
 
-        The instance is documented as immutable after construction,
-        so concurrent readers racing to fill the cached-property
-        caches (which fill without any locking) must all see
-        identical values.
+        The instance is documented as immutable after construction, so
+        concurrent readers racing to fill the cached-property caches
+        (which fill without any locking) must all see identical values.
         """
         data = make_100gaussians_image()
         error = np.sqrt(np.abs(data))
@@ -280,9 +280,9 @@ class TestApertureStatsThreadSafety:
         block the same property on a different instance in another
         thread.
 
-        The astropy lazyproperty descriptor holds one lock per
-        class attribute shared by all instances, which serialized
-        the entire computation across instances and threads. The
+        The astropy lazyproperty descriptor holds one lock per class
+        attribute shared by all instances, which serialized the entire
+        computation across instances and threads. The
         `functools.cached_property` descriptors used now have no lock,
         so instance B must complete while instance A is still blocked
         inside its getter. This test deadlocks instance B (until the

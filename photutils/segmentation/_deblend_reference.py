@@ -2,11 +2,11 @@
 """
 Pure-Python reference implementation of the deblending pipeline.
 
-This module is a pure-Python mirror of the compiled deblending
-pipeline used by :func:`~photutils.segmentation.deblend_sources`,
-kept for verification and debugging. It is not used in
-production. It must track the compiled (Cython) semantics
-exactly, which is enforced by the cross-implementation tests in
+This module is a pure-Python mirror of the compiled deblending pipeline
+used by :func:`~photutils.segmentation.deblend_sources`, kept for
+verification and debugging. It is not used in production. It must track
+the compiled (Cython) semantics exactly, which is enforced by the cross-
+implementation tests in
 ``photutils/segmentation/tests/test_deblend.py``.
 """
 

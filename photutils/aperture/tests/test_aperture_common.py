@@ -2,12 +2,12 @@
 """
 Base classes for aperture tests.
 
-The shape-specific test modules (e.g., ``test_circle``, ``test_ellipse``,
-``test_rectangle``) define one class per aperture class. Each of those
-classes sets the ``aperture`` attribute (a multi-position aperture) and
-the ``copy_param``/``copy_value`` pair naming a parameter to change, and
-inherits the tests that apply to every aperture of that kind from the
-base classes here.
+The shape-specific test modules (e.g., ``test_circle``,
+``test_ellipse``, ``test_rectangle``) define one class per aperture
+class. Each of those classes sets the ``aperture`` attribute (a multi-
+position aperture) and the ``copy_param``/``copy_value`` pair naming a
+parameter to change, and inherits the tests that apply to every aperture
+of that kind from the base classes here.
 """
 
 import astropy.units as u

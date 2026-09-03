@@ -156,8 +156,8 @@ def test_model_harmonics():
 
 def test_model_integration():
     """
-    Test that model integration does not stop as soon as the angle reaches
-    the edge of the image.
+    Test that model integration does not stop as soon as the angle
+    reaches the edge of the image.
     """
     data = make_test_image(nx=80, ny=110, i0=100.0, sma=60.0, eps=0.5,
                            pa=np.pi / 3.0, noise=0.05, seed=0)
@@ -277,8 +277,8 @@ def test_build_ellipse_model_c_length_mismatch(index):
 @pytest.mark.parametrize('index', range(4))
 def test_build_ellipse_model_c_harmonic_length_mismatch(index):
     """
-    Test that a ValueError is raised if any of the harmonic arrays
-    does not have the same length as finely_spaced_sma.
+    Test that a ValueError is raised if any of the harmonic arrays does
+    not have the same length as finely_spaced_sma.
     """
     n = 16
     sma = np.linspace(0.5, 20.0, n)
@@ -292,8 +292,8 @@ def test_build_ellipse_model_c_harmonic_length_mismatch(index):
 
 def test_build_ellipse_model_c_partial_harmonics():
     """
-    Test that a ValueError is raised if only some of the harmonic
-    arrays are input.
+    Test that a ValueError is raised if only some of the harmonic arrays
+    are input.
     """
     n = 16
     sma = np.linspace(0.5, 20.0, n)

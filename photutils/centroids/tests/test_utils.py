@@ -212,13 +212,13 @@ class TestValidateGaussianInputs:
 
     def test_data_not_mutated_when_error_nan(self, gauss_data):
         """
-        data must not be mutated when NaN in error extends combined_mask
+        Data must not be mutated when NaN in error extends combined_mask
         beyond the positions already handled by _process_data_mask.
 
-        When mask=None and data is clean, _process_data_mask returns
-        the original object without copying. If error then contributes
-        new NaN positions, the code must not write 0.0 directly into
-        the caller's array.
+        When mask=None and data is clean, _process_data_mask returns the
+        original object without copying. If error then contributes new
+        NaN positions, the code must not write 0.0 directly into the
+        caller's array.
         """
         error = np.ones_like(gauss_data)
         error[5, 5] = np.nan
@@ -278,9 +278,10 @@ class TestGaussian2DMoments:
                              np.deg2rad((0, 22, 37, 45, 60, 88, 90)))
     def test_asymmetric_gaussian_theta(self, theta_in):
         """
-        Test that an axis-aligned elliptical Gaussian (theta=0)
-        recovers the centroid and axis stddevs. The larger sigma maps
-        to x_stddev.
+        Test that an axis-aligned elliptical Gaussian (theta=0) recovers
+        the centroid and axis stddevs.
+
+        The larger sigma maps to x_stddev.
         """
         ampl = 3.5
         xcen, ycen = 30.0, 20.0

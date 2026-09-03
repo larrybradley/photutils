@@ -3,7 +3,6 @@
 Tests for the parameters module.
 """
 
-
 import numpy as np
 import pytest
 from astropy.stats import SigmaClip

@@ -157,8 +157,8 @@ class CutoutImage:
         A tuple of slice objects in axis order for the minimal bounding
         box of the cutout with respect to the original array.
 
-        For ``mode='partial'``, the slices are for the valid
-        (non-filled) cutout values.
+        For ``mode='partial'``, the slices are for the valid (non-
+        filled) cutout values.
         """
         return self._overlap_slices[0]
 
@@ -168,8 +168,8 @@ class CutoutImage:
         A tuple of slice objects in axis order for the minimal bounding
         box of the cutout with respect to the cutout array.
 
-        For ``mode='partial'``, the slices are for the valid
-        (non-filled) cutout values.
+        For ``mode='partial'``, the slices are for the valid (non-
+        filled) cutout values.
         """
         return self._overlap_slices[1]
 

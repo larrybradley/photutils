@@ -129,6 +129,7 @@ class TestMakeKernel:
         """
         Test that window function returning non-2D array raises error.
         """
+
         def bad_window(shape):
             return np.ones(shape[0])  # 1D array
 
@@ -140,6 +141,7 @@ class TestMakeKernel:
         """
         Test that window function returning wrong shape raises error.
         """
+
         def bad_window(shape):  # noqa: ARG001
             return np.ones((10, 10))  # wrong shape
 
@@ -151,6 +153,7 @@ class TestMakeKernel:
         """
         Test that window function with values < 0 raises error.
         """
+
         def bad_window(shape):
             arr = np.ones(shape)
             arr[0, 0] = -0.1
@@ -164,6 +167,7 @@ class TestMakeKernel:
         """
         Test that window function with values > 1 raises error.
         """
+
         def bad_window(shape):
             arr = np.ones(shape)
             arr[0, 0] = 1.5
@@ -191,6 +195,7 @@ class TestMakeKernel:
         Test that a window returning all zeros raises ValueError because
         the computed kernel sums to zero.
         """
+
         def zero_window(shape):
             return np.zeros(shape)
 
@@ -212,8 +217,8 @@ class TestMakeKernelWiener:
         """
         Test that the kernel has the expected Gaussian shape.
 
-        For two Gaussians with sigma=3 and sigma=5, the matching
-        kernel should be a Gaussian with sigma=sqrt(25-9)=4.
+        For two Gaussians with sigma=3 and sigma=5, the matching kernel
+        should be a Gaussian with sigma=sqrt(25-9)=4.
         """
         size = psf1.shape[0]
         cen = (size - 1) / 2.0
@@ -345,8 +350,8 @@ class TestMakeKernelWiener:
 
     def test_penalty_invalid_type(self, psf1, psf2):
         """
-        Test that a penalty that cannot be converted to a numeric
-        array raises ValueError.
+        Test that a penalty that cannot be converted to a numeric array
+        raises ValueError.
         """
         match = 'penalty must be None'
         with pytest.raises(ValueError, match=match):
@@ -387,8 +392,8 @@ class TestMakeKernelWiener:
 
     def test_penalty_all_zeros(self, psf1, psf2):
         """
-        Test that an all-zero penalty array raises ValueError because
-        it would apply no regularization.
+        Test that an all-zero penalty array raises ValueError because it
+        would apply no regularization.
         """
         match = 'penalty array must not be all zeros'
         with pytest.raises(ValueError, match=match):
@@ -589,6 +594,7 @@ class TestMakeKernelWiener:
         """
         Test that window function returning non-2D array raises error.
         """
+
         def bad_window(shape):
             return np.ones(shape[0])  # 1D array
 
@@ -600,6 +606,7 @@ class TestMakeKernelWiener:
         """
         Test that window function returning wrong shape raises error.
         """
+
         def bad_window(shape):  # noqa: ARG001
             return np.ones((10, 10))  # wrong shape
 
@@ -611,6 +618,7 @@ class TestMakeKernelWiener:
         """
         Test that window function with values < 0 raises error.
         """
+
         def bad_window(shape):
             arr = np.ones(shape)
             arr[0, 0] = -0.1
@@ -624,6 +632,7 @@ class TestMakeKernelWiener:
         """
         Test that window function with values > 1 raises error.
         """
+
         def bad_window(shape):
             arr = np.ones(shape)
             arr[0, 0] = 1.5
@@ -638,6 +647,7 @@ class TestMakeKernelWiener:
         Test that a window returning all zeros raises ValueError because
         the computed kernel sums to zero.
         """
+
         def zero_window(shape):
             return np.zeros(shape)
 

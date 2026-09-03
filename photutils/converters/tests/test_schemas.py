@@ -361,8 +361,8 @@ def test_sky_numeric_theta_rejected(stem):
 @pytest.mark.parametrize('stem', list(REQUIRED_SIZE_PARAMS))
 def test_pixel_angular_theta_accepted(stem):
     """
-    Test that a pixel aperture with an angular ``theta`` is read
-    without error.
+    Test that a pixel aperture with an angular ``theta`` is read without
+    error.
 
     The pixel apertures accept either a number or an angular quantity,
     so ``theta`` is constrained only in the sky branch of the ``oneOf``
@@ -382,8 +382,8 @@ def test_unknown_property_rejected(stem):
     validation when read.
 
     Without ``additionalProperties: false`` an unknown key is accepted
-    and then silently dropped, so a misspelled parameter would read
-    back as an aperture with default values.
+    and then silently dropped, so a misspelled parameter would read back
+    as an aperture with default values.
     """
     params = _sizes(SIZE_PARAMS[stem], sky=False)
     params['not_a_parameter'] = '999.0'
@@ -525,11 +525,11 @@ def test_optional_gridded_psf_model_params_use_defaults():
                     reason='asdf-astropy is not installed')
 def test_optional_stdpsf_grid_params_use_defaults():
     """
-    Test that a STDPSFGrid file containing only the parameters
-    required by its schema is read using the default oversampling.
+    Test that a STDPSFGrid file containing only the parameters required
+    by its schema is read using the default oversampling.
 
-    ``oversampling`` is optional in the schema, and STDPSFGrid assumes
-    a factor of 4 along both axes when it is absent.
+    ``oversampling`` is optional in the schema, and STDPSFGrid assumes a
+    factor of 4 along both axes when it is absent.
     """
     grid = _read_psf('stdpsf_grid', REQUIRED_PSF_PARAMS['stdpsf_grid'])
 

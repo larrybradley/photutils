@@ -178,8 +178,8 @@ class TestSetOperations:
 
     def test_operators_invalid_type(self):
         """
-        Test that the | and & operators raise the standard TypeError
-        for a non-BoundingBox operand.
+        Test that the | and & operators raise the standard TypeError for
+        a non-BoundingBox operand.
         """
         bbox = BoundingBox(1, 10, 2, 20)
         match = 'unsupported operand type'

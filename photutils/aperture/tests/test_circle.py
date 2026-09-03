@@ -278,8 +278,9 @@ class TestToPolygon:
 
     def test_sky_wcs_round_trip(self, tan_wcs):
         """
-        Test that converting a SkyCircularAperture to a polygon and then to
-        pixels is equivalent to converting to pixels and then to a polygon.
+        Test that converting a SkyCircularAperture to a polygon and then
+        to pixels is equivalent to converting to pixels and then to a
+        polygon.
         """
         pos = SkyCoord(ra=10.0, dec=30.0, unit='deg')
         aper = SkyCircularAperture(pos, r=5.0 * u.arcsec)
@@ -291,8 +292,8 @@ class TestToPolygon:
 
     def test_pixel_to_sky_round_trip(self, tan_wcs):
         """
-        Test that converting a CircularAperture to a polygon and then to sky
-        is equivalent to converting to sky and then to a polygon.
+        Test that converting a CircularAperture to a polygon and then to
+        sky is equivalent to converting to sky and then to a polygon.
         """
         # The bounding-box orientation can differ at the ~1e-5 level because
         # the sky shape parameters from ``to_sky`` are derived from a local

@@ -2,12 +2,12 @@
 """
 Tests that the profile classes are safe for concurrent use.
 
-All lazily-computed attributes cache raw (unnormalized) values
-that are immutable once computed, and the only mutable state is
-the scalar ``normalization_value`` attribute, which ``normalize``
-and ``unnormalize`` update with a single atomic attribute store.
-Normalization-dependent attributes are derived on access by dividing
-the raw values by ``normalization_value``, so a concurrent reader sees
+All lazily-computed attributes cache raw (unnormalized) values that are
+immutable once computed, and the only mutable state is the scalar
+``normalization_value`` attribute, which ``normalize`` and
+``unnormalize`` update with a single atomic attribute store.
+Normalization-dependent attributes are derived on access by dividing the
+raw values by ``normalization_value``, so a concurrent reader sees
 values consistent with either the old or the new normalization, never a
 mixture within one returned array.
 """

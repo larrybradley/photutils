@@ -190,8 +190,7 @@ def build_scenarios():
 
 def make_catalog(scene, method):
     """
-    Make a fresh `~photutils.segmentation.SourceCatalog` for a
-    scenario.
+    Make a fresh `~photutils.segmentation.SourceCatalog` for a scenario.
 
     Parameters
     ----------
@@ -453,8 +452,8 @@ def run_sep_flux_radius(scene, shape, kron_radius, kron_flux, seg_kwargs):
 
 def window_sigma(half_light_radius):
     """
-    Return the windowed-centroid Gaussian sigma for a half-light
-    radius, as in ``SourceCatalog.centroid_win``.
+    Return the windowed-centroid Gaussian sigma for a half-light radius,
+    as in ``SourceCatalog.centroid_win``.
 
     Parameters
     ----------

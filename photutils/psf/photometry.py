@@ -1646,8 +1646,8 @@ class PSFPhotometry:
         """
         The table of fit parameters and their errors.
 
-        This table is a subset of the ``results`` table, containing
-        only the fit parameters and their errors. It can be used as the
+        This table is a subset of the ``results`` table, containing only
+        the fit parameters and their errors. It can be used as the
         ``init_params`` for subsequent `PSFPhotometry` fits.
         """
         if self.results is None:

@@ -2,12 +2,12 @@
 """
 Tests that the background tools are safe for concurrent use.
 
-The estimator classes are stateless after construction. With the
-default string-based ``cenfunc`` and ``stdfunc`` options, sigma
-clipping routes through astropy's fast C implementation, which computes
-its clipping bounds in local variables, so concurrent calls on a
-shared estimator instance produce results identical to serial calls.
-A `~astropy.stats.SigmaClip` instance with callable or biweight
+The estimator classes are stateless after construction. With the default
+string-based ``cenfunc`` and ``stdfunc`` options, sigma clipping routes
+through astropy's fast C implementation, which computes its clipping
+bounds in local variables, so concurrent calls on a shared estimator
+instance produce results identical to serial calls. A
+`~astropy.stats.SigmaClip` instance with callable or biweight
 ``cenfunc``/``stdfunc`` options stores its bounds on the instance during
 calls and must not be shared between threads.
 
@@ -82,8 +82,8 @@ RMS_ESTIMATORS = [StdBackgroundRMS, MADStdBackgroundRMS,
 def test_concurrent_estimator_calls(estimator_cls, image_data):
     """
     Test that concurrent calls to a shared estimator instance with
-    default sigma clipping return results identical to serial calls
-    and do not modify the shared input data.
+    default sigma clipping return results identical to serial calls and
+    do not modify the shared input data.
     """
     data, _ = image_data
     data_orig = data.copy()
@@ -108,8 +108,8 @@ def test_concurrent_background2d_construction(n_threads, image_data):
     data and mask arrays return results identical to a serial
     construction and do not modify the shared inputs.
 
-    With ``n_threads`` > 1, each construction also runs its own
-    internal thread pool, exercising nested threading.
+    With ``n_threads`` > 1, each construction also runs its own internal
+    thread pool, exercising nested threading.
     """
     data, mask = image_data
     data_orig = data.copy()

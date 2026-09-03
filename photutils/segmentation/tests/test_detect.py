@@ -159,8 +159,8 @@ class TestDetectThreshold:
 
 def test_detect_sources_seeds_areas():
     """
-    Test that detect_sources returns a SegmentationImage with the
-    areas already cached and correct.
+    Test that detect_sources returns a SegmentationImage with the areas
+    already cached and correct.
     """
     data = np.zeros((10, 10))
     data[2:5, 2:5] = 10.0

@@ -33,8 +33,8 @@ def test_gini_1d():
 
 def test_gini_nd():
     """
-    Test that arrays of any dimensionality are accepted and treated as
-    a flattened set of values.
+    Test that arrays of any dimensionality are accepted and treated as a
+    flattened set of values.
     """
     data_3d = np.zeros((3, 3, 3))
     data_3d[1, 1, 1] = 1.0
@@ -108,8 +108,8 @@ def test_gini_invalid_values_filtered():
 
 def test_gini_all_zeros():
     """
-    Test that an all-zero array returns 0.0 (normalization
-    early-return).
+    Test that an all-zero array returns 0.0 (normalization early-
+    return).
     """
     assert gini(np.zeros((100, 100))) == 0.0
     assert gini(np.zeros(10)) == 0.0
@@ -138,7 +138,9 @@ def test_gini_bounded():
 def test_gini_negative_values():
     """
     Test that negative pixel values are treated via their absolute value
-    per the Lotz et al. formula.
+    per the Lotz et al.
+
+    formula.
     """
     # Negating all values must give the same result because only |x_i|
     # and |mean| enter the formula

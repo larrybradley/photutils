@@ -250,8 +250,8 @@ class TestShepardIDWInterpolator:
 
     def test_zero_weights(self):
         """
-        Test that NaN is returned when all weights are zero, leading
-        to wtot == 0.
+        Test that NaN is returned when all weights are zero, leading to
+        wtot == 0.
         """
         coords = np.array([0.0, 1.0, 2.0])
         values = np.array([10.0, 20.0, 30.0])

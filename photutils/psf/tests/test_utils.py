@@ -77,8 +77,8 @@ def test_fit_2dgaussian_single(fix_fwhm):
 
 def test_fit_2dgaussian_user_mask_with_nan():
     """
-    Regression test that unmasked non-finite values are merged into
-    a user-provided mask.
+    Regression test that unmasked non-finite values are merged into a
+    user-provided mask.
     """
     rng = np.random.default_rng(0)
     yy, xx = np.mgrid[0:31, 0:31]
@@ -238,8 +238,8 @@ def test_fit_fwhm_single():
 
 def test_fit_fwhm_convergence_warning_not_swallowed():
     """
-    Test that the convergence warning is emitted even when the
-    fit_shape warning also fired.
+    Test that the convergence warning is emitted even when the fit_shape
+    warning also fired.
     """
     data = np.ones((25, 25))
     with pytest.warns(AstropyUserWarning) as record:
@@ -427,8 +427,7 @@ def test_fit_2dgaussian_flux_init_excludes_masked_pixels():
 def test_fit_fwhm_reemits_other_warnings():
     """
     Regression test that fit_fwhm re-emits non-convergence warnings
-    verbatim instead of replacing them with a false convergence
-    warning.
+    verbatim instead of replacing them with a false convergence warning.
     """
     yy, xx = np.mgrid[0:31, 0:31]
     data = CircularGaussianPRF(flux=50, x_0=15, y_0=15, fwhm=3.1)(xx, yy)

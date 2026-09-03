@@ -435,8 +435,8 @@ class AperturePhotometry:
         The uncertainty in the `flux` values.
 
         The values are always float64, regardless of the input ``error``
-        dtype (a `~astropy.units.Quantity` if ``data`` has units). If the
-        input ``error`` is `None`, this is filled with NaN values.
+        dtype (a `~astropy.units.Quantity` if ``data`` has units). If
+        the input ``error`` is `None`, this is filled with NaN values.
         """
         values = self._stack('flux_err')
         if self._data_unit is not None:
@@ -449,10 +449,10 @@ class AperturePhotometry:
         The total unmasked overlap area of the aperture(s) (in
         ``pix**2``).
 
-        This takes into account the aperture mask method, masked
-        data pixels (``mask`` keyword), segmentation masking, and
-        partial/no overlap of the aperture with the data. The value is
-        NaN where an aperture does not overlap the data.
+        This takes into account the aperture mask method, masked data
+        pixels (``mask`` keyword), segmentation masking, and partial/no
+        overlap of the aperture with the data. The value is NaN where an
+        aperture does not overlap the data.
         """
         values = [result.area for result in self._photometry_results]
         if self._single_aperture:

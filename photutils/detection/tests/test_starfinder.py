@@ -318,8 +318,8 @@ class TestStarFinder:
 
     def test_threshold_2d_uniform(self, data, kernel):
         """
-        Test that a uniform 2D threshold gives the same results
-        as a scalar threshold.
+        Test that a uniform 2D threshold gives the same results as a
+        scalar threshold.
         """
         threshold = 1.0
         finder_scalar = StarFinder(threshold, kernel)
@@ -379,8 +379,8 @@ class TestStarFinder:
 
     def test_deprecated_peakmax(self, kernel):
         """
-        Test that the deprecated 'peakmax' keyword raises a warning
-        and still works.
+        Test that the deprecated 'peakmax' keyword raises a warning and
+        still works.
         """
         match = "'peakmax' was deprecated"
         with pytest.warns(AstropyDeprecationWarning, match=match):

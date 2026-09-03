@@ -460,9 +460,8 @@ class TestPSFFitter:
 
     def test_make_psf_model_no_stale_class_cache(self):
         """
-        Regression test that flat-model classes are not shared
-        between PSFFitter instances with different PSF models of the
-        same class.
+        Regression test that flat-model classes are not shared between
+        PSFFitter instances with different PSF models of the same class.
         """
         sources = Table({
             'id': [1, 2],
@@ -486,8 +485,8 @@ class TestPSFFitter:
 
     def test_flat_model_preserves_bounds(self, psf_model, param_mapper):
         """
-        Regression test that flat models preserve the parameter
-        bounds of the base PSF model.
+        Regression test that flat models preserve the parameter bounds
+        of the base PSF model.
         """
         assert psf_model.fwhm.bounds[0] is not None
         fitter = PSFFitter(psf_model, param_mapper)
@@ -720,8 +719,8 @@ class TestModelImageMaker:
 
     def test_local_bkg_none(self, psf_model):
         """
-        Test that include_local_bkg=True with local_bkg=None treats
-        the local background as zero.
+        Test that include_local_bkg=True with local_bkg=None treats the
+        local background as zero.
         """
         params = QTable({'x_0': [12.0], 'y_0': [12.0], 'flux': [100.0]})
         maker = _ModelImageMaker(psf_model, params)

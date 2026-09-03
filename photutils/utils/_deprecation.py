@@ -5,8 +5,8 @@ A module to create Astropy Tables with deprecated column names.
 It is designed to create new table objects from raw data, rather than
 modifying existing tables.
 
-The primary function, ``create_deprecated_table_from_data``, handles
-the data renaming and constructs an instance of a custom ``Table`` or
+The primary function, ``create_deprecated_table_from_data``, handles the
+data renaming and constructs an instance of a custom ``Table`` or
 ``QTable`` subclass that correctly handles all deprecated name access.
 
 Note that standalone Astropy functions like ``join`` inspect
@@ -266,6 +266,7 @@ def deprecated_positional_kwargs(since, *, until=None):
         A decorator function that can be applied to any function to warn
         about positional arguments.
     """
+
     def decorator(func):  # numpydoc ignore=GL08
         since_str = str(since)
         until_str = str(until) if until is not None else None
@@ -316,8 +317,8 @@ class DeprecatedColumnMixin:
     """
     A mixin to handle deprecated column names in Astropy tables.
 
-    This mixin overrides common table methods to intercept calls
-    using old column names. It translates them to new names, issues a
+    This mixin overrides common table methods to intercept calls using
+    old column names. It translates them to new names, issues a
     deprecation warning, and then calls the original parent method via
     ``super()``. This works correctly because instances are created from
     this class directly, ensuring a valid method resolution order.

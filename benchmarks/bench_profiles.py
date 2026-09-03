@@ -5,12 +5,12 @@ Benchmarks for the photutils.profiles subpackage.
 
 The benchmarks cover the per-call cost of constructing each profile
 class and computing its profile for each aperture overlap method, the
-scaling of the profile computation with the number of radial bins,
-and the cost of the RadialProfile extras (the raw data profile and
-the Gaussian and Moffat model fits).
+scaling of the profile computation with the number of radial bins, and
+the cost of the RadialProfile extras (the raw data profile and the
+Gaussian and Moffat model fits).
 
-Run ``python benchmarks/bench_profiles.py --help`` to see the
-available options.
+Run ``python benchmarks/bench_profiles.py --help`` to see the available
+options.
 """
 
 import argparse

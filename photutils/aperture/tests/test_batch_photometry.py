@@ -78,16 +78,16 @@ class _ErrorSubclass(np.ndarray):
 
 class TestMaskPathParity:
     """
-    The batch driver must give results identical to the mask-based
-    code path.
+    The batch driver must give results identical to the mask-based code
+    path.
     """
 
     @pytest.mark.parametrize('aperture', APERTURES)
     @pytest.mark.parametrize(('method', 'subpixels'), METHODS)
     def test_basic(self, aperture, method, subpixels):
         """
-        Test that the batch photometry driver gives results identical to the
-        legacy mask-based code path for the given inputs.
+        Test that the batch photometry driver gives results identical to
+        the legacy mask-based code path for the given inputs.
         """
         assert_batch_matches_legacy(aperture, DATA, method=method,
                                     subpixels=subpixels)
@@ -96,9 +96,9 @@ class TestMaskPathParity:
     @pytest.mark.parametrize(('method', 'subpixels'), METHODS)
     def test_error_and_mask(self, aperture, method, subpixels):
         """
-        Test that the batch photometry driver gives results identical to the
-        legacy mask-based code path for the given inputs, including error
-        and mask.
+        Test that the batch photometry driver gives results identical to
+        the legacy mask-based code path for the given inputs, including
+        error and mask.
         """
         assert_batch_matches_legacy(aperture, DATA, error=ERROR, mask=MASK,
                                     method=method, subpixels=subpixels)
@@ -106,17 +106,17 @@ class TestMaskPathParity:
     @pytest.mark.parametrize('aperture', APERTURES)
     def test_nan_data(self, aperture):
         """
-        Test that the batch photometry driver gives results identical to the
-        legacy mask-based code path for data containing NaN values.
+        Test that the batch photometry driver gives results identical to
+        the legacy mask-based code path for data containing NaN values.
         """
         assert_batch_matches_legacy(aperture, DATA_NAN, error=ERROR)
 
     @pytest.mark.parametrize('dtype', ['int32', 'uint16', 'float32', 'bool'])
     def test_data_dtypes(self, dtype):
         """
-        Test that the batch photometry driver gives results identical to the
-        legacy mask-based code path for different data dtypes, including
-        bool.
+        Test that the batch photometry driver gives results identical to
+        the legacy mask-based code path for different data dtypes,
+        including bool.
         """
         rtol = 1e-5 if dtype == 'float32' else 1e-12
         aperture = CircularAperture(POSITIONS, r=5.5)
@@ -130,8 +130,8 @@ class TestMaskPathParity:
 
     def test_scalar_position(self):
         """
-        Test that the batch photometry driver gives results identical to the
-        legacy mask-based code path for a single scalar position.
+        Test that the batch photometry driver gives results identical to
+        the legacy mask-based code path for a single scalar position.
         """
         aperture = CircularAperture((70.0, 80.0), r=5.5)
         assert_batch_matches_legacy(aperture, DATA, error=ERROR)
@@ -141,9 +141,9 @@ class TestMaskPathParity:
 
     def test_units(self):
         """
-        Test that the batch photometry driver gives results with the same
-        units as the input data and error, and that the values match the
-        legacy code path.
+        Test that the batch photometry driver gives results with the
+        same units as the input data and error, and that the values
+        match the legacy code path.
         """
         unit = u.Jy
         aperture = CircularAperture(POSITIONS, r=5.5)
@@ -164,13 +164,13 @@ class TestReadonlyArrays:
     @pytest.mark.parametrize(('method', 'subpixels'), METHODS)
     def test_batch_driver(self, method, subpixels):
         """
-        Test that read-only (non-writeable) data, error, and mask arrays are
-        accepted by the batch photometry driver and give results identical
-        to writeable arrays.
+        Test that read-only (non-writeable) data, error, and mask arrays
+        are accepted by the batch photometry driver and give results
+        identical to writeable arrays.
 
-        The batch Cython driver buffers the data, error, and positions into
-        ``const`` typed memoryviews so that read-only arrays do not raise a
-        ``ValueError``.
+        The batch Cython driver buffers the data, error, and positions
+        into ``const`` typed memoryviews so that read-only arrays do not
+        raise a ``ValueError``.
         """
         aperture = CircularAperture(POSITIONS, r=5.5)
         data = DATA.copy()
@@ -237,7 +237,8 @@ class TestErrorArrayShape:
         """
         Test that `photometry` returns a ``flux_err`` array that always
         has the same length as ``flux`` and is filled with NaN when
-        ``error`` is not input, both for sources with and without overlap.
+        ``error`` is not input, both for sources with and without
+        overlap.
 
         ``CircularAperture`` exercises the batch code path and
         ``PolygonAperture`` exercises the mask-based code path.
@@ -257,9 +258,9 @@ class TestFallback:
 
     def test_unsupported_inputs(self):
         """
-        Test that inputs not supported by the batch photometry driver cause
-        it to return None so that the caller falls back to the mask-based
-        code path.
+        Test that inputs not supported by the batch photometry driver
+        cause it to return None so that the caller falls back to the
+        mask-based code path.
         """
         aperture = CircularAperture(POSITIONS, r=5.5)
 
@@ -289,8 +290,8 @@ class TestFallback:
 
     def test_error_subclass_matches_mask_path(self):
         """
-        Test that an ``error`` array that the batch driver does not accept
-        gives the same results via the mask-based code path.
+        Test that an ``error`` array that the batch driver does not
+        accept gives the same results via the mask-based code path.
         """
         aperture = CircularAperture(POSITIONS, r=5.5)
         error = ERROR.view(_ErrorSubclass)
@@ -372,8 +373,8 @@ class TestThreadSafety:
     def test_concurrent_photometry(self):
         """
         Test that the batch driver releases the GIL and is therefore
-        thread-safe by running multiple photometry calls in parallel threads
-        and checking that they all give the same results.
+        thread-safe by running multiple photometry calls in parallel
+        threads and checking that they all give the same results.
         """
         aperture = CircularAperture(POSITIONS, r=5.5)
         expected = aperture._photometry(DATA, error=ERROR)

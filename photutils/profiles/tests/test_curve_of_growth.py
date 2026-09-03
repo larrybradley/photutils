@@ -278,8 +278,8 @@ class TestCurveOfGrowth:
         """
         Test CurveOfGrowth with all data masked.
 
-        When every pixel is masked the profile should be all zero
-        (zero flux in every aperture).
+        When every pixel is masked the profile should be all zero (zero
+        flux in every aperture).
         """
         xycen, data, _, _ = profile_data
 
@@ -754,9 +754,9 @@ class TestEllipticalCurveOfGrowth:
 
     def test_interp_nonmonotonic_start(self, profile_data):
         """
-        Test that `calc_radius_at_ee` raises ValueError when the
-        profile is non-monotonic at the very first point (covers the
-        len(radius) < 2 branch).
+        Test that `calc_radius_at_ee` raises ValueError when the profile
+        is non-monotonic at the very first point (covers the len(radius)
+        < 2 branch).
         """
         xycen, data, _, _ = profile_data
         radii = np.arange(1, 36)

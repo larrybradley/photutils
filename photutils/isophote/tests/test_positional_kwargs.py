@@ -92,9 +92,8 @@ def fixture_small_isolist():
     """
     Fit isophotes to a small simulated galaxy image.
 
-    A small image with a capped fit is sufficient (and fast) for
-    testing the deprecation warnings, and the fit is shared across
-    tests.
+    A small image with a capped fit is sufficient (and fast) for testing
+    the deprecation warnings, and the fit is shared across tests.
     """
     data = make_test_image(nx=128, ny=128, sma=10.0, seed=0)
     ellipse = Ellipse(data)

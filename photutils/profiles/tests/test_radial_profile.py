@@ -401,8 +401,8 @@ class TestRadialProfile:
     @pytest.mark.skipif(not HAS_MATPLOTLIB, reason='matplotlib is required')
     def test_plot_ylabel_units(self, profile_data):
         """
-        Test that the plot y-axis label includes the data unit only
-        when the profile has a physical unit.
+        Test that the plot y-axis label includes the data unit only when
+        the profile has a physical unit.
 
         A normalized profile is dimensionless.
         """

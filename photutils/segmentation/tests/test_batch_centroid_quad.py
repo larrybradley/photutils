@@ -45,9 +45,9 @@ def _reference_centroid_quad_results(cat):
     """
     Compute the quadratic centroid results of each source.
 
-    This is a verbatim port of the per-source Python implementation
-    of ``_centroid_quad_results`` that the batch path replaces. It is
-    the numerical reference for the batch path.
+    This is a verbatim port of the per-source Python implementation of
+    ``_centroid_quad_results`` that the batch path replaces. It is the
+    numerical reference for the batch path.
     """
     xi = np.arange(3)
     x, y = np.meshgrid(xi, xi)

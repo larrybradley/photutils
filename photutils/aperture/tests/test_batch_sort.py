@@ -12,8 +12,8 @@ from photutils.aperture._batch_stats import _heapsort_values, batch_sort_values
 
 def _adversarial_arrays(rng, n):
     """
-    Arrays of length ``n`` that exercise the partitioning, sentinel,
-    and short-range paths of the introsort.
+    Arrays of length ``n`` that exercise the partitioning, sentinel, and
+    short-range paths of the introsort.
     """
     base = rng.normal(size=n)
     arrays = [base, np.sort(base), np.sort(base)[::-1].copy(),

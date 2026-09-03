@@ -290,7 +290,8 @@ class TestDeprecatedColumn:
 
     def test_empty_deprecation_map(self, raw_data, recwarn):
         """
-        Test a table with an empty deprecation map (no deprecated names).
+        Test a table with an empty deprecation map (no deprecated
+        names).
         """
         table = create_deprecated_table_from_data(raw_data, {})  # empty map
         # All operations should work without any warnings
@@ -366,8 +367,8 @@ class TestDeprecatedColumn:
 
     def test_translate_names_non_string(self, raw_data, recwarn):
         """
-        Test that _translate_names passes through non-string/non-sequence
-        values unchanged (e.g., a Table used as group_by keys).
+        Test that _translate_names passes through non-string/non-
+        sequence values unchanged (e.g., a Table used as group_by keys).
         """
         table = create_deprecated_table_from_data(raw_data, DEPRECATION_MAP)
 
@@ -480,8 +481,8 @@ class TestUseFutureColumnNames:
 
     def test_global_unchanged_after_context(self):
         """
-        Test that the global flag is unchanged after the context
-        manager exits.
+        Test that the global flag is unchanged after the context manager
+        exits.
         """
         import photutils
 
@@ -732,8 +733,8 @@ def _example_func2(a, new, *, c=20):
 @deprecated_renamed_argument('b', 'new', '1.0', until=None)
 def _example_func3(a, new, *, c=20):
     """
-    Example function for testing deprecated_renamed_argument
-    with no "until" version specified.
+    Example function for testing deprecated_renamed_argument with no
+    "until" version specified.
     """
     return a + new + c
 

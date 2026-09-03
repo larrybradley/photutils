@@ -41,8 +41,8 @@ class ApertureMask:
     @cached_property
     def _mask(self):
         """
-        A boolean array that is `True` where the aperture mask weight
-        is zero.
+        A boolean array that is `True` where the aperture mask weight is
+        zero.
         """
         return self.data == 0
 

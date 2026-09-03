@@ -23,8 +23,8 @@ from photutils.segmentation import SourceCatalog, detect_sources
 
 def _reference_find_bounding_points(model, x, y):
     """
-    Reference implementation of the bounding-point lookup using the
-    pre-fast-path ``numpy.searchsorted``/``numpy.where`` algorithm.
+    Reference implementation of the bounding-point lookup using the pre-
+    fast-path ``numpy.searchsorted``/``numpy.where`` algorithm.
 
     This is used to verify that the optimized ``_find_bounding_points``
     and ``_bounding_lookup`` produce equivalent results.
@@ -50,8 +50,8 @@ def _reference_find_bounding_points(model, x, y):
 
 def _reference_bilinear_weights(xi, yi, grid_xy):
     """
-    Reference implementation of the bilinear weights using the
-    pre-fast-path ``numpy.clip`` algorithm.
+    Reference implementation of the bilinear weights using the pre-fast-
+    path ``numpy.clip`` algorithm.
     """
     x0, x1, y0, y1 = grid_xy
     xi = np.clip(xi, x0, x1)
@@ -63,8 +63,8 @@ def _reference_bilinear_weights(xi, yi, grid_xy):
 
 def _reference_calc_model_values(model, x_0, y_0, xi, yi):
     """
-    Reference implementation of ``_calc_model_values`` using the
-    pre-fast-path bounding-point and weight algorithms.
+    Reference implementation of ``_calc_model_values`` using the pre-
+    fast-path bounding-point and weight algorithms.
     """
     grid_idx, grid_xy = _reference_find_bounding_points(model, x_0, y_0)
     interpolators = np.array([model._calc_interpolator(gidx)
@@ -406,9 +406,9 @@ class TestGriddedPSFModel:
 
     def test_fit_deriv_grid_corner(self, psfmodel):
         """
-        Test the derivatives with the model positioned exactly on a
-        grid corner, where one bounding ePSF has zero weight and zero
-        weight derivatives.
+        Test the derivatives with the model positioned exactly on a grid
+        corner, where one bounding ePSF has zero weight and zero weight
+        derivatives.
         """
         x_0, y_0 = 40.0, 60.0  # grid corner
         x = np.linspace(x_0 - 8, x_0 + 8, 9)
@@ -422,9 +422,9 @@ class TestGriddedPSFModel:
 
     def test_fit_deriv_single_plane(self, psfmodel):
         """
-        Test the derivatives for a grid containing a single ePSF,
-        which has no dependence on the model position through the
-        bilinear weights.
+        Test the derivatives for a grid containing a single ePSF, which
+        has no dependence on the model position through the bilinear
+        weights.
         """
         meta = {'grid_xypos': [psfmodel.grid_xypos[0]],
                 'oversampling': psfmodel.oversampling}
@@ -840,8 +840,8 @@ class TestSTDPSFGridFromASDF:
 
     def test_repeated_grid_coordinate(self):
         """
-        Test a grid where a coordinate is repeated because two
-        detectors abut (e.g., ACS/WFC).
+        Test a grid where a coordinate is repeated because two detectors
+        abut (e.g., ACS/WFC).
         """
         grid_xypos = np.array([(0, 0), (1, 0), (0, 5), (1, 5),
                                (0, 5), (1, 5), (0, 9), (1, 9)])

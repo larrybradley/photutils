@@ -158,10 +158,10 @@ class TestComputeLocalWCSJacobian:
     @pytest.mark.parametrize(('center_ra', 'center_dec'), TROUBLESOME_CENTERS)
     def test_parity_at_pole_and_wrap(self, center_ra, center_dec):
         """
-        Regression test that the determinant (parity) of the Jacobian must
-        stay negative for a standard RA-increases-to-the-left WCS at all
-        declinations and RA values, including near the poles and across
-        the wraparound.
+        Regression test that the determinant (parity) of the Jacobian
+        must stay negative for a standard RA-increases-to-the-left WCS
+        at all declinations and RA values, including near the poles and
+        across the wraparound.
         """
         wcs = _make_sip_wcs(center_ra, center_dec)
         skycoord = SkyCoord(center_ra * u.deg, center_dec * u.deg)
@@ -252,8 +252,8 @@ class TestWcsPixelScaleAngle:
 
     def test_rotated_wcs_angle(self, rotated_wcs):
         """
-        For a 25-degree rotated WCS, the North angle should shift by
-        ~25 degrees from the axis-aligned value (~90 deg).
+        For a 25-degree rotated WCS, the North angle should shift by ~25
+        degrees from the axis-aligned value (~90 deg).
         """
         _, _, angle = wcs_pixel_scale_angle(WCS_CENTER, rotated_wcs)
         # The rotation should be about 90 - 25 = 65 degrees
@@ -328,7 +328,8 @@ class TestJacobianMeanScale:
 
     def test_pixel_to_sky_simple_scale(self, simple_wcs, center_xy_coord):
         """
-        For an isotropic WCS, the mean scale should equal WCS_CDELT_ARCSEC.
+        For an isotropic WCS, the mean scale should equal
+        WCS_CDELT_ARCSEC.
         """
         _, scale = jacobian_pixel_to_sky_mean_scale(
             center_xy_coord, simple_wcs)
@@ -468,8 +469,8 @@ class TestDispatchMeanScale:
 
 class TestGWCSDispatch:
     """
-    Test that dispatch helpers correctly handle WCS objects without
-    the ``has_distortion`` attribute (e.g., GWCS), defaulting to the
+    Test that dispatch helpers correctly handle WCS objects without the
+    ``has_distortion`` attribute (e.g., GWCS), defaulting to the
     Jacobian path.
     """
 
@@ -698,8 +699,8 @@ def _ellipse_implicit_residual(x, y, center, width, height, angle_rad):
 
 class TestFlippedParityWCS:
     """
-    Regression tests for sky <-> pixel shape conversions with a
-    flipped-parity WCS (North down, East left, positive determinant).
+    Regression tests for sky <-> pixel shape conversions with a flipped-
+    parity WCS (North down, East left, positive determinant).
 
     Such a WCS previously produced apertures that were mirrored about
     the x-axis relative to the correct orientation.
@@ -717,8 +718,8 @@ class TestFlippedParityWCS:
     @pytest.mark.parametrize('pa_deg', PA_DEGS)
     def test_sky_to_pixel_matches_projection(self, flipped_wcs, pa_deg):
         """
-        The pixel ellipse from ``sky_shape_to_pixel_svd`` must match
-        the true projection of the sky ellipse boundary (not its mirror
+        The pixel ellipse from ``sky_shape_to_pixel_svd`` must match the
+        true projection of the sky ellipse boundary (not its mirror
         image) for a flipped-parity WCS.
         """
         a_arcsec, b_arcsec = 3.0, 1.5

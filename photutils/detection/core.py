@@ -274,8 +274,8 @@ class StarFinderCatalogBase(metaclass=abc.ABCMeta):
         """
         Index or slice the catalog.
 
-        Class-specific attributes to copy are declared by overriding
-        the ``_get_init_attributes`` method in subclasses.
+        Class-specific attributes to copy are declared by overriding the
+        ``_get_init_attributes`` method in subclasses.
         """
         # NOTE: we allow indexing/slicing of scalar (self.isscalar = True)
         #       instances in order to perform catalog filtering even for
@@ -525,8 +525,8 @@ class StarFinderCatalogBase(metaclass=abc.ABCMeta):
         Gaussian function that has the same second-order moments as the
         source.
 
-        The angle increases in the counter-clockwise direction and is
-        in the range (-90, 90] degrees.
+        The angle increases in the counter-clockwise direction and is in
+        the range (-90, 90] degrees.
         """
         angle = 0.5 * np.arctan2(2.0 * self.moments_central[:, 1, 1],
                                  self.mu_diff)

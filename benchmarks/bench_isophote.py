@@ -5,12 +5,12 @@ Benchmarks for the photutils.isophote subpackage.
 
 The benchmarks cover full isophote fitting with Ellipse.fit_image,
 elliptical sample extraction with EllipseSample.extract for each
-integration mode, model-image reconstruction with
-build_ellipse_model, and the scaling of the private
-build_ellipse_model_c Cython kernel with image size.
+integration mode, model-image reconstruction with build_ellipse_model,
+and the scaling of the private build_ellipse_model_c Cython kernel with
+image size.
 
-Run ``python benchmarks/bench_isophote.py --help`` to see the
-available options.
+Run ``python benchmarks/bench_isophote.py --help`` to see the available
+options.
 """
 
 import argparse

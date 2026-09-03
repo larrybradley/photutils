@@ -82,9 +82,8 @@ def test_concurrent_image_depth_shared_instance():
 def test_concurrent_image_depth_shared_sigma_clip():
     """
     Test that ImageDepth instances sharing a user-input SigmaClip
-    instance can run concurrently, producing results identical to
-    serial calls (each call must use a local copy of the SigmaClip
-    instance).
+    instance can run concurrently, producing results identical to serial
+    calls (each call must use a local copy of the SigmaClip instance).
     """
     data, mask = _make_depth_inputs()
     sigma_clip = SigmaClip(sigma=3.0, maxiters=5)

@@ -3,17 +3,16 @@
 """
 Benchmarks for ApertureStats in the photutils.aperture subpackage.
 
-The benchmarks cover computing the ApertureStats properties for all
-of the pixel-based aperture types, with and without sigma clipping,
-the cold cost of each individual ApertureStats property (including
-its lazy dependencies) for a circular aperture, and the thread
-scaling of the ``n_threads`` keyword.
+The benchmarks cover computing the ApertureStats properties for all of
+the pixel-based aperture types, with and without sigma clipping, the
+cold cost of each individual ApertureStats property (including its lazy
+dependencies) for a circular aperture, and the thread scaling of the
+``n_threads`` keyword.
 
-The all-properties timings exclude the properties that construct
-per-source Python objects (the cutouts and bounding boxes) by
-default because they do not parallelize with ``n_threads`` and
-would otherwise dominate the timings. Use ``--all-properties`` to
-include them.
+The all-properties timings exclude the properties that construct per-
+source Python objects (the cutouts and bounding boxes) by default
+because they do not parallelize with ``n_threads`` and would otherwise
+dominate the timings. Use ``--all-properties`` to include them.
 
 Run ``python benchmarks/bench_aperture_stats.py --help`` to see the
 available options.
@@ -226,8 +225,8 @@ def bench_properties(size, n_sources, n_threads_list, *, repeats=3,
 def bench_thread_scaling(size, n_sources, n_threads_list, *, repeats=3,
                          seed=0):
     """
-    Benchmark ApertureStats thread scaling for all pixel-based
-    aperture types.
+    Benchmark ApertureStats thread scaling for all pixel-based aperture
+    types.
 
     Two sweeps are measured for each aperture type: the aperture
     ``sum`` (with an error array), which runs entirely in the

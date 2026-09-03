@@ -254,8 +254,8 @@ class TestSegmentationMasking:
 
     def test_correct_matches_manual_mirror(self):
         """
-        Test that mask_method='correct' reproduces plain photometry on
-        a manually mirror-corrected image.
+        Test that mask_method='correct' reproduces plain photometry on a
+        manually mirror-corrected image.
 
         The scene is constructed so that the mirror of every neighbor
         pixel is an unmasked non-neighbor pixel, so every neighbor pixel
@@ -444,8 +444,8 @@ class TestScalarBehavior:
 
     def test_scalar_matches_array(self, data):
         """
-        Test that the scalar output from a single position matches
-        the first element of the array output from a length-1 list of
+        Test that the scalar output from a single position matches the
+        first element of the array output from a length-1 list of
         positions.
         """
         scalar = AperturePhotometry(data, CircularAperture((150, 25), r=8))
@@ -846,9 +846,9 @@ class TestReadOnlyInputs:
 
 class TestEmptyPositions:
     """
-    Regression tests for apertures with zero positions, which must
-    flow through both classes (including the batch Cython drivers) and
-    the legacy function, returning empty outputs.
+    Regression tests for apertures with zero positions, which must flow
+    through both classes (including the batch Cython drivers) and the
+    legacy function, returning empty outputs.
     """
 
     def test_aperture_photometry_class(self):
@@ -946,8 +946,9 @@ class TestReprAndImmutability:
 
     def test_no_new_attributes_after_init(self, data):
         """
-        Only cached-property cache entries may appear after ``__init__``,
-        which is required for the instance to be thread-safe.
+        Only cached-property cache entries may appear after
+        ``__init__``, which is required for the instance to be thread-
+        safe.
         """
         aper = CircularAperture(((150, 25), (90, 60)), 8)
         phot = AperturePhotometry(data, aper, error=np.ones_like(data),
@@ -1116,9 +1117,9 @@ class TestNThreads:
 
     def test_mask_based_fallback(self):
         """
-        Test that apertures that do not support the batch code path
-        give correct results with n_threads > 1 (the mask-based code
-        path stays serial).
+        Test that apertures that do not support the batch code path give
+        correct results with n_threads > 1 (the mask-based code path
+        stays serial).
         """
         data, _, _, positions = self.make_inputs()
         aper = NoBatchCircularAperture(positions, r=7.0)

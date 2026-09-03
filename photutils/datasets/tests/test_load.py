@@ -68,14 +68,14 @@ class TestGetPathRemote:
 
     These tests verify that ``download_file`` is called with both the
     primary astropy data URL and the photutils-datasets fallback URL
-    passed as ``sources``, so that astropy handles the cache lookup
-    and fallback behavior automatically.
+    passed as ``sources``, so that astropy handles the cache lookup and
+    fallback behavior automatically.
     """
 
     def test_calls_download_file_with_sources(self, url_paths):
         """
-        Test that _get_path calls ``download_file`` with the primary
-        URL as the cache key and both URLs in ``sources``.
+        Test that _get_path calls ``download_file`` with the primary URL
+        as the cache key and both URLs in ``sources``.
         """
         with patch('photutils.datasets.load.download_file') as mock_dl:
             mock_dl.return_value = '/cached/path/test_file.fits'

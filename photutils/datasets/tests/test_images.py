@@ -173,8 +173,8 @@ def test_make_model_image_units_no_overlap():
 
 def test_make_model_image_units_no_sources_rendered():
     """
-    Test that the output units do not depend on whether any sources
-    are actually rendered.
+    Test that the output units do not depend on whether any sources are
+    actually rendered.
     """
     unit = u.Jy
     model = CircularGaussianSigmaPRF(sigma=1.5)

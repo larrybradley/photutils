@@ -184,8 +184,7 @@ class EPSFStar:
 
     def __array__(self, dtype=None, copy=None):
         """
-        Array representation of the data array (e.g., for
-        matplotlib).
+        Array representation of the data array (e.g., for matplotlib).
         """
         if copy is False:
             return np.asarray(self._data, dtype=dtype)
@@ -352,8 +351,8 @@ class EPSFStar:
     @property
     def _xyidx_centered(self):
         """
-        1D arrays of x and y indices of unmasked pixels, with respect
-        to the star center, in the cutout reference frame.
+        1D arrays of x and y indices of unmasked pixels, with respect to
+        the star center, in the cutout reference frame.
 
         Returns
         -------
@@ -458,10 +457,10 @@ class EPSFStars:
 
         This allows accessing star attributes (like ``cutout_center``,
         ``center``, ``flux``) directly on the EPSFStars container,
-        returning an array of values from all contained stars. If
-        the per-star values have inconsistent shapes (e.g., for a
-        mix of `EPSFStar` and multi-star `LinkedEPSFStar` objects),
-        an object array is returned. Private attributes (other than
+        returning an array of values from all contained stars. If the
+        per-star values have inconsistent shapes (e.g., for a mix of
+        `EPSFStar` and multi-star `LinkedEPSFStar` objects), an object
+        array is returned. Private attributes (other than
         ``_excluded_from_fit``) are not delegated, and empty containers
         raise `AttributeError`.
         """
@@ -626,8 +625,9 @@ class LinkedEPSFStar:
         """
         Delegate attribute access to the underlying star list.
 
-        This provides access to common star attributes like cutout_center,
-        center, flux, etc. as arrays when accessed on the LinkedEPSFStar.
+        This provides access to common star attributes like
+        cutout_center, center, flux, etc. as arrays when accessed on the
+        LinkedEPSFStar.
         """
         if attr == '_excluded_from_fit':
             return np.array([star._excluded_from_fit
@@ -668,8 +668,8 @@ class LinkedEPSFStar:
     def cutout_center_flat(self):
         """
         A `~numpy.ndarray` of the ``(x, y)`` position of all the stars'
-        centers with respect to the input cutout ``data`` array, as a
-        2D array (``n_all_stars`` x 2).
+        centers with respect to the input cutout ``data`` array, as a 2D
+        array (``n_all_stars`` x 2).
         """
         return np.array([star.cutout_center for star in self._data])
 
@@ -697,8 +697,8 @@ class LinkedEPSFStar:
         """
         The total number of `EPSFStar` objects in this linked star.
 
-        For LinkedEPSFStar this is the same as n_stars since there
-        is no nesting.
+        For LinkedEPSFStar this is the same as n_stars since there is no
+        nesting.
         """
         return len(self._data)
 

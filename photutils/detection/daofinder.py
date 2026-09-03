@@ -542,12 +542,12 @@ class _DAOStarFinderCatalog(StarFinderCatalogBase):
     @cached_property
     def roundness1(self):
         """
-        The roundness of the source based on symmetry, defined as
-        the ratio of a measure of the object's bilateral (2-fold) to
-        four-fold symmetry.
+        The roundness of the source based on symmetry, defined as the
+        ratio of a measure of the object's bilateral (2-fold) to four-
+        fold symmetry.
 
-        A circular source will have a zero roundness. A source
-        extended in x or y will have a negative or positive roundness,
+        A circular source will have a zero roundness. A source extended
+        in x or y will have a negative or positive roundness,
         respectively.
         """
         # Set the central (peak) pixel to zero for the sum4 calculation

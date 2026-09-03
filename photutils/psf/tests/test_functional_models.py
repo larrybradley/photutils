@@ -275,8 +275,8 @@ def test_circular_prf_fwhm_sigma_equivalence():
 
 def test_gaussian_prf_matches_analytic_integral():
     """
-    Test that GaussianPRF at theta=0 equals the erf-based analytic
-    pixel integral of GaussianPSF.
+    Test that GaussianPRF at theta=0 equals the erf-based analytic pixel
+    integral of GaussianPSF.
     """
     flux = 71.4
     x_0 = 0.3
@@ -332,8 +332,8 @@ def test_gaussian_bounding_boxes():
 @pytest.mark.parametrize('model_cls', [GaussianPSF, GaussianPRF])
 def test_gaussian_bounding_box_theta_units(model_cls):
     """
-    Regression test that float theta (degrees) and Quantity theta
-    give identical bounding boxes.
+    Regression test that float theta (degrees) and Quantity theta give
+    identical bounding boxes.
     """
     m_float = model_cls(x_0=0, y_0=0, x_fwhm=2, y_fwhm=3, theta=90)
     m_quant = model_cls(x_0=0, y_0=0, x_fwhm=2, y_fwhm=3,
@@ -396,8 +396,8 @@ def test_moffat_psf_model(use_units):
 
 def test_moffat_psf_beta_bound():
     """
-    Test that the default lower bound of beta is strictly greater
-    than 1.
+    Test that the default lower bound of beta is strictly greater than
+    1.
     """
     assert MoffatPSF().beta.bounds[0] > 1.0
 
@@ -500,8 +500,8 @@ def test_airydisk_psf_model(use_units):
 def test_airydisk_infinite_radial_distance():
     """
     Regression test that AiryDiskPSF evaluates to zero at infinite
-    radial distance, matching the other models, while NaN inputs
-    still propagate.
+    radial distance, matching the other models, while NaN inputs still
+    propagate.
     """
     model = AiryDiskPSF(flux=1, radius=2)
     assert model(np.inf, 0.0) == 0.0

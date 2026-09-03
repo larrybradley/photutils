@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 """
-Benchmarks for AperturePhotometry in the photutils.aperture
-subpackage.
+Benchmarks for AperturePhotometry in the photutils.aperture subpackage.
 
-The benchmarks cover computing the flux (with an error array) for all
-of the pixel-based aperture types and each aperture overlap method
-(exact, center, and subpixel), and the thread scaling of the
-``n_threads`` keyword.
+The benchmarks cover computing the flux (with an error array) for all of
+the pixel-based aperture types and each aperture overlap method (exact,
+center, and subpixel), and the thread scaling of the ``n_threads``
+keyword.
 
-Run ``python benchmarks/bench_aperture_photometry.py --help`` to see
-the available options.
+Run ``python benchmarks/bench_aperture_photometry.py --help`` to see the
+available options.
 """
 
 import argparse

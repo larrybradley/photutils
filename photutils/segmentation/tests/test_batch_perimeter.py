@@ -20,8 +20,8 @@ def _reference_perimeter(cat):
     """
     Compute the perimeter of each source segment.
 
-    This is a verbatim port of the per-source Python implementation
-    of ``perimeter`` that the batch Cython kernel replaces. It is the
+    This is a verbatim port of the per-source Python implementation of
+    ``perimeter`` that the batch Cython kernel replaces. It is the
     numerical reference for the kernel.
     """
     size = 34

@@ -3,13 +3,13 @@
 """
 Benchmarks for the photutils.datasets subpackage.
 
-The benchmarks cover the scaling of ``make_model_image`` with the
-number of sources, the model discretization methods, the scaling of
-``make_model_params`` with the number of sources, the noise
-functions, the WCS factories, and the example-image functions.
+The benchmarks cover the scaling of ``make_model_image`` with the number
+of sources, the model discretization methods, the scaling of
+``make_model_params`` with the number of sources, the noise functions,
+the WCS factories, and the example-image functions.
 
-Run ``python benchmarks/bench_datasets.py --help`` to see the
-available options.
+Run ``python benchmarks/bench_datasets.py --help`` to see the available
+options.
 """
 
 import argparse

@@ -422,8 +422,8 @@ class TestSourceGrouper:
 
     def test_grouper_matches_fclusterdata(self):
         """
-        The grouper must produce the identical partition as
-        single-linkage fclusterdata with the distance criterion.
+        The grouper must produce the identical partition as single-
+        linkage fclusterdata with the distance criterion.
         """
         rng = np.random.default_rng(0)
         x = rng.uniform(0, 500, 1000)

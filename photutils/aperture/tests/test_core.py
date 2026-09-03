@@ -188,8 +188,8 @@ class TestPixelAperture:
 
     def test_to_mask_invalid_method(self):
         """
-        Test that to_mask raises ValueError for an unrecognised
-        method string (exercises the invalid-method branch in
+        Test that to_mask raises ValueError for an unrecognised method
+        string (exercises the invalid-method branch in
         _translate_mask_method).
         """
         aper = CircularAperture(SCALAR_POS, r=3)
@@ -210,8 +210,10 @@ class TestPixelAperture:
     @pytest.mark.parametrize('subpixels', [True, False])
     def test_to_mask_bool_subpixels(self, subpixels):
         """
-        Test that a bool subpixels value is rejected. bool is a subclass
-        of int, so True would otherwise be silently used as subpixels=1.
+        Test that a bool subpixels value is rejected.
+
+        bool is a subclass of int, so True would otherwise be silently
+        used as subpixels=1.
         """
         aper = CircularAperture(SCALAR_POS, r=3)
         match = 'subpixels must be a strictly positive integer'
@@ -250,8 +252,8 @@ class TestPixelAperturePhotometry:
 
     def test_photometry_1d_data_error(self):
         """
-        Test that photometry raises ValueError when data is not a
-        2D array.
+        Test that photometry raises ValueError when data is not a 2D
+        array.
         """
         match = 'data must be a 2D array'
         with pytest.raises(ValueError, match=match):
@@ -259,8 +261,8 @@ class TestPixelAperturePhotometry:
 
     def test_photometry_error_shape_mismatch(self):
         """
-        Test that photometry raises ValueError when the error array
-        does not match the data shape.
+        Test that photometry raises ValueError when the error array does
+        not match the data shape.
         """
         match = 'error and data must have the same shape'
         with pytest.raises(ValueError, match=match):
@@ -268,8 +270,8 @@ class TestPixelAperturePhotometry:
 
     def test_photometry_unit_mismatch_error(self):
         """
-        Test that photometry raises ValueError when data and error
-        have different units.
+        Test that photometry raises ValueError when data and error have
+        different units.
         """
         import astropy.units as u
 
@@ -293,8 +295,8 @@ class TestPixelAperturePhotometry:
 
     def test_photometry_area_matches_area_overlap(self):
         """
-        Test that the result area matches area_overlap for a simple
-        non-masked, fully-overlapping aperture.
+        Test that the result area matches area_overlap for a simple non-
+        masked, fully-overlapping aperture.
         """
         result = self.aper._photometry(self.data)
         expected = self.aper.area_overlap(self.data)
@@ -344,8 +346,8 @@ class TestPixelAperturePhotometry:
     def test_do_photometry_deprecated(self):
         """
         Test that the deprecated do_photometry method emits a
-        deprecation warning and returns a plain (flux, flux_err)
-        2-tuple matching the private photometry engine.
+        deprecation warning and returns a plain (flux, flux_err) 2-tuple
+        matching the private photometry engine.
         """
         error = np.full(self.data.shape, 0.1)
         expected = self.aper._photometry(self.data, error=error)
@@ -497,8 +499,8 @@ class TestApertureIteration:
 
     def test_iter(self):
         """
-        Test that iterating over a multi-position aperture yields
-        scalar apertures.
+        Test that iterating over a multi-position aperture yields scalar
+        apertures.
         """
         aper = CircularAperture(POSITIONS, r=3)
         items = list(aper)
@@ -575,6 +577,7 @@ class TestMethodSubpixelsDocstring:
         Test that the placeholder is replaced by the method and
         subpixels descriptions.
         """
+
         @_update_method_subpixels_docstring
         def func():
             """
@@ -584,7 +587,6 @@ class TestMethodSubpixelsDocstring:
             ----------
             <method_subpixels_descriptions>
             """
-
         doc = func.__doc__
         assert '<method_subpixels_descriptions>' not in doc
         assert "method : {'exact', 'center', 'subpixel'}, optional" in doc
@@ -598,6 +600,7 @@ class TestMethodSubpixelsDocstring:
         The docstring is assigned manually to avoid the compile-time
         docstring dedenting introduced in Python 3.13.
         """
+
         def func():
             pass
 
@@ -622,6 +625,7 @@ class TestMethodSubpixelsDocstring:
         The docstring is assigned manually to avoid the compile-time
         docstring dedenting introduced in Python 3.13.
         """
+
         def func():
             pass
 
@@ -635,6 +639,7 @@ class TestMethodSubpixelsDocstring:
         """
         Test that the decorator is a no-op if no docstring exists.
         """
+
         @_update_method_subpixels_docstring
         def func():
             pass
@@ -645,6 +650,7 @@ class TestMethodSubpixelsDocstring:
         """
         Test that the decorator also updates a class docstring.
         """
+
         @_update_method_subpixels_docstring
         class Example:
             """
@@ -655,6 +661,8 @@ class TestMethodSubpixelsDocstring:
             <method_subpixels_descriptions>
             """
 
+            attr = 1
+
         assert '<method_subpixels_descriptions>' not in Example.__doc__
         assert 'subpixels : int, optional' in Example.__doc__
 
@@ -664,6 +672,7 @@ class TestMethodSubpixelsDocstring:
         method bullet list, without the method header or the subpixels
         description.
         """
+
         @_update_method_subpixels_docstring
         def func():
             """
@@ -673,7 +682,6 @@ class TestMethodSubpixelsDocstring:
             ----------
             <method_bullets>
             """
-
         doc = func.__doc__
         assert '<method_bullets>' not in doc
         assert "* ``'exact'`` (default):" in doc
@@ -687,6 +695,7 @@ class TestMethodSubpixelsDocstring:
         Test that the subpixels-description placeholder is replaced by
         only the subpixels parameter description.
         """
+
         @_update_method_subpixels_docstring
         def func():
             """
@@ -696,7 +705,6 @@ class TestMethodSubpixelsDocstring:
             ----------
             <subpixels_description>
             """
-
         doc = func.__doc__
         assert '<subpixels_description>' not in doc
         assert 'subpixels : int, optional' in doc

@@ -114,8 +114,8 @@ class TestSegmentationImage:
 
     def test_areas_computed_when_not_seeded(self):
         """
-        Test that areas fall back to on-demand computation when they
-        are not seeded, and match the seeded values.
+        Test that areas fall back to on-demand computation when they are
+        not seeded, and match the seeded values.
         """
         segm = SegmentationImage(self.data.copy())
         expected = segm.areas.copy()
@@ -190,8 +190,8 @@ class TestSegmentationImage:
 
     def test_relabel_consecutive_carries_areas(self):
         """
-        Test that relabel_consecutive carries labels, areas, and
-        slices across without recomputing them.
+        Test that relabel_consecutive carries labels, areas, and slices
+        across without recomputing them.
         """
         segm = SegmentationImage(self.data.copy())
         old_areas = segm.areas.copy()
@@ -205,8 +205,8 @@ class TestSegmentationImage:
 
     def test_reassign_labels_areas_recomputed(self):
         """
-        Test that reassign_labels leaves areas correct after labels
-        are merged.
+        Test that reassign_labels leaves areas correct after labels are
+        merged.
         """
         segm = SegmentationImage(self.data.copy())
         segm.reassign_label(label=3, new_label=1)
@@ -226,8 +226,8 @@ class TestSegmentationImage:
 
     def test_get_slice_matches_slices(self):
         """
-        Test that _get_slice returns the same slice as indexing into
-        the slices list by label index.
+        Test that _get_slice returns the same slice as indexing into the
+        slices list by label index.
         """
         segm = SegmentationImage(self.data.copy())
         for label in segm.labels:
@@ -236,8 +236,8 @@ class TestSegmentationImage:
 
     def test_find_objects_called_once(self, monkeypatch):
         """
-        Test that the bounding slices are computed only once, even
-        when both slices and per-label segments are used.
+        Test that the bounding slices are computed only once, even when
+        both slices and per-label segments are used.
         """
         calls = []
         original = segm_core.find_objects
@@ -339,8 +339,8 @@ class TestSegmentationImage:
 
     def test_flags_default(self):
         """
-        Test that the flags property exists and is all zeros for a
-        user-constructed segmentation image.
+        Test that the flags property exists and is all zeros for a user-
+        constructed segmentation image.
         """
         segm = SegmentationImage(self.data.copy())
         assert_equal(segm.flags, np.zeros(segm.n_labels, dtype=int))
@@ -591,8 +591,8 @@ class TestSegmentationImage:
 
     def test_segment_no_full_array_reference(self):
         """
-        Test that Segment stores only a cutout copy, not a reference
-        to the full segmentation array.
+        Test that Segment stores only a cutout copy, not a reference to
+        the full segmentation array.
         """
         large = np.zeros((1000, 1000), dtype=np.int32)
         large[10:20, 10:20] = 1
@@ -747,8 +747,8 @@ class TestSegmentationImage:
     ])
     def test_bbox_values(self, label, expected):
         """
-        Test that bbox returns correct bounding box coordinates for
-        each label.
+        Test that bbox returns correct bounding box coordinates for each
+        label.
         """
         from photutils.aperture import BoundingBox
 
@@ -1069,7 +1069,6 @@ class TestSegmentationImage:
     @pytest.mark.skipif(not HAS_RASTERIO, reason='rasterio is required')
     @pytest.mark.skipif(not HAS_SHAPELY, reason='shapely is required')
     def test_polygon_hole(self):
-
         """
         Test polygon hole.
         """
@@ -1757,8 +1756,8 @@ class TestGetSegment:
     @pytest.mark.skipif(not HAS_SHAPELY, reason='shapely is required')
     def test_get_segment_polygon_matches(self):
         """
-        Test that get_segment produces the same polygon as the
-        segments property.
+        Test that get_segment produces the same polygon as the segments
+        property.
         """
         for idx, label in enumerate(self.segm.labels):
             seg_new = self.segm.get_segment(label)
@@ -1770,8 +1769,8 @@ class TestGetSegment:
     @pytest.mark.skipif(not HAS_SHAPELY, reason='shapely is required')
     def test_get_segment_polygon_multipolygon(self):
         """
-        Test that get_segment returns a MultiPolygon for a
-        non-contiguous segment.
+        Test that get_segment returns a MultiPolygon for a non-
+        contiguous segment.
         """
         from shapely import MultiPolygon
 
@@ -1798,8 +1797,8 @@ class TestGetSegment:
 
     def test_get_segments_basic(self):
         """
-        Test that get_segments returns a list of Segments in the
-        correct order.
+        Test that get_segments returns a list of Segments in the correct
+        order.
         """
         labels = [7, 3, 1]
         segs = self.segm.get_segments(labels)
@@ -1843,6 +1842,7 @@ class TestGetSegment:
         Test that _make_polygon_for_label returns None when rasterio
         returns no polygons for the target label.
         """
+
         def fake_shapes(_data, **_kwargs):
             # Return no polygons at all
             return iter([])
@@ -1967,6 +1967,7 @@ class TestGetPolygon:
         Test that get_polygon returns None when rasterio yields no
         polygons.
         """
+
         def fake_shapes(_data, **_kwargs):
             return iter([])
 
@@ -2075,7 +2076,8 @@ class TestGetRegion:
 
     def test_get_region_basic(self):
         """
-        Test that get_region returns a PolygonPixelRegion for each label.
+        Test that get_region returns a PolygonPixelRegion for each
+        label.
         """
         from regions import PolygonPixelRegion
 
@@ -2118,8 +2120,8 @@ class TestGetRegion:
 
     def test_get_region_multipolygon(self):
         """
-        Test that get_region returns a Regions object for a
-        non-contiguous (MultiPolygon) segment.
+        Test that get_region returns a Regions object for a non-
+        contiguous (MultiPolygon) segment.
         """
         from regions import Regions
 
@@ -2235,6 +2237,7 @@ class TestThreadSafety:
         is benign because the computed list is identical for every
         thread.
         """
+
         class FreshSegm(SegmentationImage):
             pass
 

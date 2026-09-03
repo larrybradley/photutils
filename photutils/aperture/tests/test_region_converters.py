@@ -543,8 +543,8 @@ class TestApertureToRegion:
 
         class _FakeAperture:
             """
-            Minimal fake scalar aperture that passes the scalar check but
-            has no matching isinstance branch.
+            Minimal fake scalar aperture that passes the scalar check
+            but has no matching isinstance branch.
             """
 
             isscalar = True
@@ -580,9 +580,9 @@ class TestShapelyConversions:
     @pytest.mark.skipif(not HAS_SHAPELY, reason='shapely is required')
     def test_multipolygon_to_region(self):
         """
-        Test that _shapely_polygon_to_region handles MultiPolygon inputs by
-        returning a Regions object containing one PolygonPixelRegion per
-        polygon.
+        Test that _shapely_polygon_to_region handles MultiPolygon inputs
+        by returning a Regions object containing one PolygonPixelRegion
+        per polygon.
         """
         from regions import Regions
         from shapely import MultiPolygon, Polygon

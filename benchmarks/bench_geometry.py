@@ -10,8 +10,8 @@ method (exact, center, and subpixel), the scaling with grid size, and
 the scaling of the polygon overlap with the number of vertices for
 convex and non-convex polygons.
 
-Run ``python benchmarks/bench_geometry.py --help`` to see the
-available options.
+Run ``python benchmarks/bench_geometry.py --help`` to see the available
+options.
 """
 
 import argparse
@@ -125,6 +125,7 @@ def time_grid(func, use_exact, subpixels, *, n_iter, repeats):
     result : float
         The best per-call wall-clock time in seconds.
     """
+
     def run():
         """
         Call the overlap grid callable ``n_iter`` times.

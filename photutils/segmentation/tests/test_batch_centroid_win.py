@@ -353,7 +353,8 @@ def test_thread_safety(scene):
 
 def test_catalog_centroid_win(scene):
     """
-    Test the SourceCatalog.centroid_win property against the batch driver.
+    Test the SourceCatalog.centroid_win property against the batch
+    driver.
     """
     cat = make_catalog(scene)
     results = cat._centroid_win_results

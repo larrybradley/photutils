@@ -247,9 +247,9 @@ class TestToPolygon:
     @pytest.mark.parametrize('theta_deg', [0.0, 30.0, 45.0, 90.0, 137.0])
     def test_sky_wcs_round_trip(self, theta_deg, tan_wcs):
         """
-        Test that converting a SkyEllipticalAperture to a polygon and then
-        to pixels is equivalent to converting to pixels and then to a
-        polygon.
+        Test that converting a SkyEllipticalAperture to a polygon and
+        then to pixels is equivalent to converting to pixels and then to
+        a polygon.
         """
         pos = SkyCoord(ra=10.0, dec=30.0, unit='deg')
         aper = SkyEllipticalAperture(pos, a=5.0 * u.arcsec, b=3.0 * u.arcsec,
@@ -263,8 +263,8 @@ class TestToPolygon:
     @pytest.mark.parametrize('theta_deg', [0.0, 30.0, 45.0, 90.0, 137.0])
     def test_pixel_to_sky_round_trip(self, theta_deg, tan_wcs):
         """
-        Test that converting an EllipticalAperture to a polygon and then to
-        sky is equivalent to converting to sky and then to a polygon.
+        Test that converting an EllipticalAperture to a polygon and then
+        to sky is equivalent to converting to sky and then to a polygon.
         """
         # The bounding-box orientation can differ at the ~1e-5 level because
         # the sky shape parameters from ``to_sky`` are derived from a local

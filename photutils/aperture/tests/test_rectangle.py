@@ -206,9 +206,9 @@ class TestDeprecatedMaskMixin:
                              [('exact', 5), ('center', 5), ('subpixel', 8)])
     def test_to_mask(self, method, subpixels):
         """
-        Test that the deprecated RectangularMaskMixin.to_mask method works
-        with the current _translate_mask_method signature and matches the
-        non-deprecated to_mask result.
+        Test that the deprecated RectangularMaskMixin.to_mask method
+        works with the current _translate_mask_method signature and
+        matches the non-deprecated to_mask result.
         """
         aper = RectangularAperture((10.0, 10.0), w=4.0, h=2.0, theta=0.5)
         mask = RectangularMaskMixin.to_mask(aper, method=method,
@@ -286,11 +286,12 @@ class TestToPolygon:
     @pytest.mark.parametrize('theta_deg', [0.0, 30.0, 45.0, 90.0, 137.0])
     def test_sky_wcs_round_trip(self, theta_deg, tan_wcs):
         """
-        Test that converting a SkyRectangularAperture to a polygon and then
-        to pixels matches converting to pixels and then to a polygon for all
-        rotation angles.
+        Test that converting a SkyRectangularAperture to a polygon and
+        then to pixels matches converting to pixels and then to a
+        polygon for all rotation angles.
 
-        The two pixel polygons share the same area and bounding-box extents.
+        The two pixel polygons share the same area and bounding-box
+        extents.
         """
         pos = SkyCoord(ra=10.0, dec=30.0, unit='deg')
         aper = SkyRectangularAperture(pos, w=4.0 * u.arcsec, h=2.0 * u.arcsec,
@@ -304,9 +305,9 @@ class TestToPolygon:
     @pytest.mark.parametrize('theta_deg', [0.0, 30.0, 45.0, 90.0, 137.0])
     def test_pixel_to_sky_round_trip(self, theta_deg, tan_wcs):
         """
-        Test that converting a RectangularAperture to a polygon and then to
-        sky matches converting to sky and then to a polygon for all rotation
-        angles.
+        Test that converting a RectangularAperture to a polygon and then
+        to sky matches converting to sky and then to a polygon for all
+        rotation angles.
         """
         # The bounding-box orientation can differ at the ~1e-5 level because
         # the sky shape parameters from ``to_sky`` are derived from a local

@@ -350,9 +350,9 @@ class TestDAOStarFinder:
         multidimensional per-source arrays (e.g., the cutouts and
         marginal-fit results) have been computed.
 
-        Previously, the integer index dropped the leading source axis
-        of those cached arrays, and accessing dependent properties
-        (e.g., ``peak``) on the indexed catalog raised an IndexError.
+        Previously, the integer index dropped the leading source axis of
+        those cached arrays, and accessing dependent properties (e.g.,
+        ``peak``) on the indexed catalog raised an IndexError.
         """
         finder = DAOStarFinder(threshold=5.0, fwhm=2.0)
         cat = finder._get_raw_catalog(data)
@@ -449,8 +449,8 @@ class TestDAOStarFinder:
 
     def test_threshold_2d_uniform(self, data):
         """
-        Test that a uniform 2D threshold gives the same results
-        as a scalar threshold.
+        Test that a uniform 2D threshold gives the same results as a
+        scalar threshold.
         """
         threshold = 5.0
         fwhm = 1.0
@@ -530,8 +530,8 @@ class TestDAOStarFinder:
 
     def test_scale_threshold_false_different_results(self, data):
         """
-        Test that scale_threshold=False gives different results
-        than the default.
+        Test that scale_threshold=False gives different results than the
+        default.
         """
         threshold = 5.0
         fwhm = 1.5
@@ -614,8 +614,8 @@ class TestDAOStarFinder:
 
     def test_deprecated_peakmax(self):
         """
-        Test that the deprecated 'peakmax' keyword raises a warning
-        and still works.
+        Test that the deprecated 'peakmax' keyword raises a warning and
+        still works.
         """
         match = "'peakmax' was deprecated"
         with pytest.warns(AstropyDeprecationWarning, match=match):

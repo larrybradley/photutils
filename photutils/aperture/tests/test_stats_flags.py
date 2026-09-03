@@ -50,8 +50,8 @@ def _single_pixel_data():
 
 def _stats_with_injected_covariance(cov_xx, cov_yy, cov_xy):
     """
-    Return a length-1 array ``ApertureStats`` whose central moments
-    are overridden so that the source covariance matrix has the given
+    Return a length-1 array ``ApertureStats`` whose central moments are
+    overridden so that the source covariance matrix has the given
     entries (with unit total weight).
 
     This exercises the singular-covariance criterion directly for cases
@@ -102,9 +102,9 @@ class TestOverlapFlags:
     @pytest.mark.usefixtures('maybe_mask_path')
     def test_no_pixels(self, unit_data):
         """
-        Test that an empty "center" footprint sets no_pixels even when the
-        default exact-method sum footprint is populated (the per-footprint
-        flag bits are combined with OR).
+        Test that an empty "center" footprint sets no_pixels even when
+        the default exact-method sum footprint is populated (the per-
+        footprint flag bits are combined with OR).
         """
         data = unit_data
         # Nearest pixel centers are sqrt(0.5) ~ 0.707 away
@@ -147,9 +147,9 @@ class TestMaskedAndNonFiniteFlags:
     @pytest.mark.usefixtures('maybe_mask_path')
     def test_sum_footprint_masked(self, unit_data, unit_mask):
         """
-        Test that a masked boundary pixel touched only by the exact-method
-        sum footprint (its center lies exactly on the aperture boundary)
-        sets masked_pixels in the merged flags.
+        Test that a masked boundary pixel touched only by the exact-
+        method sum footprint (its center lies exactly on the aperture
+        boundary) sets masked_pixels in the merged flags.
         """
         data = unit_data
         aper = CircularAperture((12, 12), r=3.0)
@@ -166,9 +166,9 @@ class TestMaskedAndNonFiniteFlags:
         """
         Test the non_finite_data flag.
 
-        In ApertureStats, non-finite data values are automatically masked,
-        so they contribute to all_masked (but not to masked_pixels, which
-        reflects only the input mask).
+        In ApertureStats, non-finite data values are automatically
+        masked, so they contribute to all_masked (but not to
+        masked_pixels, which reflects only the input mask).
         """
         data = np.ones(UNIT_SHAPE)
         data[12, 12] = np.nan
@@ -228,9 +228,10 @@ class TestSigmaClipFlags:
 
     def test_all_clipped(self, unit_data):
         """
-        Test the all_clipped flag using a SigmaClip subclass that rejects
-        every pixel (only reachable via the mask-based path).
+        Test the all_clipped flag using a SigmaClip subclass that
+        rejects every pixel (only reachable via the mask-based path).
         """
+
         class _ClipAll(SigmaClip):
             def __call__(self, data, **kwargs):  # noqa: ARG002
                 return np.ma.masked_array(data,
@@ -438,8 +439,8 @@ class TestFlagsAPI:
 
 class TestSingularCovariance:
     """
-    Tests for the singular_covariance flag, which is always evaluated
-    by the flags property.
+    Tests for the singular_covariance flag, which is always evaluated by
+    the flags property.
     """
 
     @pytest.mark.usefixtures('maybe_mask_path')
@@ -457,9 +458,9 @@ class TestSingularCovariance:
     @pytest.mark.usefixtures('maybe_mask_path')
     def test_array_and_guards(self):
         """
-        Test that the singular_covariance bit is set for an array of sources
-        and that the covariance computation is guarded against sources with
-        no overlap (undefined moments).
+        Test that the singular_covariance bit is set for an array of
+        sources and that the covariance computation is guarded against
+        sources with no overlap (undefined moments).
         """
         data = _single_pixel_data()
         data[6, 6] = 100.0
@@ -491,8 +492,8 @@ class TestSingularCovariance:
     @pytest.mark.usefixtures('maybe_mask_path')
     def test_in_default_table(self):
         """
-        Test that the singular_covariance bit is reflected in the default
-        to_table() output.
+        Test that the singular_covariance bit is reflected in the
+        default to_table() output.
         """
         data = _single_pixel_data()
         aper = CircularAperture((12.0, 12.0), r=5.0)
@@ -515,8 +516,8 @@ class TestSingularCovariance:
     @pytest.mark.usefixtures('maybe_mask_path')
     def test_in_properties(self):
         """
-        Test that the singular_covariance bit is reflected in the properties
-        list even if no shape properties are accessed.
+        Test that the singular_covariance bit is reflected in the
+        properties list even if no shape properties are accessed.
         """
         data = _single_pixel_data()
         aper = CircularAperture((12.0, 12.0), r=5.0)
@@ -526,8 +527,8 @@ class TestSingularCovariance:
     @pytest.mark.usefixtures('maybe_mask_path')
     def test_slicing(self):
         """
-        Test that the singular_covariance bit is preserved when slicing an
-        array of ApertureStats objects.
+        Test that the singular_covariance bit is preserved when slicing
+        an array of ApertureStats objects.
         """
         data = _single_pixel_data()
         data[6, 6] = 100.0
@@ -541,13 +542,13 @@ class TestSingularCovariance:
         """
         Test that a rank-1 degenerate source is flagged as singular.
 
-        A rank-1 degenerate source has one unresolved axis and one extended
-        axis, so its covariance matrix has one tiny eigenvalue. The
-        singularity criterion is that the minor-axis variance is below a
-        floor of ``1/12`` (the variance of a uniform distribution over a
-        unit pixel). This is a more robust criterion than the determinant
-        test, which can be fooled by a rank-1 source with a large major-axis
-        variance.
+        A rank-1 degenerate source has one unresolved axis and one
+        extended axis, so its covariance matrix has one tiny eigenvalue.
+        The singularity criterion is that the minor-axis variance is
+        below a floor of ``1/12`` (the variance of a uniform
+        distribution over a unit pixel). This is a more robust criterion
+        than the determinant test, which can be fooled by a rank-1
+        source with a large major-axis variance.
         """
         # Minor-axis variance 0.05 < 1/12, major-axis variance 0.5
         stats = _stats_with_injected_covariance(cov_xx=0.5, cov_yy=0.05,
@@ -560,8 +561,8 @@ class TestSingularCovariance:
 
     def test_not_positive_semidefinite(self):
         """
-        Test that a covariance matrix that is not positive semidefinite is
-        flagged as singular.
+        Test that a covariance matrix that is not positive semidefinite
+        is flagged as singular.
         """
         stats = _stats_with_injected_covariance(cov_xx=1.0, cov_yy=1.0,
                                                 cov_xy=2.0)
@@ -616,8 +617,7 @@ class TestUndefinedShape:
         """
         Test the undefined_shape bit for an array of sources, and that
         sources with no valid pixels (no overlap or fully masked) are
-        not flagged (they are reported by the overlap and masking
-        bits).
+        not flagged (they are reported by the overlap and masking bits).
         """
         data = np.zeros(UNIT_SHAPE)
         data[16:21, 16:21] = 50.0  # positive-flux source at (18, 18)

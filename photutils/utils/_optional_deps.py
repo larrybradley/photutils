@@ -2,16 +2,16 @@
 """
 Tools for optional dependencies.
 
-Attributes ``HAS_<PKG>`` (e.g., ``HAS_MATPLOTLIB``, ``HAS_SKIMAGE``)
-are booleans that indicate whether the corresponding package can be
+Attributes ``HAS_<PKG>`` (e.g., ``HAS_MATPLOTLIB``, ``HAS_SKIMAGE``) are
+booleans that indicate whether the corresponding package can be
 imported. The actual import is performed lazily on first attribute
 access via :pep:`562`.
 
 The ``HAS_*`` names are derived from the *import* name of each optional
-dependency (uppercased, hyphens/dots replaced by underscores).
-For the handful of packages whose import name differs from their
-distribution (pip) name, a small translation dict (``_DIST_TO_IMPORT``)
-is maintained.
+dependency (uppercased, hyphens/dots replaced by underscores). For the
+handful of packages whose import name differs from their distribution
+(pip) name, a small translation dict (``_DIST_TO_IMPORT``) is
+maintained.
 """
 
 import importlib

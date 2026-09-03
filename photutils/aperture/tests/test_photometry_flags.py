@@ -33,8 +33,8 @@ def _flags(aperture, data, **kwargs):
 
 def _bbox_clipped_candidates(aper, shape):
     """
-    Per-source indicator of whether the aperture bounding
-    box overlaps the data but is clipped by a data edge (the
+    Per-source indicator of whether the aperture bounding box overlaps
+    the data but is clipped by a data edge (the
     ``FLAG_COL_BBOX_CLIPPED`` candidate condition, computed from the
     aperture bounding boxes).
     """
@@ -52,7 +52,9 @@ def _bbox_clipped_candidates(aper, shape):
 def _bruteforce_outside_weights(aper, shape, *, method, subpixels, candidates):
     """
     Reference (non-gated) per-source outside-weight test, built from
-    explicit aperture masks. This replicates the mask-based branch of
+    explicit aperture masks.
+
+    This replicates the mask-based branch of
     ``_resolve_outside_weights``, including its restriction to the
     candidate (bbox-clipped) sources.
     """
@@ -93,7 +95,8 @@ class TestOverlapFlags:
     @pytest.mark.parametrize(('method', 'subpixels'), METHODS)
     def test_no_overlap(self, unit_data, factory, method, subpixels):
         """
-        Test that fully off-image apertures set no_overlap and no_pixels.
+        Test that fully off-image apertures set no_overlap and
+        no_pixels.
         """
         data = unit_data
         aper = factory([(-50.0, 12.0), (12.0, 12.0)])
@@ -154,7 +157,8 @@ class TestOverlapFlags:
 
     def test_no_pixels_tiny_aperture(self, unit_data):
         """
-        Test that a tiny aperture with the "center" method sets no_pixels.
+        Test that a tiny aperture with the "center" method sets
+        no_pixels.
         """
         data = unit_data
         # Nearest pixel centers are sqrt(0.5) ~ 0.707 away
@@ -177,8 +181,8 @@ class TestPolygonOverlapFlags:
     @pytest.mark.parametrize(('method', 'subpixels'), METHODS)
     def test_offcenter_inside(self, method, subpixels):
         """
-        Test that a polygon lying entirely inside the data is not flagged as
-        partial_overlap.
+        Test that a polygon lying entirely inside the data is not
+        flagged as partial_overlap.
         """
         data = np.ones((12, 12))
         # The centroid of this triangle is well off-center from the
@@ -202,8 +206,8 @@ class TestPolygonOverlapFlags:
     @pytest.mark.parametrize(('method', 'subpixels'), METHODS)
     def test_offcenter_partial(self, method, subpixels):
         """
-        Test that a polygon extending past a data edge is still flagged as
-        partial_overlap.
+        Test that a polygon extending past a data edge is still flagged
+        as partial_overlap.
         """
         data = np.ones((12, 12))
         # The part of this triangle beyond the left data edge contains
@@ -360,8 +364,8 @@ class TestMaskPathParity:
     @pytest.mark.parametrize(('method', 'subpixels'), METHODS)
     def test_basic(self, unit_mask, method, subpixels):
         """
-        Test that the mask-based code path produces flags identical to the
-        batch Cython driver.
+        Test that the mask-based code path produces flags identical to
+        the batch Cython driver.
         """
         rng = np.random.default_rng(0)
         data = rng.normal(1.0, 0.1, size=UNIT_SHAPE)
@@ -415,11 +419,12 @@ class TestMaskPathParity:
         Test batch/mask-path parity when non-finite masking (the
         AperturePhotometry path) combines with segmentation masking.
 
-        Non-finite pixels must be masked before the segmentation handling,
-        so a NaN neighbor pixel is excluded as non-finite (not counted as
-        a neighbor pixel or mirror-corrected) and a NaN mirror pixel makes
-        its neighbor uncorrectable with mask_method='correct', matching the
-        batch kernel and ApertureStats.
+        Non-finite pixels must be masked before the segmentation
+        handling, so a NaN neighbor pixel is excluded as non-finite (not
+        counted as a neighbor pixel or mirror-corrected) and a NaN
+        mirror pixel makes its neighbor uncorrectable with
+        mask_method='correct', matching the batch kernel and
+        ApertureStats.
         """
         data = unit_data
         data[nan_pixel] = np.nan
@@ -528,9 +533,9 @@ class TestResolveOutsideWeights:
         In practice, the caller only ever marks a source as a candidate
         when its aperture mask does overlap the data, so the mask's
         bounding box is never actually clipped away entirely. This
-        directly exercises that defensive branch. A non-'exact' method is
-        used because the 'exact' method takes the gated fast path (see
-        ``_resolve_outside_weights``).
+        directly exercises that defensive branch. A non-'exact' method
+        is used because the 'exact' method takes the gated fast path
+        (see ``_resolve_outside_weights``).
         """
         aper = CircularAperture((-5.0, 12.0), r=3.0)
         shape = (25, 25)
@@ -546,15 +551,16 @@ class TestResolveOutsideWeights:
     @pytest.mark.parametrize('factory', APERTURE_FACTORIES)
     def test_exact_gating(self, factory):
         """
-        Test that the gated 'exact' fast path in _resolve_outside_weights
-        matches the explicit per-source mask computation.
+        Test that the gated 'exact' fast path in
+        _resolve_outside_weights matches the explicit per-source mask
+        computation.
 
         For the 'exact' method the minimal bounding box is tight, so a
-        bbox that is clipped by a data edge always leaves a positive-area
-        aperture sliver outside the data. The gated path returns the
-        bbox-clipped candidates unchanged. This must equal the reference
-        mask-based outside-weight test for a mix of interior, edge, corner,
-        and fully off-image positions.
+        bbox that is clipped by a data edge always leaves a positive-
+        area aperture sliver outside the data. The gated path returns
+        the bbox-clipped candidates unchanged. This must equal the
+        reference mask-based outside-weight test for a mix of interior,
+        edge, corner, and fully off-image positions.
         """
         ny, nx = UNIT_SHAPE
         xy = [(12.0, 12.0),  # interior (not a candidate)

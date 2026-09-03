@@ -150,8 +150,8 @@ def build_shapes():
     Build the registry of aperture shapes to benchmark.
 
     Each entry provides a photutils aperture factory and, where SEP
-    supports the shape, a SEP wrapper. SEP exact mode (``subpix=0``)
-    is used so that the SEP results are directly comparable to the
+    supports the shape, a SEP wrapper. SEP exact mode (``subpix=0``) is
+    used so that the SEP results are directly comparable to the
     photutils ``method='exact'`` results.
     """
     r_circ = 6.0  # circle
@@ -291,8 +291,8 @@ def build_shapes():
 
 def build_scenarios():
     """
-    Build the four masking scenarios, each expanded over the
-    applicable ``mask_method`` values.
+    Build the four masking scenarios, each expanded over the applicable
+    ``mask_method`` values.
     """
     return [
         {'name': 'no masking', 'use_mask': False, 'use_segm': False,
@@ -525,9 +525,9 @@ def run_sep(shape, data, positions, error, scenario, method, segm32):
 
 def _sanitize(arr):
     """
-    Map empty-aperture sentinels to 0 so that the ``ApertureStats``
-    NaN convention agrees with the 0.0 returned by the other entry
-    points (and by SEP).
+    Map empty-aperture sentinels to 0 so that the ``ApertureStats`` NaN
+    convention agrees with the 0.0 returned by the other entry points
+    (and by SEP).
 
     Parameters
     ----------

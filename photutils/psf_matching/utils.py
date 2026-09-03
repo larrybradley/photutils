@@ -3,7 +3,6 @@
 Utility functions for the psf_matching subpackage.
 """
 
-
 import numpy as np
 from scipy.fft import fft2, fftshift, ifftshift
 from scipy.ndimage import zoom

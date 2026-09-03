@@ -336,8 +336,8 @@ class TestSpecificEstimators:
     def test_sextractor_scalar_result_with_axis(self):
         """
         Test that SExtractorBackground returns a scalar when the
-        reduction consumes all axes, consistent with the other
-        estimator classes.
+        reduction consumes all axes, consistent with the other estimator
+        classes.
         """
         rng = np.random.default_rng(0)
         bkg = SExtractorBackground(sigma_clip=None)
@@ -667,8 +667,8 @@ class TestInputNotMutated:
 
 class TestFastFlatClip:
     """
-    Tests for routing axis=None sigma clipping through astropy's fast
-    C implementation.
+    Tests for routing axis=None sigma clipping through astropy's fast C
+    implementation.
     """
 
     @classmethod
@@ -700,9 +700,10 @@ class TestFastFlatClip:
 
     def test_all_clipped_consistent_with_axis(self):
         """
-        Test that when sigma clipping rejects all values, the
-        axis=None result is consistent with the axis-based result
-        (astropy keeps all values in this degenerate case).
+        Test that when sigma clipping rejects all values, the axis=None
+        result is consistent with the axis-based result (astropy keeps
+        all values in this degenerate case).
+
         Previously, the axis=None path returned NaN.
         """
         data = np.array([0.0, 100.0])

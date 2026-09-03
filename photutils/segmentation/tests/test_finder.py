@@ -111,8 +111,8 @@ def test_finder_deprecations():
 
 def test_finder_n_threads():
     """
-    Test that SourceFinder n_threads produces results identical to
-    the single-threaded computation.
+    Test that SourceFinder n_threads produces results identical to the
+    single-threaded computation.
     """
     yy, xx = np.mgrid[0:101, 0:101]
     data = (Gaussian2D(100, 50, 50, 5, 5)(xx, yy)

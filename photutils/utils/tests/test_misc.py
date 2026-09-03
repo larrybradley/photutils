@@ -13,8 +13,8 @@ from photutils.utils._misc import _get_date, _get_meta, _get_version_info
 
 def test_get_version_info_import_error():
     """
-    Test that _get_version_info returns None for packages that cannot
-    be imported.
+    Test that _get_version_info returns None for packages that cannot be
+    imported.
     """
     real_import = builtins.__import__
 

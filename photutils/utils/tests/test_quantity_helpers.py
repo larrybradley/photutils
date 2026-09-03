@@ -33,8 +33,7 @@ def test_units(all_units):
 
 def test_process_quantities_all_none():
     """
-    Test that process_quantities with all None inputs returns None
-    unit.
+    Test that process_quantities with all None inputs returns None unit.
     """
     values, unit = process_quantities([None, None], ['a', 'b'])
     assert values == [None, None]

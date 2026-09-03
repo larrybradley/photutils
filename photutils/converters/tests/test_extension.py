@@ -146,8 +146,8 @@ def test_documented_tags_match_the_manifest():
     Test that the tags listed in the ASDF documentation match those
     defined by the manifests.
 
-    The documentation table is written by hand, so it would otherwise
-    go stale when a tag is added, removed, or renamed.
+    The documentation table is written by hand, so it would otherwise go
+    stale when a tag is added, removed, or renamed.
     """
     docs = (Path(__file__).parents[3] / 'docs' / 'user_guide' / 'asdf.rst')
     if not docs.is_file():

@@ -85,8 +85,8 @@ def test_aperture_converters(tmp_path, example):
 @pytest.mark.parametrize('example', THETA_EXAMPLES, ids=_example_id)
 def test_aperture_converters_theta(tmp_path, example, theta):
     """
-    Test that the aperture converters can round-trip an aperture
-    rotated at an angle ``theta``.
+    Test that the aperture converters can round-trip an aperture rotated
+    at an angle ``theta``.
     """
     _check_roundtrip(tmp_path, *example(theta))
 

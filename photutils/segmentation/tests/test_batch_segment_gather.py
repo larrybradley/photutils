@@ -24,8 +24,8 @@ def _reference_values(masked_cutouts):
     cutout.
 
     This is a verbatim port of the previous ``_get_values`` method,
-    applied to the public masked cutouts, that the batch segment
-    gather replaces. It is the reference for the gather.
+    applied to the public masked cutouts, that the batch segment gather
+    replaces. It is the reference for the gather.
     """
     values = []
     for arr in masked_cutouts:
@@ -225,8 +225,8 @@ def test_segment_area_matches_reference(scene):
 
 def _sample_values():
     """
-    A container of four sources with 3, 0 (masked placeholder), 1, and
-    2 values.
+    A container of four sources with 3, 0 (masked placeholder), 1, and 2
+    values.
     """
     packed = np.array([1.0, -2.0, 3.0, np.nan, 5.0, 6.0, 7.0])
     offsets = np.array([0, 3, 4, 5, 7], dtype=np.intp)

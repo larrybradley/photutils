@@ -201,8 +201,7 @@ class TestGetOptionalDeps:
 
     def test_scikit_image_present(self):
         """
-        Test that ``scikit-image`` appears in the optional
-        dependencies.
+        Test that ``scikit-image`` appears in the optional dependencies.
         """
         result = _get_optional_deps(_pkg_dist_name, extra='all')
         assert 'scikit-image' in result

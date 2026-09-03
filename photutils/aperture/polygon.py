@@ -25,8 +25,8 @@ __all__ = [
 
 def _signed_polygon_area(verts):
     """
-    Calculate the signed area of a polygon (positive for
-    counter-clockwise vertices) via the shoelace formula.
+    Calculate the signed area of a polygon (positive for counter-
+    clockwise vertices) via the shoelace formula.
 
     Parameters
     ----------
@@ -47,9 +47,9 @@ def _orientation(a, b, c):
     """
     Return twice the signed area of the triangle ``a``, ``b``, ``c``.
 
-    The result is positive if ``a -> b -> c`` traverses
-    counter-clockwise, negative if clockwise, and zero if the three
-    points are collinear.
+    The result is positive if ``a -> b -> c`` traverses counter-
+    clockwise, negative if clockwise, and zero if the three points are
+    collinear.
     """
     return ((b[0] - a[0]) * (c[1] - a[1])
             - (b[1] - a[1]) * (c[0] - a[0]))
@@ -447,9 +447,9 @@ class PolygonAperture(PixelAperture):
     @classmethod
     def _from_simple_offsets(cls, positions, offsets):
         """
-        Construct a `PolygonAperture` from vertex offsets that are
-        known to define a simple polygon, skipping the ``O(n^2)``
-        self-intersection check.
+        Construct a `PolygonAperture` from vertex offsets that are known
+        to define a simple polygon, skipping the ``O(n^2)`` self-
+        intersection check.
 
         This is a fast-path internal constructor used by the
         ``to_polygon`` methods of the built-in apertures, where the
@@ -743,8 +743,8 @@ class PolygonAperture(PixelAperture):
     @cached_property
     def _xy_bounds(self):
         """
-        The ``(xmin, xmax, ymin, ymax)`` offsets of the polygon's
-        axis-aligned bounding box, relative to ``positions``.
+        The ``(xmin, xmax, ymin, ymax)`` offsets of the polygon's axis-
+        aligned bounding box, relative to ``positions``.
         """
         offsets = self.vertex_offsets
         return (float(offsets[:, 0].min()), float(offsets[:, 0].max()),
@@ -831,8 +831,8 @@ class PolygonAperture(PixelAperture):
         The outer (circumscribed-circle) radius of the regular polygon
         in pixels, i.e., the distance from ``positions`` to each vertex.
 
-        This is also called the `circumradius
-        <https://mathworld.wolfram.com/Circumradius.html>`_.
+        This is also called the
+        `circumradius <https://mathworld.wolfram.com/Circumradius.html>`_.
 
         This attribute is only defined for regular polygons. Accessing
         it for a non-regular polygon raises `ValueError`.
@@ -847,8 +847,8 @@ class PolygonAperture(PixelAperture):
         pixels, i.e., the distance from ``positions`` to the midpoint of
         each side.
 
-        This is also called the `inradius
-        <https://mathworld.wolfram.com/Inradius.html>`_
+        This is also called the
+        `inradius <https://mathworld.wolfram.com/Inradius.html>`_
 
         This attribute is only defined for regular polygons. Accessing
         it for a non-regular polygon raises `ValueError`.
@@ -1244,8 +1244,8 @@ class SkyPolygonAperture(SkyAperture):
         polygon as a `~astropy.units.Quantity`, i.e., the distance from
         ``positions`` to each vertex.
 
-        This is also called the `circumradius
-        <https://mathworld.wolfram.com/Circumradius.html>`_.
+        This is also called the
+        `circumradius <https://mathworld.wolfram.com/Circumradius.html>`_.
 
         This attribute is only defined for regular polygons. Accessing
         it for a non-regular polygon raises `ValueError`.
@@ -1260,8 +1260,8 @@ class SkyPolygonAperture(SkyAperture):
         polygon as a `~astropy.units.Quantity`, i.e., the distance from
         ``positions`` to the midpoint of each side.
 
-        This is also called the `inradius
-        <https://mathworld.wolfram.com/Inradius.html>`_
+        This is also called the
+        `inradius <https://mathworld.wolfram.com/Inradius.html>`_
 
         This attribute is only defined for regular polygons. Accessing
         it for a non-regular polygon raises `ValueError`.

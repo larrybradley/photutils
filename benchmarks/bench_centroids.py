@@ -7,8 +7,8 @@ The benchmarks cover the per-call cost of the single-source centroid
 functions (centroid_com, centroid_quadratic, centroid_1dg, and
 centroid_2dg) and centroid_sources at many positions.
 
-Run ``python benchmarks/bench_centroids.py --help`` to see the
-available options.
+Run ``python benchmarks/bench_centroids.py --help`` to see the available
+options.
 """
 
 import argparse
@@ -74,8 +74,7 @@ def make_source_cutout(size, *, fwhm=4.0, amplitude=100.0, noise_std=1.0,
 def make_sources_image(n_sources, *, spacing=25, fwhm=4.0, amplitude=100.0,
                        noise_std=1.0, seed=0):
     """
-    Return an image with a grid of Gaussian sources and their
-    positions.
+    Return an image with a grid of Gaussian sources and their positions.
 
     Parameters
     ----------
@@ -132,8 +131,7 @@ def make_sources_image(n_sources, *, spacing=25, fwhm=4.0, amplitude=100.0,
 
 def bench_functions(*, cutout_size=21, n_iter=200, repeats=3, seed=0):
     """
-    Benchmark the per-call cost of the single-source centroid
-    functions.
+    Benchmark the per-call cost of the single-source centroid functions.
 
     Each function is called on the same single-source cutout; the
     Gaussian fitting functions are also timed with an error array.

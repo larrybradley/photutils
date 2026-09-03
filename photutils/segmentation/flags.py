@@ -1,7 +1,7 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 """
-Tools for working with segmentation quality flags, including
-centralized flag definitions and decoding utilities.
+Tools for working with segmentation quality flags, including centralized
+flag definitions and decoding utilities.
 """
 
 from typing import ClassVar

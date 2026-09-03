@@ -85,13 +85,13 @@ MODEL_EXAMPLES = [
 @pytest.mark.parametrize('example', MODEL_EXAMPLES, ids=_example_id)
 def test_psf_converters_preserve_fitting_state(tmp_path, example):
     """
-    Test that non-default fixed, bounds, and name states survive a
-    round trip.
+    Test that non-default fixed, bounds, and name states survive a round
+    trip.
 
     The file stores only the fixed=True entries and the non-empty
-    bounds, so parameters whose class defaults differ from that
-    baseline (e.g., the shape parameters, which default to fixed=True
-    with a lower bound) must be reset when reading.
+    bounds, so parameters whose class defaults differ from that baseline
+    (e.g., the shape parameters, which default to fixed=True with a
+    lower bound) must be reset when reading.
     """
     psf, _ = example()
     for name in psf.param_names:
@@ -165,11 +165,11 @@ def test_gridded_psf_converter_preserves_modified_oversampling(tmp_path):
 def test_grid_structure_is_stored_outside_meta(example, converter_name,
                                                method):
     """
-    Test that both grid converters store the grid structure as
-    top-level properties rather than inside ``meta``.
+    Test that both grid converters store the grid structure as top-level
+    properties rather than inside ``meta``.
 
-    GriddedPSFModel keeps the grid structure in its meta attribute
-    and STDPSFGrid keeps it in private attributes, so the converters
+    GriddedPSFModel keeps the grid structure in its meta attribute and
+    STDPSFGrid keeps it in private attributes, so the converters
     normalize it to a single layout in the file.
     """
     from photutils.converters import image_models

@@ -1,6 +1,7 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 """
-Converters to and from the ASDF format for photutils.psf.functional_models.
+Converters to and from the ASDF format for
+photutils.psf.functional_models.
 """
 
 from asdf_astropy.converters.transform.core import (TransformConverterBase,

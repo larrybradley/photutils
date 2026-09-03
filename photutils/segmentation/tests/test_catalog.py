@@ -374,8 +374,8 @@ class TestSourceCatalog:
         dependent property was not.
 
         This parametrizes over the dependencies that feed other
-        properties through ``_array``, caches exactly one of them on
-        the parent, slices to a scalar, and checks that every property
+        properties through ``_array``, caches exactly one of them on the
+        parent, slices to a scalar, and checks that every property
         matches the same scalar computed from scratch.
         """
         kwargs = {'error': self.error, 'background': self.background,
@@ -682,8 +682,8 @@ class TestSourceCatalog:
 
     def test_detection_catalog_segment_flux_localbkg(self):
         """
-        Test that the segment_flux local-background subtraction uses
-        the measurement catalog's unmasked pixel count when a detection
+        Test that the segment_flux local-background subtraction uses the
+        measurement catalog's unmasked pixel count when a detection
         catalog with a different mask is input.
 
         Regression test for a bug where the local background was
@@ -1172,8 +1172,7 @@ class TestSourceCatalog:
     def test_data_dtype(self):
         """
         Test that input ``data`` with int dtype does not raise
-        UFuncTypeError due to subtraction of float array from int
-        array.
+        UFuncTypeError due to subtraction of float array from int array.
         """
         data = np.zeros((25, 25), dtype=np.uint16)
         data[8:16, 8:16] = 10
@@ -1445,9 +1444,9 @@ class TestSourceCatalogFlags:
 
     def test_masked_non_finite_pixel(self):
         """
-        Test that a pixel that is both input-masked and non-finite
-        sets the masked_pixels, non_finite_data, and non_finite_error
-        flags together.
+        Test that a pixel that is both input-masked and non-finite sets
+        the masked_pixels, non_finite_data, and non_finite_error flags
+        together.
         """
         data = self.data.copy()
         data[25, 25] = np.nan
@@ -1478,8 +1477,8 @@ class TestSourceCatalogFlags:
 
     def test_undefined_shape(self):
         """
-        Test the undefined_shape flag for a source with non-positive
-        net flux.
+        Test the undefined_shape flag for a source with non-positive net
+        flux.
         """
         data = np.zeros((11, 11))
         data[3:8, 3:8] = -1.0
@@ -1784,8 +1783,8 @@ class TestSourceCatalogFlags:
         Test that the kron_minimum_radius flag follows the kron_params
         of the detection catalog, which measures the Kron radii.
 
-        A detection catalog overrides the input ``kron_params``, so
-        the minimum radius of the detection catalog is the one that is
+        A detection catalog overrides the input ``kron_params``, so the
+        minimum radius of the detection catalog is the one that is
         applied.
         """
         # The detection catalog does not apply its minimum, even though
@@ -1879,8 +1878,8 @@ class TestSourceCatalogFlags:
 
     def test_decode_flags(self):
         """
-        Test that decode_flags returns a dictionary mapping each
-        source label to its active flag names.
+        Test that decode_flags returns a dictionary mapping each source
+        label to its active flag names.
         """
         cat = SourceCatalog(self.data, self.segm)
         decoded = cat.decode_flags()
@@ -1909,8 +1908,8 @@ class TestSourceCatalogFlags:
 
     def test_decode_flags_scalar(self):
         """
-        Test that decode_flags on a scalar catalog returns a
-        single-entry dictionary keyed by the source label.
+        Test that decode_flags on a scalar catalog returns a single-
+        entry dictionary keyed by the source label.
         """
         cat = SourceCatalog(self.data, self.segm)
         interior_idx = int(np.argmax(cat.bbox_xmin > 0))
@@ -2158,8 +2157,8 @@ def test_background_centroid_coordinate_order():
 
 def test_aperture_mask_method_none():
     """
-    Test that circular_photometry with aperture_mask_method='none' does not
-    mask neighboring sources.
+    Test that circular_photometry with aperture_mask_method='none' does
+    not mask neighboring sources.
     """
     yy, xx = np.mgrid[0:101, 0:101]
     # Two overlapping sources
@@ -2280,8 +2279,8 @@ def test_progress_bar_deprecated():
 
 def test_negative_covariance_eigvals(single_source_catalog):
     """
-    Test that negative eigenvalues in the covariance matrix are
-    replaced with NaN.
+    Test that negative eigenvalues in the covariance matrix are replaced
+    with NaN.
     """
     _data, _segm, cat = single_source_catalog
 
@@ -2587,9 +2586,11 @@ def test_centroid_win_aperture_mask_mask(centroid_win_data):
 
 def test_make_scalar(single_source_catalog):
     """
-    Test the scalar collapse of method results. A length-1 sequence
-    is collapsed for a scalar catalog, a longer sequence is returned
-    unchanged, and a multi-source catalog never collapses.
+    Test the scalar collapse of method results.
+
+    A length-1 sequence is collapsed for a scalar catalog, a longer
+    sequence is returned unchanged, and a multi-source catalog never
+    collapses.
     """
     _data, _segm, cat = single_source_catalog
     assert not cat.isscalar
@@ -2751,8 +2752,8 @@ def test_measured_kron_radius_circular_no_min_radius(gauss_101_data):
 
 def test_centroid_win_err():
     """
-    Test that centroid_win_err returns finite 1-sigma position
-    errors when an error array is provided.
+    Test that centroid_win_err returns finite 1-sigma position errors
+    when an error array is provided.
     """
     g1 = Gaussian2D(1621, 6.29, 10.95, 1.55, 1.29, 0.296706)
     g2 = Gaussian2D(3596, 13.81, 8.29, 1.44, 1.27, 0.628319)
@@ -2834,8 +2835,8 @@ def test_centroid_win_err_scalar():
 def test_centroid_win_err_sliced():
     """
     Test that centroid_win_err works on a sliced catalog after
-    centroid_win was computed on the parent catalog (regression test
-    for a side-effect attribute that was not propagated by slicing).
+    centroid_win was computed on the parent catalog (regression test for
+    a side-effect attribute that was not propagated by slicing).
     """
     g1 = Gaussian2D(1621, 6.29, 10.95, 1.55, 1.29, 0.296706)
     g2 = Gaussian2D(3596, 13.81, 8.29, 1.44, 1.27, 0.628319)
@@ -2864,9 +2865,9 @@ def test_centroid_win_err_sliced():
 
 def test_centroid_win_err_singularity():
     """
-    Test that the singularity correction in centroid_win_err is
-    applied for a source where non-zero error is limited to a single
-    pixel, causing a nearly singular error covariance.
+    Test that the singularity correction in centroid_win_err is applied
+    for a source where non-zero error is limited to a single pixel,
+    causing a nearly singular error covariance.
     """
     data = np.zeros((21, 21))
     data[10, 10] = 10000.0
@@ -2895,9 +2896,11 @@ def test_centroid_win_err_singularity():
 
 def test_centroid_win_err_cov():
     """
-    Test the windowed pixel error covariance. It is symmetric for
-    every source, near-zero off-diagonal for a circular source with
-    uniform errors, and consistent with centroid_win_err.
+    Test the windowed pixel error covariance.
+
+    It is symmetric for every source, near-zero off-diagonal for a
+    circular source with uniform errors, and consistent with
+    centroid_win_err.
     """
     yy, xx = np.mgrid[0:31, 0:31]
     data = Gaussian2D(500.0, 15.2, 15.6, 2.5, 2.5)(xx, yy)
@@ -2945,8 +2948,8 @@ def test_centroid_win_err_cov_fallback():
 
 def test_centroid_err():
     """
-    Test that centroid_err returns finite 1-sigma position errors
-    when an error array is provided.
+    Test that centroid_err returns finite 1-sigma position errors when
+    an error array is provided.
     """
     g1 = Gaussian2D(1621, 6.29, 10.95, 1.55, 1.29, 0.296706)
     g2 = Gaussian2D(3596, 13.81, 8.29, 1.44, 1.27, 0.628319)
@@ -2975,8 +2978,7 @@ def test_centroid_err():
 
 def test_centroid_err_no_error():
     """
-    Test that centroid_err returns NaN when no error array is
-    provided.
+    Test that centroid_err returns NaN when no error array is provided.
     """
     g1 = Gaussian2D(1621, 10.0, 10.0, 2.0, 2.0)
     yy, xx = np.mgrid[0:21, 0:21]
@@ -3022,8 +3024,9 @@ def test_centroid_err_scalar():
 
 def test_centroid_err_singularity():
     """
-    Test that the singularity correction in centroid_err is applied
-    for a source where the error covariance matrix is nearly singular.
+    Test that the singularity correction in centroid_err is applied for
+    a source where the error covariance matrix is nearly singular.
+
     This happens when error is concentrated at only the centroid pixel,
     making det == esn^2 exactly, so we use <= in a modified check or
     construct a case where floating-point rounding makes det < esn^2.
@@ -3084,8 +3087,8 @@ def test_centroid_err_formula():
 
 def test_centroid_err_zero_flux():
     """
-    Test that centroid_err returns NaN when the convolved data
-    total flux is zero within the segment (total_flux <= 0 branch).
+    Test that centroid_err returns NaN when the convolved data total
+    flux is zero within the segment (total_flux <= 0 branch).
     """
     data = np.ones((11, 11))
     # convolved_data has zero flux in the segment region
@@ -3277,8 +3280,8 @@ def test_centroid_quad_err_fallback():
 
 def test_centroid_quad_err_peak_at_edge():
     """
-    Test that sources whose maximum value is at the edge of the
-    cutout return the peak-pixel position with NaN errors.
+    Test that sources whose maximum value is at the edge of the cutout
+    return the peak-pixel position with NaN errors.
     """
     # Monotonic gradient: the maximum is at the segment cutout edge
     yy, xx = np.mgrid[0:11, 0:11]
@@ -3296,8 +3299,8 @@ def test_centroid_quad_err_peak_at_edge():
 
 def test_centroid_quad_err_columns():
     """
-    Test the quadratic centroid error properties as to_table columns
-    and the scalar-catalog collapse.
+    Test the quadratic centroid error properties as to_table columns and
+    the scalar-catalog collapse.
     """
     g1 = Gaussian2D(1621, 6.29, 10.95, 1.55, 1.29, 0.296706)
     g2 = Gaussian2D(3596, 13.81, 8.29, 1.44, 1.27, 0.628319)
@@ -3383,8 +3386,8 @@ def test_centroid_quad_err_cov_fallback():
 
 def test_sky_err_from_cov():
     """
-    Test the pixel-to-sky error covariance transport against a
-    hand-rotated covariance for a rotated TAN WCS.
+    Test the pixel-to-sky error covariance transport against a hand-
+    rotated covariance for a rotated TAN WCS.
     """
     theta_deg = 30.0
     scale = 0.25  # arcsec / pixel
@@ -3645,8 +3648,8 @@ class TestNThreads:
 
     def test_n_threads_exceeds_sources(self, many_source_inputs):
         """
-        Test that n_threads larger than the number of sources gives
-        the same results.
+        Test that n_threads larger than the number of sources gives the
+        same results.
         """
         data, segm, error, _ = many_source_inputs
         cat1 = SourceCatalog(data, segm, error=error)
@@ -3672,12 +3675,12 @@ class TestNThreads:
 
     def test_sliced_catalog_new_fraction(self, many_source_inputs):
         """
-        Test that a multi-source slice of a threaded catalog computes
-        a flux radius for a new fraction identically to the parent.
+        Test that a multi-source slice of a threaded catalog computes a
+        flux radius for a new fraction identically to the parent.
 
         Slicing drops the packed flux-radius inputs, so the slice
-        recomputes them (chunked over its own sources) on the first
-        call for a fraction that the parent had not cached, while the
+        recomputes them (chunked over its own sources) on the first call
+        for a fraction that the parent had not cached, while the
         parent's cached fractions are carried over.
         """
         data, segm, error, _ = many_source_inputs

@@ -344,8 +344,8 @@ class TestDeblendSources:
 
     def test_flags_nonposmin_children(self):
         """
-        Test that children of a parent whose mode fell back due to
-        non-positive minimum data values carry both the deblended and
+        Test that children of a parent whose mode fell back due to non-
+        positive minimum data values carry both the deblended and
         fallback flags.
         """
         data = self.data.copy()
@@ -496,8 +496,8 @@ class TestDeblendSources:
 
 def make_marker_test_image(kind):
     """
-    Return an image containing a single connected source for the
-    marker-path equivalence tests.
+    Return an image containing a single connected source for the marker-
+    path equivalence tests.
 
     Parameters
     ----------
@@ -563,13 +563,12 @@ def normalize_markers(markers):
 @pytest.mark.parametrize('connectivity', [8, 4])
 def test_make_markers_matches_legacy(kind, mode, connectivity):
     """
-    Test that make_markers produces the same markers as the legacy
-    per-level path (the last image of the make_markers_per_level
-    chain).
+    Test that make_markers produces the same markers as the legacy per-
+    level path (the last image of the make_markers_per_level chain).
 
-    The markers must contain the same regions with the same
-    raster-scan label ordering, since the ordering determines the
-    final deblended label assignment.
+    The markers must contain the same regions with the same raster-scan
+    label ordering, since the ordering determines the final deblended
+    label assignment.
     """
     from photutils.segmentation.utils import _make_binary_structure
 
@@ -687,14 +686,14 @@ def python_deblend_chunk(data, segm_data, driver_data,  # noqa: ARG001
 def test_chunk_driver_matches_python_path(dtype, scene):
     """
     Test that the compiled chunk driver and contrast loop produce
-    results identical to the pure-Python per-source path, including
-    the threshold computation, the mode fallbacks, the below-contrast
-    marker removal, and the recorded warnings, for float64, float32, and
+    results identical to the pure-Python per-source path, including the
+    threshold computation, the mode fallbacks, the below-contrast marker
+    removal, and the recorded warnings, for float64, float32, and
     integer data.
 
     The scenes cover deblending sources, the non-positive-minimum and
-    too-many-markers mode fallbacks, a source that does not split,
-    a constant source, and contrast values that trigger the batched
+    too-many-markers mode fallbacks, a source that does not split, a
+    constant source, and contrast values that trigger the batched
     removal, the one-at-a-time removal, the removal of all but one
     basin, and the removal path for sources with a negative minimum
     (which always removes one marker at a time).
@@ -760,9 +759,9 @@ def test_chunk_driver_matches_python_path(dtype, scene):
 
 def test_n_threads_identical():
     """
-    Test that multithreaded deblending produces results identical to
-    the single-threaded computation, including when there are more
-    threads than sources.
+    Test that multithreaded deblending produces results identical to the
+    single-threaded computation, including when there are more threads
+    than sources.
     """
     y, x = np.mgrid[0:101, 0:301]
     data = (Gaussian2D(100, 50, 50, 5, 5)(x, y)
@@ -796,8 +795,8 @@ def test_n_threads_invalid(n_threads):
 
 def test_deblend_segm_dtype():
     """
-    Test that deblending a segmentation image with a non-native
-    integer dtype gives the same result as the int32 one.
+    Test that deblending a segmentation image with a non-native integer
+    dtype gives the same result as the int32 one.
     """
     data, segm = make_multipeak_source()
     expected = deblend_sources(data, segm, 5)
@@ -933,8 +932,8 @@ def python_saddle_markers(data, segment_mask, thresholds, n_pixels,
 def test_saddle_markers_match_reference(dtype, connectivity, scene,
                                         contrast):
     """
-    Test that the compiled saddle-criterion marker selection matches
-    the pure-Python reference implementation, including nested splits,
+    Test that the compiled saddle-criterion marker selection matches the
+    pure-Python reference implementation, including nested splits,
     dissolving below-contrast siblings, the sinh fallback for negative
     minima, both connectivities, and float32 data.
     """
@@ -999,8 +998,8 @@ def test_contrast_method_invalid():
 
 def test_contrast_method_default():
     """
-    Test that the default contrast_method of None currently resolves
-    to the 'basin' method.
+    Test that the default contrast_method of None currently resolves to
+    the 'basin' method.
     """
     data, segm = make_multipeak_source()
     result_default = deblend_sources(data, segm, 5, contrast=0.1)
@@ -1012,8 +1011,8 @@ def test_contrast_method_default():
 def test_saddle_deblend():
     """
     Test deblending with the saddle contrast criterion through the
-    public API, including a source that does not split, the parent
-    label map, the deblended flags, and thread-count invariance.
+    public API, including a source that does not split, the parent label
+    map, the deblended flags, and thread-count invariance.
     """
     y, x = np.mgrid[0:101, 0:181]
     data, _ = make_multipeak_source()
@@ -1074,8 +1073,8 @@ def test_nonposmin_fallback_sinh():
 
 def test_python_path_connectivity_mismatch():
     """
-    Test that the pure-Python reference path raises the same error
-    as the compiled contrast loop when the detection and deblending
+    Test that the pure-Python reference path raises the same error as
+    the compiled contrast loop when the detection and deblending
     connectivities differ.
     """
     from photutils.segmentation import deblend as deblend_module
@@ -1134,11 +1133,11 @@ def test_contrast_removal(contrast, n_labels):
     Test the below-contrast marker removal over a range of contrasts.
 
     The contrast=0.15 case removes the two faintest basins together
-    (their total flux fraction is below both the contrast and the
-    next-faintest basin flux), the contrast=0.07 case removes the same
-    two basins one at a time (their total is above the contrast),
-    and the contrast=0.35 case removes all but one basin so that no
-    deblending occurs.
+    (their total flux fraction is below both the contrast and the next-
+    faintest basin flux), the contrast=0.07 case removes the same two
+    basins one at a time (their total is above the contrast), and the
+    contrast=0.35 case removes all but one basin so that no deblending
+    occurs.
     """
     data, segm = make_multipeak_source()
     result = deblend_sources(data, segm, 5, contrast=contrast)
@@ -1177,8 +1176,8 @@ def test_n_markers_fallback():
 
 def test_flags_n_markers_fallback():
     """
-    Test that the n_markers fallback flag is set on the output
-    sources produced from the affected input label.
+    Test that the n_markers fallback flag is set on the output sources
+    produced from the affected input label.
     """
     size = 51
     data1 = np.resize([0, 0, 1, 1], size)
@@ -1247,9 +1246,9 @@ def test_flags_fallback_without_deblending(relabel):
 
 def test_nonposmin_astropy_user_warning():
     """
-    Test that the nonposmin warning is caught as an
-    AstropyUserWarning, checking that DeblendWarning is a subclass of
-    it so that existing warning filters continue to work.
+    Test that the nonposmin warning is caught as an AstropyUserWarning,
+    checking that DeblendWarning is a subclass of it so that existing
+    warning filters continue to work.
     """
     g1 = Gaussian2D(100, 50, 50, 8, 8)
     g2 = Gaussian2D(100, 35, 50, 8, 8)
@@ -1266,9 +1265,8 @@ def test_nonposmin_astropy_user_warning():
 
 def test_n_markers_fallback_returns_none():
     """
-    Test that deblend_source returns None when make_markers returns
-    None on the linear-mode fallback (second attempt after >200
-    markers).
+    Test that deblend_source returns None when make_markers returns None
+    on the linear-mode fallback (second attempt after >200 markers).
     """
     # Create a source with varying data values so source_min != source_max
     data = np.ones((20, 20)) * 10.0

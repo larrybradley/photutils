@@ -3,7 +3,6 @@
 Tests for the iterative module.
 """
 
-
 import astropy.units as u
 import numpy as np
 import pytest
@@ -348,9 +347,9 @@ def make_one_shot_finder(x, y):
 
 def test_mode_all_invalid_source():
     """
-    Regression test for mode='all' when an earlier iteration
-    produced a non-finite fit (the invalid row is dropped and
-    iter_detected must stay aligned).
+    Regression test for mode='all' when an earlier iteration produced a
+    non-finite fit (the invalid row is dropped and iter_detected must
+    stay aligned).
     """
     sources = QTable()
     sources['x_0'] = [30.0, 70.0, 50.0]
@@ -402,8 +401,8 @@ def test_mode_all_carries_local_bkg():
 
 def test_image_methods_after_no_detections(test_data):
     """
-    Regression test that the image methods raise a clear error after
-    a run in which no sources were detected.
+    Regression test that the image methods raise a clear error after a
+    run in which no sources were detected.
     """
     data, _, _ = test_data
     psf_model = CircularGaussianPRF(flux=1, fwhm=2.7)

@@ -7,6 +7,7 @@ This catches data races and shared-state issues introduced by ``with
 nogil:`` sections in the functions, and verifies that each compiled
 module opts into free-threading (``freethreading_compatible=True``).
 """
+
 import importlib
 import sys
 import sysconfig

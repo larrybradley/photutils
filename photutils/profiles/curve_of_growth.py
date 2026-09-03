@@ -20,8 +20,8 @@ class _CurveOfGrowthBase(ProfileBase):
     """
     Base class for curve-of-growth profile classes.
 
-    Curve-of-growth profiles measure the cumulative flux directly
-    within the apertures defined by the ``apertures`` property.
+    Curve-of-growth profiles measure the cumulative flux directly within
+    the apertures defined by the ``apertures`` property.
     """
 
     @property
@@ -279,8 +279,8 @@ class CurveOfGrowth(_CurveOfGrowthBase):
 
         This is the same as the input ``radii``.
 
-        Note that these are the radii of the circular apertures used
-        to measure the profile. Thus, they are the radial values that
+        Note that these are the radii of the circular apertures used to
+        measure the profile. Thus, they are the radial values that
         enclose the given flux. They can be used directly to measure the
         encircled energy/flux at a given radius.
         """
@@ -551,8 +551,8 @@ class EnsquaredCurveOfGrowth(_CurveOfGrowthBase):
         Note that these are the half side lengths of the square
         apertures used to measure the profile. The full side length of
         each square aperture is ``2 * half_size``. They can be used
-        directly to measure the ensquared energy/flux at a given
-        half-size.
+        directly to measure the ensquared energy/flux at a given half-
+        size.
         """
         return self.half_sizes
 

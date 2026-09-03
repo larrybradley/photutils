@@ -510,10 +510,10 @@ class Background2D:
 
         Returns a `_BoxStatsSpec` when the ``sigma_clip``,
         ``bkg_estimator``, and ``bkg_rms_estimator`` inputs are all
-        supported by the fused sigma-clipping and statistics kernel,
-        and `None` otherwise (in which case the generic path based
-        on `astropy.stats.SigmaClip` and the estimator callables is
-        used). The fast path supports the string ``cenfunc`` values
+        supported by the fused sigma-clipping and statistics kernel, and
+        `None` otherwise (in which case the generic path based on
+        `astropy.stats.SigmaClip` and the estimator callables is used).
+        The fast path supports the string ``cenfunc`` values
         'median'/'mean'/'biweight', the string ``stdfunc`` values
         'std'/'mad_std'/'biweight', no spatial growing, and the standard
         photutils estimator classes. For the biweight-based estimators,

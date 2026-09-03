@@ -59,8 +59,9 @@ def _pentagram():
 
 def _concave_star():
     """
-    A ten-pointed star outline (alternating inner/outer radii). It is
-    concave but simple (non-self-intersecting).
+    A ten-pointed star outline (alternating inner/outer radii).
+
+    It is concave but simple (non-self-intersecting).
     """
     ang = np.pi / 2 + np.arange(10) * np.pi / 5
     radius = np.where(np.arange(10) % 2 == 0, 5.0, 2.0)
@@ -418,8 +419,8 @@ class TestPolygonValidation:
 
 class TestPolygonConstruction:
     """
-    Tests for constructing a PolygonAperture and validating its
-    vertex offsets.
+    Tests for constructing a PolygonAperture and validating its vertex
+    offsets.
     """
 
     def test_construct_scalar(self):
@@ -587,13 +588,13 @@ class TestPolygonMasks:
 
     def test_to_mask_center_matches_rectangle(self):
         """
-        Test that the ``center`` mask for a rectangle matches the equivalent
-        polygon.
+        Test that the ``center`` mask for a rectangle matches the
+        equivalent polygon.
 
-        A `RectangularAperture` and a `PolygonAperture` built from the same
-        four corners must produce identical ``center`` masks. This includes
-        pixel centers that lie exactly on the aperture boundary, which both
-        apertures must exclude.
+        A `RectangularAperture` and a `PolygonAperture` built from the
+        same four corners must produce identical ``center`` masks. This
+        includes pixel centers that lie exactly on the aperture
+        boundary, which both apertures must exclude.
         """
         shape = (12, 12)
 
@@ -640,8 +641,8 @@ class TestPolygonMasks:
 
 class TestPolygonPhotometry:
     """
-    Tests for photometry with a PolygonAperture, including pixel
-    centers lying exactly on a polygon boundary.
+    Tests for photometry with a PolygonAperture, including pixel centers
+    lying exactly on a polygon boundary.
     """
 
     def test_photometry(self):
@@ -718,13 +719,14 @@ class TestPolygonPhotometry:
                               ('center', {})])
     def test_array_photometry_matches_scalar(self, method, kwargs):
         """
-        Test that multi-position polygon photometry (batch Cython driver)
-        matches the per-position mask-based (grid) result for the exact,
-        subpixel, and center methods, including for a non-convex polygon.
+        Test that multi-position polygon photometry (batch Cython
+        driver) matches the per-position mask-based (grid) result for
+        the exact, subpixel, and center methods, including for a non-
+        convex polygon.
 
         This exercises the batch driver's per-position buffer reuse and
-        confirms it is numerically identical to the ``polygon_overlap_grid``
-        code path used by ``to_mask``.
+        confirms it is numerically identical to the
+        ``polygon_overlap_grid`` code path used by ``to_mask``.
         """
         rng = np.random.default_rng(0)
         data = rng.random((60, 60))
@@ -741,12 +743,12 @@ class TestPolygonPhotometry:
 
     def test_matches_rotated_rectangle(self):
         """
-        Test that the exact polygon mask for a rotated rectangle matches the
-        exact rectangular mask.
+        Test that the exact polygon mask for a rotated rectangle matches
+        the exact rectangular mask.
 
-        This is a non-trivial test of the polygon masking machinery, since
-        the rectangle vertices are not axis-aligned and thus require the
-        full generality of the polygon code.
+        This is a non-trivial test of the polygon masking machinery,
+        since the rectangle vertices are not axis-aligned and thus
+        require the full generality of the polygon code.
         """
         rect = RectangularAperture((5.5, 5.5), w=4.0, h=2.0, theta=np.pi / 6)
         # Build the equivalent polygon from the rotated rectangle vertices.
@@ -896,8 +898,8 @@ class TestRegularPolygon:
     @pytest.mark.parametrize('n_spikes', [5, 6, 7, 8])
     def test_from_star(self, n_spikes):
         """
-        Test that ``_from_star`` constructs a star-shaped polygon with the
-        correct area and that it raises for invalid parameters.
+        Test that ``_from_star`` constructs a star-shaped polygon with
+        the correct area and that it raises for invalid parameters.
         """
         xypos = (5, 5)
 
@@ -1031,8 +1033,8 @@ class TestSkyPolygonConstruction:
 
     def test_offsets_reset_cached_properties(self):
         """
-        Test that changing vertex_offsets on a SkyPolygonAperture clears the
-        cached vertices, which are stored as a SkyCoord.
+        Test that changing vertex_offsets on a SkyPolygonAperture clears
+        the cached vertices, which are stored as a SkyCoord.
         """
         pos = SkyCoord(ra=180.0, dec=0.0, unit='deg')
         aper = SkyPolygonAperture(pos, SQUARE_OFFSETS * u.arcsec)
@@ -1134,7 +1136,8 @@ class TestPolygonPixelSkyConversion:
 
     def test_pixel_sky_pixel(self):
         """
-        Test that round-trip through to_sky / to_pixel reproduces original.
+        Test that round-trip through to_sky / to_pixel reproduces
+        original.
         """
         wcs = _make_wcs()
         aper = PolygonAperture([(50.0, 50.0), (60.0, 60.0)], SQUARE_OFFSETS)

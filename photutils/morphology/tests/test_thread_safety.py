@@ -1,12 +1,12 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 """
-Tests that the morphology functions are thread-safe and return
-identical results when run concurrently from multiple threads.
+Tests that the morphology functions are thread-safe and return identical
+results when run concurrently from multiple threads.
 
-Both ``data_properties`` and ``gini`` are pure functions with no
-module-level mutable state. Each call operates only on its inputs
-and local variables, and ``data_properties`` constructs a new
-``SourceCatalog`` per call.
+Both ``data_properties`` and ``gini`` are pure functions with no module-
+level mutable state. Each call operates only on its inputs and local
+variables, and ``data_properties`` constructs a new ``SourceCatalog``
+per call.
 """
 
 from concurrent.futures import ThreadPoolExecutor

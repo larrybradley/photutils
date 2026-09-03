@@ -3,14 +3,13 @@
 """
 Benchmarks for the photutils.psf subpackage.
 
-The benchmarks cover the per-call evaluation cost of the PSF models
-(the functional models, ImagePSF, and GriddedPSFModel), PSFPhotometry
-versus the number of sources and versus the PSF model type,
+The benchmarks cover the per-call evaluation cost of the PSF models (the
+functional models, ImagePSF, and GriddedPSFModel), PSFPhotometry versus
+the number of sources and versus the PSF model type,
 IterativePSFPhotometry, the ImagePSF and GriddedPSFModel analytic
 Jacobians versus the finite-difference approximation, SourceGrouper
-scaling, ePSF building
-(extract_stars and EPSFBuilder), the Gaussian fitting helpers
-(fit_2dgaussian and fit_fwhm), and make_psf_model_image.
+scaling, ePSF building (extract_stars and EPSFBuilder), the Gaussian
+fitting helpers (fit_2dgaussian and fit_fwhm), and make_psf_model_image.
 
 Run ``python benchmarks/bench_psf.py --help`` to see the available
 options.
@@ -136,8 +135,8 @@ class _NoDerivImagePSF(ImagePSF):
     """
     An ImagePSF variant with the analytic Jacobian disabled.
 
-    It is used by the Jacobian benchmark to time the fitter's
-    finite-difference fallback.
+    It is used by the Jacobian benchmark to time the fitter's finite-
+    difference fallback.
     """
 
     fit_deriv = None
@@ -147,8 +146,8 @@ class _NoDerivGriddedPSFModel(GriddedPSFModel):
     """
     A GriddedPSFModel variant with the analytic Jacobian disabled.
 
-    It is used by the Jacobian benchmark to time the fitter's
-    finite-difference fallback.
+    It is used by the Jacobian benchmark to time the fitter's finite-
+    difference fallback.
     """
 
     fit_deriv = None

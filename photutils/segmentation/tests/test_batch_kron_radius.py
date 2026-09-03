@@ -24,9 +24,9 @@ def _reference_measured_kron_radius(cat):
     """
     Compute the unscaled measured Kron radius of each source.
 
-    This is a verbatim port of the per-source Python implementation
-    of ``_measured_kron_radius`` that the batch Cython kernel
-    replaces. It is the numerical reference for the kernel.
+    This is a verbatim port of the per-source Python implementation of
+    ``_measured_kron_radius`` that the batch Cython kernel replaces. It
+    is the numerical reference for the kernel.
     """
     scale = 6.0
 

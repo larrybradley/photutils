@@ -223,8 +223,8 @@ def test_mixed_aperture_types(scene):
 
 def _make_uncorrectable_catalog(method):
     """
-    Make a catalog whose first source has a Kron aperture lying
-    entirely on a neighboring segment.
+    Make a catalog whose first source has a Kron aperture lying entirely
+    on a neighboring segment.
 
     The first source's centroid is moved to the center of the
     neighboring segment after its Kron radius is measured, so its Kron

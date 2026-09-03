@@ -214,13 +214,13 @@ class TestUpdateFlagDocstring:
         """
         Test that the placeholder is replaced with the bullet list.
         """
+
         def func():
             """
             Flags.
 
             <flag_descriptions>
             """
-
         func = update_flag_docstring(func, registry)
         assert '<flag_descriptions>' not in func.__doc__
         assert "* **1** (``'one'``) : The first flag." in func.__doc__
@@ -229,11 +229,11 @@ class TestUpdateFlagDocstring:
         """
         Test that a docstring without the placeholder is unchanged.
         """
+
         def func():
             """
             Flags.
             """
-
         docstring = func.__doc__
         func = update_flag_docstring(func, registry)
         assert func.__doc__ == docstring
@@ -242,6 +242,7 @@ class TestUpdateFlagDocstring:
         """
         Test that a function without a docstring is returned unchanged.
         """
+
         def func():
             pass
 

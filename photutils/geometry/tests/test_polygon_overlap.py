@@ -12,8 +12,8 @@ from photutils.geometry._polygon_overlap import polygon_overlap_grid
 
 def test_polygon_overlap_clockwise_input():
     """
-    Clockwise-ordered vertices should give the same result as
-    counter-clockwise ones.
+    Clockwise-ordered vertices should give the same result as counter-
+    clockwise ones.
     """
     vx_ccw = np.array([-1.0, 1.0, 1.0, -1.0])
     vy_ccw = np.array([-1.0, -1.0, 1.0, 1.0])
@@ -110,8 +110,8 @@ def test_polygon_overlap_subpixel_convex_fast_path(subpix):
     Test that the convex interior/exterior fast path of the subpixel
     mode returns results identical to sampling every pixel.
 
-    The same hexagon with a duplicated vertex is geometrically
-    identical but is reported as non-convex (the zero-length edge fails
+    The same hexagon with a duplicated vertex is geometrically identical
+    but is reported as non-convex (the zero-length edge fails
     ``convex_edge_normals``), which disables the fast path and forces
     the full scanline sampling for every pixel.
     """
@@ -142,6 +142,7 @@ def test_polygon_overlap_no_intersection():
 def test_polygon_overlap_nonconvex_l_shape():
     """
     The exact-mode kernel handles non-convex (L-shaped) polygons.
+
     The L-shape used here has area 12 (4x4 square minus 2x2 corner).
     """
     vx = np.array([0.0, 4.0, 4.0, 2.0, 2.0, 0.0])
@@ -153,9 +154,10 @@ def test_polygon_overlap_nonconvex_l_shape():
 
 def test_polygon_overlap_nonconvex_star():
     """
-    The exact-mode kernel handles a 5-pointed star (non-convex,
-    non-self-intersecting). The total area should match the shoelace
-    area of the polygon.
+    The exact-mode kernel handles a 5-pointed star (non-convex, non-
+    self-intersecting).
+
+    The total area should match the shoelace area of the polygon.
     """
     n_points = 5
     r_outer, r_inner = 5.0, 2.0
@@ -182,7 +184,8 @@ def test_polygon_overlap_nonconvex_star():
 ])
 def test_polygon_overlap_rectangle_area(width, height):
     """
-    The total overlap of an axis-aligned rectangle equals width * height.
+    The total overlap of an axis-aligned rectangle equals width *
+    height.
     """
     hw, hh = width / 2.0, height / 2.0
     vx = np.array([-hw, hw, hw, -hw])
@@ -252,8 +255,8 @@ def test_polygon_overlap_validation():
 def test_polygon_overlap_vertices_input_types():
     """
     Test that integer arrays and Python lists are accepted for the
-    vertex coordinates and give the same result as float64 arrays,
-    and that non-1D vertex arrays raise an error.
+    vertex coordinates and give the same result as float64 arrays, and
+    that non-1D vertex arrays raise an error.
     """
     vx = np.array([0.0, 4.0, 0.0])
     vy = np.array([0.0, 0.0, 4.0])
@@ -338,8 +341,8 @@ def test_polygon_overlap_subpixel_on_all_boundaries():
 
     A unit square spanning [-1, 1] in both axes is sampled by a single
     pixel with ``subpixels=3``, so the 9 subpixel centers fall at every
-    combination of (-1, 0, +1). Of these, only the central center
-    (0, 0) is strictly interior. The four edge-midpoint centers (two
+    combination of (-1, 0, +1). Of these, only the central center (0, 0)
+    is strictly interior. The four edge-midpoint centers (two
     horizontal, two vertical) and the four corner centers all lie on the
     boundary and are excluded, giving 1/9.
     """

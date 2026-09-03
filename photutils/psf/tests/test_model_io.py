@@ -322,9 +322,9 @@ class TestWebbPSFReader:
 
     def test_read_webbpsf_key_order(self, tmp_path):
         """
-        Test that the DET_YX keywords are ordered by their numeric
-        index and not by their string ordering (e.g., DET_YX10 must
-        follow DET_YX9).
+        Test that the DET_YX keywords are ordered by their numeric index
+        and not by their string ordering (e.g., DET_YX10 must follow
+        DET_YX9).
         """
         xgrid = (0.0, 1000.0)
         ygrid = (0.0, 400.0, 800.0, 1200.0, 1600.0, 2047.0)
@@ -339,8 +339,8 @@ class TestWebbPSFReader:
 
     def test_read_webbpsf_2d(self, tmp_path):
         """
-        Test that a WebbPSF file containing a single 2D PSF is read as
-        a (1, ny, nx) grid.
+        Test that a WebbPSF file containing a single 2D PSF is read as a
+        (1, ny, nx) grid.
         """
         filename = str(tmp_path / 'webbpsf_2d_mock.fits')
         make_webbpsf_file(filename, (100.0,), (200.0,), data_2d=True)
@@ -473,8 +473,8 @@ class TestFormatIdentifiers:
 
     def test_corrupt_fits_filepath(self, tmp_path):
         """
-        Test that a corrupt file with a FITS extension is not
-        identified when given only a file path.
+        Test that a corrupt file with a FITS extension is not identified
+        when given only a file path.
         """
         filename = str(tmp_path / 'bad.fits')
         with open(filename, 'w') as f:

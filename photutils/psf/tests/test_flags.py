@@ -543,6 +543,7 @@ def test_update_decode_docstring_noop():
     Test that the update_decode_docstring decorator is a no-op if no
     docstring exists.
     """
+
     @_update_decode_docstring
     def test_func(data):
         pass

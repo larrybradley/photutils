@@ -4,14 +4,14 @@ Tests that the centroid functions are thread-safe and return identical
 results when run concurrently from multiple threads.
 
 The centroid functions hold no shared mutable state. There are no
-module-level caches, each call creates its own fitter instance,
-and fit non-convergence is detected from the fitter's ``fit_info``
-rather than by capturing warnings (``warnings.catch_warnings``
-mutates process-global state). The convergence-warning test turns
-warnings into errors itself (rather than relying on the pytest
-``filterwarnings`` configuration, which is absent when pytest runs with
-``-p no:warnings``), so any spurious warning raised in a worker thread
-(e.g., a cross-thread "fit may not have converged" injection) fails the
+module-level caches, each call creates its own fitter instance, and fit
+non-convergence is detected from the fitter's ``fit_info`` rather than
+by capturing warnings (``warnings.catch_warnings`` mutates process-
+global state). The convergence-warning test turns warnings into errors
+itself (rather than relying on the pytest ``filterwarnings``
+configuration, which is absent when pytest runs with ``-p
+no:warnings``), so any spurious warning raised in a worker thread (e.g.,
+a cross-thread "fit may not have converged" injection) fails the
 corresponding future.
 """
 
@@ -66,8 +66,8 @@ def _make_task(func, data, mask, error):
 @pytest.mark.parametrize('centroid_func', CENTROID_FUNCS)
 def test_concurrent_centroid_calls(source_data, centroid_func):
     """
-    Test that concurrent calls to each centroid function on shared
-    input arrays return results identical to a serial call.
+    Test that concurrent calls to each centroid function on shared input
+    arrays return results identical to a serial call.
     """
     task = _make_task(centroid_func, *source_data)
     expected = task()
@@ -81,8 +81,8 @@ def test_concurrent_centroid_calls(source_data, centroid_func):
 
 def test_mixed_concurrent_centroid_calls(source_data):
     """
-    Test all of the centroid functions running interleaved in one
-    thread pool.
+    Test all of the centroid functions running interleaved in one thread
+    pool.
 
     Mixing the functions surfaces cross-call interference (e.g., the
     previous warning-capture convergence detection in centroid_2dg could
@@ -103,15 +103,15 @@ def test_mixed_concurrent_centroid_calls(source_data):
 
 def test_concurrent_convergence_warning_isolation():
     """
-    Test that converging centroid_2dg fits stay warning-free while
-    non-converging fits warn concurrently in other threads.
+    Test that converging centroid_2dg fits stay warning-free while non-
+    converging fits warn concurrently in other threads.
 
-    With the previous warning-capture convergence detection, a
-    non-converging fit in one thread could inject its warning into
-    a converging fit in another thread (or have its own warning
-    suppressed). Warnings are turned into errors for the duration of
-    the thread pool (in the main thread, so that all worker threads see
-    the same filter), so an injected warning would fail the converging
+    With the previous warning-capture convergence detection, a non-
+    converging fit in one thread could inject its warning into a
+    converging fit in another thread (or have its own warning
+    suppressed). Warnings are turned into errors for the duration of the
+    thread pool (in the main thread, so that all worker threads see the
+    same filter), so an injected warning would fail the converging
     futures below and a missing warning would fail the non-converging
     futures.
     """
@@ -147,8 +147,8 @@ def test_concurrent_convergence_warning_isolation():
 
 def test_concurrent_centroid_sources():
     """
-    Test that concurrent centroid_sources calls on a shared image
-    return results identical to a serial call.
+    Test that concurrent centroid_sources calls on a shared image return
+    results identical to a serial call.
     """
     xpos = [25.0, 75.0]
     ypos = [30.0, 70.0]

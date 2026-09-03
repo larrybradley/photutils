@@ -151,8 +151,8 @@ def test_centroid_2dg_constant_data(value):
     data.
 
     After subtracting the minimum, a constant array becomes all-zero,
-    making the moment sum zero and the Gaussian parameters undefined.
-    A clear error is raised rather than silent NaN results.
+    making the moment sum zero and the Gaussian parameters undefined. A
+    clear error is raised rather than silent NaN results.
     """
     data = np.full((10, 10), value)
     match = 'Input data must have non-constant values'
@@ -163,8 +163,8 @@ def test_centroid_2dg_constant_data(value):
 @pytest.mark.parametrize('value', [0.0, 1.0, -3.7])
 def test_centroid_1dg_constant_data(value):
     """
-    Test that centroid_1dg raises a ValueError for constant (flat)
-    input data.
+    Test that centroid_1dg raises a ValueError for constant (flat) input
+    data.
 
     A constant marginal distribution has undefined Gaussian moment
     estimates. This previously raised a cryptic error from inside the

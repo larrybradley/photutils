@@ -545,8 +545,8 @@ class RadialProfile(ProfileBase):
     @cached_property
     def _raw_moffat_profile(self):
         """
-        The raw-fit 1D Moffat evaluated at the profile radii, or
-        `None` if the fit failed.
+        The raw-fit 1D Moffat evaluated at the profile radii, or `None`
+        if the fit failed.
         """
         if self._raw_moffat_fit is None:
             return None
@@ -574,8 +574,8 @@ class RadialProfile(ProfileBase):
         (`~numpy.ndarray`) of radii and data values.
 
         Returns the radii and values of the unmasked data points within
-        the maximum radius defined by the input radii. Pixels flagged
-        in ``self.mask`` (including auto-masked non-finite values) are
+        the maximum radius defined by the input radii. Pixels flagged in
+        ``self.mask`` (including auto-masked non-finite values) are
         excluded.
         """
         shape = self.data.shape

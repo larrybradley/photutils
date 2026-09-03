@@ -20,8 +20,8 @@ def _reference_cutout_index(cat, argfunc):
     The cutout-frame position of an extreme value of each source.
 
     This is a verbatim port of the per-source ``cutout_min_value_index``
-    and ``cutout_max_value_index`` loops that the batch kernel
-    replaces. It is the reference for the kernel.
+    and ``cutout_max_value_index`` loops that the batch kernel replaces.
+    It is the reference for the kernel.
     """
     idx = []
     for arr in cat._array('data_cutout_masked'):
@@ -79,9 +79,9 @@ def test_matches_reference(scene, with_mask):
 
 def test_ties_and_all_masked():
     """
-    Test the first occurrence of a repeated extreme, a completely
-    masked source (NaN positions and a float result), and a source
-    whose extremes lie on the bounding-box edges.
+    Test the first occurrence of a repeated extreme, a completely masked
+    source (NaN positions and a float result), and a source whose
+    extremes lie on the bounding-box edges.
     """
     data = np.zeros((30, 30))
     segm_data = np.zeros(data.shape, dtype=int)

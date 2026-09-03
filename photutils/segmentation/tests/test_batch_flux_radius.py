@@ -31,10 +31,9 @@ def _reference_optimizer_args(cat):
     """
     Prepare the per-source flux-radius root-find arguments.
 
-    This is a verbatim port of the per-source Python implementation
-    of ``_flux_radius_optimizer_args`` that the batch Cython
-    preparation replaces. It is the numerical reference for the
-    preparation.
+    This is a verbatim port of the per-source Python implementation of
+    ``_flux_radius_optimizer_args`` that the batch Cython preparation
+    replaces. It is the numerical reference for the preparation.
     """
     kron_flux = cat._kron_photometry[:, 0]  # unitless
     max_radius = cat._max_circular_kron_radius
@@ -289,7 +288,7 @@ def test_solve_grid_edges_guard(scene):
 def test_solve_buffer_guard(scene):
     """
     Test that a region that runs past the end of the packed buffer, a
-    negative start, and a negative count are each rejected
+    negative start, and a negative count are each rejected.
     """
     cat = make_catalog(scene)
     args = cat._flux_radius_optimizer_args

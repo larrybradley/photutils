@@ -83,8 +83,8 @@ def _reference_extremes(data, aperture):
 @pytest.mark.parametrize('n_threads', [1, 3])
 def test_min_max_without_sort(stats_inputs, n_threads):
     """
-    Test that min and max alone are computed without the per-source
-    sort and match both the reference and the sorted path.
+    Test that min and max alone are computed without the per-source sort
+    and match both the reference and the sorted path.
     """
     data, aperture = stats_inputs
     ref_min, ref_max = _reference_extremes(data, aperture)
@@ -102,8 +102,8 @@ def test_min_max_without_sort(stats_inputs, n_threads):
 
 def test_min_max_after_sort(stats_inputs):
     """
-    Test that min and max agree with the sorted path (and the
-    reference) when the sorted buffer already exists.
+    Test that min and max agree with the sorted path (and the reference)
+    when the sorted buffer already exists.
     """
     data, aperture = stats_inputs
     stats = ApertureStats(data, aperture)

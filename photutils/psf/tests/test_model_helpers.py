@@ -187,8 +187,8 @@ def test_make_psf_model_integral():
 
 def test_make_psf_model_normalize_dx_dy():
     """
-    Regression test that make_psf_model normalization works with
-    dx != dy.
+    Regression test that make_psf_model normalization works with dx !=
+    dy.
     """
     gauss = Gaussian2D(1, 0, 0, 1, 1)
     psf = make_psf_model(gauss, x_name='x_mean', y_name='y_mean',

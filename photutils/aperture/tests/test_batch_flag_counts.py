@@ -57,13 +57,13 @@ def _gather_fcounts(data, positions, radius, *, mask=None,
 
 class TestPixelCounts:
     """
-    Tests for the per-source pixel counts returned by the batch
-    drivers.
+    Tests for the per-source pixel counts returned by the batch drivers.
     """
 
     def test_interior_source(self, unit_data):
         """
-        Test that a clean interior source has only n_pixels/valid counts.
+        Test that a clean interior source has only n_pixels/valid
+        counts.
         """
         data = unit_data
         fc = _sums_fcounts(data, (12.0, 12.0), 3.0)[0]
@@ -78,7 +78,8 @@ class TestPixelCounts:
 
     def test_no_bbox_overlap(self, unit_data):
         """
-        Test that a source with no bounding-box overlap has all-zero counts.
+        Test that a source with no bounding-box overlap has all-zero
+        counts.
         """
         data = unit_data
         fc = _sums_fcounts(data, (100.0, 100.0), 3.0)[0]
@@ -113,8 +114,8 @@ class TestPixelCounts:
 
     def test_mask_plane_bits(self, unit_data):
         """
-        Test that mask-plane bit 1 counts as masked and bit 2 as non-finite
-        data, with bit 1 taking precedence.
+        Test that mask-plane bit 1 counts as masked and bit 2 as non-
+        finite data, with bit 1 taking precedence.
         """
         data = unit_data
         mask = np.zeros(UNIT_SHAPE, dtype=np.uint8)
@@ -129,8 +130,8 @@ class TestPixelCounts:
 
     def test_gather_matches_sums_center(self):
         """
-        Test that the gather kernel flag counts match the photometry kernel
-        with the "center" method.
+        Test that the gather kernel flag counts match the photometry
+        kernel with the "center" method.
         """
         rng = np.random.default_rng(1)
         data = rng.normal(size=UNIT_SHAPE)
@@ -161,11 +162,11 @@ class TestNonFiniteCounts:
 
     def test_nonfinite_data_unmasked(self, unit_data):
         """
-        Test that unmasked non-finite data values are detected (and still
-        contribute) in the photometry kernel.
+        Test that unmasked non-finite data values are detected (and
+        still contribute) in the photometry kernel.
 
-        Unmasked non-finite contributions are detected from the accumulated
-        sums as a 0/1 indicator.
+        Unmasked non-finite contributions are detected from the
+        accumulated sums as a 0/1 indicator.
         """
         data = unit_data
         data[12, 12] = np.nan
@@ -222,9 +223,10 @@ class TestBboxClipped:
 
     def test_parity_with_mask(self, unit_data):
         """
-        Test that n_pixels matches the nonzero in-data aperture-mask weights
-        and that the bbox-clipped indicator matches the overlap slices, for
-        randomized positions including edge and rounding cases.
+        Test that n_pixels matches the nonzero in-data aperture-mask
+        weights and that the bbox-clipped indicator matches the overlap
+        slices, for randomized positions including edge and rounding
+        cases.
         """
         rng = np.random.default_rng(0)
         data = unit_data
@@ -311,8 +313,8 @@ class TestSegMaskedCounts:
     Tests for the masked neighbor-segment pixel counts.
 
     Masked pixels never reach the segmentation branch of the per-pixel
-    loop, so they are counted in separate columns for callers that
-    treat the mask and neighbor overlays independently.
+    loop, so they are counted in separate columns for callers that treat
+    the mask and neighbor overlays independently.
     """
 
     @staticmethod

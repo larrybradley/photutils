@@ -227,7 +227,8 @@ class TestApertureFlagsRegistry:
 
     def test_define_docstring_invalid_registry(self):
         """
-        Test that define_flag_docstring rejects a non-FlagRegistry input.
+        Test that define_flag_docstring rejects a non-FlagRegistry
+        input.
         """
         match = 'registry must be an instance of FlagRegistry'
         with pytest.raises(TypeError, match=match):

@@ -277,9 +277,9 @@ def test_centroid_quadratic_large_coordinates():
     Test for centroid_quadratic with a source at large pixel
     coordinates.
 
-    The quadratic fit is performed in coordinates centered on the
-    peak pixel. A design matrix built from absolute pixel coordinates
-    becomes ill-conditioned at large coordinates (condition number
+    The quadratic fit is performed in coordinates centered on the peak
+    pixel. A design matrix built from absolute pixel coordinates becomes
+    ill-conditioned at large coordinates (condition number
     ~coordinate**4) and previously returned NaN with a spurious "fit
     does not have a maximum" warning.
     """
@@ -508,8 +508,8 @@ def test_centroid_quadratic_fit_failed():
     """
     Test centroid_quadratic when the quadratic fit fails.
 
-    This tests the LinAlgError exception handling. Since lstsq is
-    very robust (uses SVD internally), we use mocking to trigger this
+    This tests the LinAlgError exception handling. Since lstsq is very
+    robust (uses SVD internally), we use mocking to trigger this
     condition.
     """
     data = np.zeros((11, 11))
@@ -637,9 +637,10 @@ class TestCentroidSources:
 
     def test_centroid_func_no_mask_keyword(self):
         """
-        Test centroid_sources with a centroid function that has no
-        mask keyword.
+        Test centroid_sources with a centroid function that has no mask
+        keyword.
         """
+
         def test_func(data):
             return data
 
@@ -797,9 +798,10 @@ class TestCentroidSources:
 
     def test_var_keyword_centroid_func(self, test_data):
         """
-        Test centroid_sources with a centroid function that accepts
-        the mask keyword via **kwargs.
+        Test centroid_sources with a centroid function that accepts the
+        mask keyword via **kwargs.
         """
+
         def my_centroid(data, **kwargs):
             return centroid_com(data, mask=kwargs.get('mask'))
 
@@ -827,8 +829,8 @@ class TestCentroidSources:
 
     def test_mask_wrong_shape(self):
         """
-        Test centroid_sources raises ValueError when the mask shape
-        does not match the data shape.
+        Test centroid_sources raises ValueError when the mask shape does
+        not match the data shape.
         """
         data = np.ones((50, 50))
         mask = np.zeros((30, 30), dtype=bool)
@@ -838,8 +840,8 @@ class TestCentroidSources:
 
     def test_xypeak_multiple_sources(self):
         """
-        Test that xpeak/ypeak are correctly offset for each source in
-        a multi-source centroid_sources call.
+        Test that xpeak/ypeak are correctly offset for each source in a
+        multi-source centroid_sources call.
         """
         # Two isolated peaks close together so that xpeak=10 (absolute)
         # lies within both source cutouts (box_size=5):

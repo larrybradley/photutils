@@ -107,8 +107,8 @@ class TestFindPeaks:
 
     def test_mask_equivalent_to_nan(self):
         """
-        Test that masking a pixel gives the same result as setting it
-        to NaN.
+        Test that masking a pixel gives the same result as setting it to
+        NaN.
         """
         rng = np.random.default_rng(0)
         data = rng.normal(0.0, 1.0, (50, 50))

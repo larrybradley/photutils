@@ -408,8 +408,8 @@ class TestIRAFStarFinder:
 
     def test_threshold_2d_uniform(self, data):
         """
-        Test that a uniform 2D threshold gives the same results
-        as a scalar threshold.
+        Test that a uniform 2D threshold gives the same results as a
+        scalar threshold.
         """
         threshold = 5.0
         fwhm = 1.0
@@ -463,8 +463,7 @@ class TestIRAFStarFinder:
     def test_catalog_intermediate_properties(self, data):
         """
         Test IRAF catalog intermediate properties: sky,
-        cutout_data_nosub, cutout_xorigin, cutout_yorigin,
-        sharpness.
+        cutout_data_nosub, cutout_xorigin, cutout_yorigin, sharpness.
         """
         finder = IRAFStarFinder(threshold=1.0, fwhm=2.0,
                                 sharpness_range=(-np.inf, np.inf),
@@ -537,8 +536,8 @@ class TestIRAFStarFinder:
 
     def test_deprecated_peakmax(self):
         """
-        Test that the deprecated 'peakmax' keyword raises a warning
-        and still works.
+        Test that the deprecated 'peakmax' keyword raises a warning and
+        still works.
         """
         match = "'peakmax' was deprecated"
         with pytest.warns(AstropyDeprecationWarning, match=match):

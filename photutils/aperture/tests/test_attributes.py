@@ -154,8 +154,8 @@ class TestApertureAttribute:
 
     def test_reset_no_cached_properties(self):
         """
-        Test that AttributeError is silently caught when _cached_properties
-        is absent.
+        Test that AttributeError is silently caught when
+        _cached_properties is absent.
         """
         obj = MockBase()
         obj.attr = 1.0
@@ -254,7 +254,8 @@ class TestPixelPositions:
 
     def test_zip_quantity_error(self):
         """
-        Test that TypeError is raised when zip contains Quantity objects.
+        Test that TypeError is raised when zip contains Quantity
+        objects.
         """
         obj = MockPixelPos()
         match = "'positions' must not be a Quantity"
@@ -368,8 +369,8 @@ class TestPositiveScalar:
 
     def test_non_numeric_error(self):
         """
-        Test that a non-numeric scalar (e.g., a string) raises
-        TypeError with the intended message.
+        Test that a non-numeric scalar (e.g., a string) raises TypeError
+        with the intended message.
         """
         obj = MockPositiveScalar()
         match = "'r' must be a positive scalar"

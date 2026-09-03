@@ -820,9 +820,10 @@ def test_psf_photometry_init_params_columns(test_data):
 
 def test_grouped_fit_two_image_psfs():
     """
-    Regression test that grouped fits with two different same-class
-    PSF models do not reuse a stale cached flat-model class.
+    Regression test that grouped fits with two different same-class PSF
+    models do not reuse a stale cached flat-model class.
     """
+
     def make_image_psf(sigma2):
         yy, xx = np.mgrid[:21, :21]
         psf_data = np.exp(-((xx - 10.0)**2 + (yy - 10.0)**2)
@@ -855,8 +856,8 @@ def test_grouped_fit_two_image_psfs():
 
 def test_near_bound_flag_grouped():
     """
-    Regression test that the NEAR_BOUND flag (bit 32) is set for
-    grouped sources, matching single-source behavior.
+    Regression test that the NEAR_BOUND flag (bit 32) is set for grouped
+    sources, matching single-source behavior.
     """
     model = CircularGaussianPRF(fwhm=2.7)
     data, params = make_psf_model_image(
@@ -873,8 +874,8 @@ def test_near_bound_flag_grouped():
 
 def test_int_data_with_local_bkg():
     """
-    Regression test that integer-dtype data works with a float
-    local_bkg column.
+    Regression test that integer-dtype data works with a float local_bkg
+    column.
     """
     model = CircularGaussianPRF(fwhm=2.7)
     data, params = make_psf_model_image(
@@ -940,8 +941,8 @@ def test_grouper_init_params(test_data):
 
 def test_grouper_not_mutated_by_group_id():
     """
-    Regression test that a call with init_params['group_id'] does
-    not disable the grouper for subsequent calls.
+    Regression test that a call with init_params['group_id'] does not
+    disable the grouper for subsequent calls.
     """
     model = CircularGaussianPRF(fwhm=2.7)
     data, true_params = make_psf_model_image(
@@ -1772,8 +1773,8 @@ def test_invalid_sources(test_data, units):
 
 def test_results_to_params_exclude_n_pixels():
     """
-    Regression test that the n_pixels_fit column does not leak into
-    the init/model parameter tables.
+    Regression test that the n_pixels_fit column does not leak into the
+    init/model parameter tables.
     """
     model = CircularGaussianPRF(fwhm=2.7)
     data, params = make_psf_model_image(
@@ -1791,8 +1792,8 @@ def test_results_to_params_exclude_n_pixels():
 
 def test_duplicate_init_params_ids():
     """
-    Regression test that duplicate init_params ids are rejected
-    instead of producing a cartesian product of mispaired rows.
+    Regression test that duplicate init_params ids are rejected instead
+    of producing a cartesian product of mispaired rows.
     """
     model = CircularGaussianPRF(fwhm=2.7)
     data = np.zeros((30, 30))
@@ -1837,8 +1838,8 @@ def test_empty_init_params():
 
 def test_reduced_chi2_zero_dof():
     """
-    Regression test that reduced_chi2 is NaN (with no warning) when
-    the number of fit pixels equals the number of fit parameters.
+    Regression test that reduced_chi2 is NaN (with no warning) when the
+    number of fit pixels equals the number of fit parameters.
     """
     model = CircularGaussianPRF(fwhm=2.7)
     data, params = make_psf_model_image(
@@ -1893,8 +1894,8 @@ def test_row_index_not_leaked_on_failure():
 
 def test_group_id_from_float_id_message():
     """
-    Test that the group_id dtype error names the id column when
-    group_id was derived from it.
+    Test that the group_id dtype error names the id column when group_id
+    was derived from it.
     """
     model = CircularGaussianPRF(fwhm=2.7)
     data = np.ones((11, 11))
@@ -2510,8 +2511,8 @@ def test_valid_fitter_maxiters():
 
 def test_nddata_with_explicit_mask_or_error():
     """
-    Regression test that explicit mask/error keywords are rejected
-    (not silently ignored) when data is an NDData instance.
+    Regression test that explicit mask/error keywords are rejected (not
+    silently ignored) when data is an NDData instance.
     """
     model = CircularGaussianPRF(fwhm=2.7)
     data = np.ones((25, 25))
@@ -2535,10 +2536,10 @@ def test_aperture_radius_bool():
 
 def test_finder_empty_table():
     """
-    Regression test that a finder returning a zero-row table is
-    treated like no sources found instead of raising an aperture
-    error.
+    Regression test that a finder returning a zero-row table is treated
+    like no sources found instead of raising an aperture error.
     """
+
     def finder(data, *, mask=None):  # noqa: ARG001
         return Table({'x': np.array([]), 'y': np.array([])})
 
@@ -2573,9 +2574,9 @@ def test_near_bound_flag_model_bounds():
 
 def test_near_bound_flag_flux_bounds_units():
     """
-    Regression test that the near_bound flag (bit 32) is evaluated for
-    a flux parameter with bounds when the data has units (the fitted
-    flux is then a Quantity).
+    Regression test that the near_bound flag (bit 32) is evaluated for a
+    flux parameter with bounds when the data has units (the fitted flux
+    is then a Quantity).
     """
     unit = u.Jy
     model = CircularGaussianPRF(fwhm=2.7)
@@ -2607,8 +2608,8 @@ def test_near_bound_flag_flux_bounds_units():
 
 def test_error_weights_message_has_source_context():
     """
-    Regression test that the invalid-error-value message names the
-    fit region location.
+    Regression test that the invalid-error-value message names the fit
+    region location.
     """
     model = CircularGaussianPRF(fwhm=2.7)
     data, params = make_psf_model_image((35, 35), model, 1,

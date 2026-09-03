@@ -38,8 +38,8 @@ def test_elliptical_overlap_grid(grid_size, maj_size, min_size, angle,
 @pytest.mark.parametrize('theta', [0.0, 0.3])
 def test_elliptical_overlap_smaller_than_pixel(theta):
     """
-    An ellipse smaller than a pixel, centered exactly on a pixel
-    center, must return the ellipse area, not 1.0.
+    An ellipse smaller than a pixel, centered exactly on a pixel center,
+    must return the ellipse area, not 1.0.
     """
     area = np.pi * 0.4 * 0.3
     grid = elliptical_overlap_grid(-1.5, 1.5, -1.5, 1.5, 3, 3,

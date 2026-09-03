@@ -5,9 +5,8 @@ Benchmarks for the photutils.psf_matching subpackage.
 
 The benchmarks cover the per-call cost of the kernel-making functions
 (``make_kernel`` and ``make_wiener_kernel`` for each penalty), the
-scaling of the kernel computation with the PSF size, the per-call
-cost of the window classes, and ``resize_psf`` for each spline
-order.
+scaling of the kernel computation with the PSF size, the per-call cost
+of the window classes, and ``resize_psf`` for each spline order.
 
 Run ``python benchmarks/bench_psf_matching.py --help`` to see the
 available options.

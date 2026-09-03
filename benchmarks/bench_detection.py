@@ -4,14 +4,14 @@
 Benchmarks for the photutils.detection subpackage.
 
 The benchmarks cover the star finder classes (DAOStarFinder,
-IRAFStarFinder, and StarFinder) for both source detection and
-catalog-only (xycoords) runs, the find_peaks detection modes, the
-fast circular (min_separation) peak detection versus the equivalent
-circular-footprint maximum filter, and concurrent find_stars calls on
-a shared finder instance across thread counts.
+IRAFStarFinder, and StarFinder) for both source detection and catalog-
+only (xycoords) runs, the find_peaks detection modes, the fast circular
+(min_separation) peak detection versus the equivalent circular-footprint
+maximum filter, and concurrent find_stars calls on a shared finder
+instance across thread counts.
 
-Run ``python benchmarks/bench_detection.py --help`` to see the
-available options.
+Run ``python benchmarks/bench_detection.py --help`` to see the available
+options.
 """
 
 import argparse
@@ -218,8 +218,8 @@ def bench_find_peaks(*, n_sources=1000, repeats=3, seed=0):
 def bench_min_separation(*, n_sources=1000, radii=(5, 10, 25, 50),
                          repeats=3, seed=0):
     """
-    Benchmark the fast circular (min_separation) peak detection
-    against the equivalent circular-footprint maximum filter.
+    Benchmark the fast circular (min_separation) peak detection against
+    the equivalent circular-footprint maximum filter.
 
     Parameters
     ----------

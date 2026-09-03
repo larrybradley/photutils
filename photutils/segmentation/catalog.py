@@ -124,8 +124,8 @@ class _SegmentValues:
     @property
     def values(self):
         """
-        A list of the 1D value arrays of each source (a single NaN for
-        a completely masked source).
+        A list of the 1D value arrays of each source (a single NaN for a
+        completely masked source).
         """
         return np.split(self.packed, self.offsets[1:-1])
 
@@ -399,6 +399,7 @@ def use_detcat(method):
     decorator : function
         The decorated method.
     """
+
     @functools.wraps(method)
     def _use_detcat(self, *args, **kwargs):
         if self._detection_catalog is None:
@@ -1106,11 +1107,11 @@ class SourceCatalog:
         (``ndarray`` values are reshaped, while other objects are
         wrapped in a length-1 list).
 
-        Reading the collapsed value rather than the raw stored value
-        is important. A per-source array can be stored either with
-        its leading length-1 axis intact (when computed directly for
-        a scalar catalog) or with that axis already removed (when a
-        multi-source value is cached and then sliced to a scalar). Going
+        Reading the collapsed value rather than the raw stored value is
+        important. A per-source array can be stored either with its
+        leading length-1 axis intact (when computed directly for a
+        scalar catalog) or with that axis already removed (when a multi-
+        source value is cached and then sliced to a scalar). Going
         through the scalar collapse normalizes both cases to the same
         shape, so this method is robust regardless of how the value was
         produced.
@@ -1161,8 +1162,8 @@ class SourceCatalog:
 
     def _get_batch_convdata(self):
         """
-        Return the cached C-contiguous float64 convolved-data array
-        used by the batch moment kernels.
+        Return the cached C-contiguous float64 convolved-data array used
+        by the batch moment kernels.
         """
         arrays = self._get_batch_arrays()
         if 'convdata' not in arrays:
@@ -1205,8 +1206,8 @@ class SourceCatalog:
 
     def _get_batch_bboxes(self):
         """
-        Return the per-source segment bounding boxes as
-        ``(iymin, iymax, ixmin, ixmax)`` C-contiguous intp arrays.
+        Return the per-source segment bounding boxes as ``(iymin, iymax,
+        ixmin, ixmax)`` C-contiguous intp arrays.
         """
         return tuple(np.ascontiguousarray(col)
                      for col in self._batch_bboxes.T)
@@ -1583,8 +1584,7 @@ class SourceCatalog:
 
         Each mask is `True` for pixels outside the source segment, for
         non-finite ``data`` values, and where the input ``mask`` is
-        `True`. These masks are applied to the masked cutout
-        properties.
+        `True`. These masks are applied to the masked cutout properties.
         """
         return [segm_mask
                 | self._make_cutout_data_mask(data_cutout, mask_cutout)
@@ -1927,11 +1927,11 @@ class SourceCatalog:
         The bitwise OR of the pixel condition bits over each source
         segment, as a uint8 array.
 
-        Bit 1 (value 1) is set if any segment pixel is input-masked,
-        bit 2 (value 2) if any segment ``data`` value is non-finite,
-        and bit 3 (value 4) if any segment ``error`` value is
-        non-finite. The bits are evaluated on every segment pixel,
-        including input-masked pixels.
+        Bit 1 (value 1) is set if any segment pixel is input-masked, bit
+        2 (value 2) if any segment ``data`` value is non-finite, and bit
+        3 (value 4) if any segment ``error`` value is non-finite. The
+        bits are evaluated on every segment pixel, including input-
+        masked pixels.
         """
         arrays = self._get_batch_arrays()
         pixel_flags = arrays['mask'].copy()
@@ -2119,8 +2119,8 @@ class SourceCatalog:
 
     def _segment_gather(self, array):
         """
-        Pack the unmasked values of ``array`` within each source
-        segment into one array (see ``batch_segment_gather``).
+        Pack the unmasked values of ``array`` within each source segment
+        into one array (see ``batch_segment_gather``).
 
         Parameters
         ----------
@@ -2168,8 +2168,8 @@ class SourceCatalog:
     @cached_property
     def _data_values(self):
         """
-        The unmasked data values within each source segment, as a
-        packed `_SegmentValues` container.
+        The unmasked data values within each source segment, as a packed
+        `_SegmentValues` container.
 
         A single NaN is held for completely-masked sources.
         """
@@ -2191,8 +2191,8 @@ class SourceCatalog:
     @cached_property
     def _background_values(self):
         """
-        The unmasked background values within each source segment, as
-        a packed `_SegmentValues` container, or `None` if no background
+        The unmasked background values within each source segment, as a
+        packed `_SegmentValues` container, or `None` if no background
         array was input.
 
         A single NaN is held for completely-masked sources.
@@ -2623,8 +2623,8 @@ class SourceCatalog:
     @use_detcat
     def _centroid_win_results(self):
         """
-        The "windowed" centroid coordinates, their error variances
-        and covariance, and the fallback indicator as a 2D array with
+        The "windowed" centroid coordinates, their error variances and
+        covariance, and the fallback indicator as a 2D array with
         columns ``(x, y, var_x, var_y, cov_xy, fallback)`` and shape
         ``(n_labels, 6)``.
 
@@ -2738,8 +2738,8 @@ class SourceCatalog:
         The ``x`` coordinate of the "windowed" centroid
         (`centroid_win`).
 
-        The window centroid is computed using an iterative algorithm
-        to derive a more accurate centroid. It is equivalent to
+        The window centroid is computed using an iterative algorithm to
+        derive a more accurate centroid. It is equivalent to
         `SourceExtractor`_'s XWIN_IMAGE parameters.
         """
         return self._array('centroid_win')[:, 0]
@@ -2751,8 +2751,8 @@ class SourceCatalog:
         The ``y`` coordinate of the "windowed" centroid
         (`centroid_win`).
 
-        The window centroid is computed using an iterative algorithm
-        to derive a more accurate centroid. It is equivalent to
+        The window centroid is computed using an iterative algorithm to
+        derive a more accurate centroid. It is equivalent to
         `SourceExtractor`_'s YWIN_IMAGE parameters.
         """
         return self._array('centroid_win')[:, 1]
@@ -2768,8 +2768,8 @@ class SourceCatalog:
         through the Gaussian-weighted windowed centroid formula. If
         ``error`` was not input, then the errors are NaN.
 
-        Sources where the windowed centroid fell back to the
-        isophotal `centroid` have the isophotal centroid errors (see
+        Sources where the windowed centroid fell back to the isophotal
+        `centroid` have the isophotal centroid errors (see
         `centroid_err`). The errors are NaN where the half-light radius
         is not finite.
         """
@@ -3051,8 +3051,8 @@ class SourceCatalog:
         using the delta method. If ``error`` was not input, then the
         errors are NaN.
 
-        Sources where the quadratic centroid fell back to the
-        isophotal `centroid` have the isophotal centroid errors (see
+        Sources where the quadratic centroid fell back to the isophotal
+        `centroid` have the isophotal centroid errors (see
         `centroid_err`). The errors are NaN for sources where the
         maximum data value is at the edge of the source segment (where
         the position of the maximum pixel is returned instead of a fit).
@@ -3127,12 +3127,12 @@ class SourceCatalog:
         The 1-sigma errors on the `sky_centroid` position as a ``(east,
         north)`` `~astropy.units.Quantity` in arcsec.
 
-        The pixel error covariance of the `centroid` is transported
-        to the local tangent plane with the WCS Jacobian evaluated
-        at each source position. The first column is the error
-        along East (the Right Ascension direction as a great-circle
-        angle, i.e., including the cos(dec) factor) and the second
-        is along North (Declination).
+        The pixel error covariance of the `centroid` is transported to
+        the local tangent plane with the WCS Jacobian evaluated at each
+        source position. The first column is the error along East (the
+        Right Ascension direction as a great-circle angle, i.e.,
+        including the cos(dec) factor) and the second is along North
+        (Declination).
 
         `None` if ``wcs`` is not input. NaN where the pixel errors are
         unavailable (e.g., no ``error`` input).
@@ -3782,8 +3782,8 @@ class SourceCatalog:
         The total area of the source segment in units of pixels**2.
 
         This area is simply the area of the source segment from the
-        input ``segmentation_image``. It does not take into account
-        any data masking (i.e., a ``mask`` input to `SourceCatalog` or
+        input ``segmentation_image``. It does not take into account any
+        data masking (i.e., a ``mask`` input to `SourceCatalog` or
         invalid ``data`` values).
         """
         segm = self._segmentation_image
@@ -3885,14 +3885,14 @@ class SourceCatalog:
         sources whose raw covariance matrix is singular or nearly
         singular, including rank-1 degenerate sources.
 
-        This is the mask used for the ``'singular_covariance'``
-        flag. It matches the equivalent aperture flag (see
-        `~photutils.aperture.decode_aperture_flags`). In addition to
-        the determinant test used by ``_singular_covariance_mask``, a
-        source is flagged when its minor-axis variance (the smaller
-        eigenvalue of the raw covariance matrix) is less than ``1 /
-        12``. The determinant test alone misses elongated sources that
-        are unresolved along only one axis. Sources with non-finite
+        This is the mask used for the ``'singular_covariance'`` flag. It
+        matches the equivalent aperture flag (see
+        `~photutils.aperture.decode_aperture_flags`). In addition to the
+        determinant test used by ``_singular_covariance_mask``, a source
+        is flagged when its minor-axis variance (the smaller eigenvalue
+        of the raw covariance matrix) is less than ``1 / 12``. The
+        determinant test alone misses elongated sources that are
+        unresolved along only one axis. Sources with non-finite
         covariance are not flagged.
         """
         covar = self._raw_covariance
@@ -3928,9 +3928,9 @@ class SourceCatalog:
         function that has the same normalized second-order moments as
         the source, before any regularization.
 
-        This unregularized matrix is shared by `_covariance`
-        (which regularizes a copy) and by the masks that test
-        it for singularity (``_singular_covariance_mask`` and
+        This unregularized matrix is shared by `_covariance` (which
+        regularizes a copy) and by the masks that test it for
+        singularity (``_singular_covariance_mask`` and
         ``_singular_covariance_flag_mask``). Callers that modify the
         matrix in place must operate on a copy so the cached value is
         not corrupted.
@@ -4074,8 +4074,8 @@ class SourceCatalog:
         Gaussian function that has the same second-order moments as the
         source.
 
-        The angle increases in the counter-clockwise direction and is
-        in the range (-90, 90] degrees.
+        The angle increases in the counter-clockwise direction and is in
+        the range (-90, 90] degrees.
         """
         covar = self._covariance
         orient_radians = 0.5 * np.arctan2(2.0 * covar[:, 0, 1],
@@ -5354,8 +5354,8 @@ class SourceCatalog:
     @use_detcat
     def _flux_radius_optimizer_args(self):
         """
-        The prepared per-source inputs of the flux-radius
-        root-find (see ``batch_flux_radius_prepare``), as a
+        The prepared per-source inputs of the flux-radius root-find (see
+        ``batch_flux_radius_prepare``), as a
         `~photutils.segmentation._batch_results.BatchFluxRadiusArgs`
         with one entry per source.
 

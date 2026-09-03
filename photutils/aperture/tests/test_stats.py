@@ -293,8 +293,8 @@ class TestSumMethod(BaseApertureStatsData):
 
 class TestMasking(BaseApertureStatsData):
     """
-    Tests for the mask keyword, local background, and apertures
-    that do not overlap the data.
+    Tests for the mask keyword, local background, and apertures that do
+    not overlap the data.
     """
 
     def test_mask(self):
@@ -527,8 +527,8 @@ class TestIndexing(BaseApertureStatsData):
     def test_fancy_slicing_list_cache(self):
         """
         Test fancy-index slicing of an evaluated list-valued cached
-        property (e.g., the ``bbox`` BoundingBox list), which cannot
-        be indexed directly with an array index.
+        property (e.g., the ``bbox`` BoundingBox list), which cannot be
+        indexed directly with an array index.
         """
         apstats = self.apstats1.copy()
         bbox = apstats.bbox  # cache the per-source BoundingBox list
@@ -575,8 +575,8 @@ class TestIndexing(BaseApertureStatsData):
         dependent property was not.
 
         This parametrizes over the dependencies that feed other
-        properties through ``_array``, caches exactly one of them on
-        the parent, slices to a scalar, and checks that every property
+        properties through ``_array``, caches exactly one of them on the
+        parent, slices to a scalar, and checks that every property
         matches the same scalar computed from scratch.
         """
         scalar_props = ('isscalar', 'n_positions')
@@ -605,8 +605,8 @@ class TestDeprecations(BaseApertureStatsData):
 
     def test_deprecated_attributes(self):
         """
-        Test that deprecated attributes are still available and
-        give the same value as the new attributes, but raise an
+        Test that deprecated attributes are still available and give the
+        same value as the new attributes, but raise an
         AstropyDeprecationWarning.
         """
         apstats = ApertureStats(self.data, self.aperture, error=self.error)
@@ -729,8 +729,8 @@ class TestInputValidation(BaseApertureStatsData):
 
 class TestMaskPathParity(BaseApertureStatsData):
     """
-    The mask-based code path must give the same results as the
-    fast batch code path.
+    The mask-based code path must give the same results as the fast
+    batch code path.
     """
 
     @pytest.mark.parametrize('aperture', [
@@ -754,9 +754,9 @@ class TestMaskPathParity(BaseApertureStatsData):
     ])
     def test_fast_matches_mask(self, aperture, sigma_clip):
         """
-        Regression test that the fast Cython statistics path produces the
-        same results as the mask-based path for every property, including
-        when sigma-clipping is applied.
+        Regression test that the fast Cython statistics path produces
+        the same results as the mask-based path for every property,
+        including when sigma-clipping is applied.
         """
         numeric_props = (
             'sum', 'sum_err', 'sum_aper_area', 'center_aper_area',
@@ -857,9 +857,9 @@ class TestMaskPathParity(BaseApertureStatsData):
     @pytest.mark.parametrize('with_units', [False, True])
     def test_slow_path_extended(self, sum_method, with_units):
         """
-        Test that the mask-based code path matches the fast path for data
-        units, ``sum_method='center'``, and a non-overlapping source,
-        exercising the unit-application and no-overlap branches.
+        Test that the mask-based code path matches the fast path for
+        data units, ``sum_method='center'``, and a non-overlapping
+        source, exercising the unit-application and no-overlap branches.
         """
         positions = [*self.positions, (-50.0, -50.0)]  # last has no overlap
         data = self.data
@@ -947,10 +947,9 @@ class TestMaskPathParity(BaseApertureStatsData):
 
     def test_mask_nonfinite_data(self):
         """
-        Test that the fast batch driver correctly combines a
-        user-supplied ``mask`` with the mask derived from non-finite
-        ``data`` values, giving the same result as the mask-based code
-        path.
+        Test that the fast batch driver correctly combines a user-
+        supplied ``mask`` with the mask derived from non-finite ``data``
+        values, giving the same result as the mask-based code path.
         """
         data = self.data.copy()
         data[168, 145] = np.nan
@@ -988,8 +987,8 @@ class TestStandardErrors(BaseApertureStatsData):
 
     def test_mean_err_single_pixel(self):
         """
-        Test that the standard error is NaN for apertures with fewer than
-        two unmasked pixels.
+        Test that the standard error is NaN for apertures with fewer
+        than two unmasked pixels.
         """
         data = np.zeros((11, 11))
         data[5, 5] = 1.0
@@ -1103,8 +1102,8 @@ class TestMadStdScale:
 
 class TestRegionInput:
     """
-    A regions.Region input must give the same results as the
-    equivalent aperture.
+    A regions.Region input must give the same results as the equivalent
+    aperture.
     """
 
     @pytest.mark.skipif(not HAS_REGIONS, reason='regions is required')
@@ -1392,9 +1391,9 @@ class TestNThreads:
     @pytest.mark.parametrize('use_sigma_clip', [False, True])
     def test_identical_results(self, n_threads, use_sigma_clip):
         """
-        Test that multithreaded statistics are identical to the
-        single-threaded computation for every property, including for
-        off-edge positions, masked pixels, and non-finite data values.
+        Test that multithreaded statistics are identical to the single-
+        threaded computation for every property, including for off-edge
+        positions, masked pixels, and non-finite data values.
         """
         data, error, mask, positions = self.make_inputs()
         wcs = make_wcs(data.shape)
@@ -1471,9 +1470,9 @@ class TestNThreads:
 
     def test_mask_based_fallback(self):
         """
-        Test that apertures that do not support the batch code path
-        give correct results with n_threads > 1 (the mask-based code
-        path stays serial).
+        Test that apertures that do not support the batch code path give
+        correct results with n_threads > 1 (the mask-based code path
+        stays serial).
         """
         data, error, _, positions = self.make_inputs()
         aper = NoBatchCircularAperture(positions, r=7.0)
@@ -1486,9 +1485,9 @@ class TestNThreads:
 
     def test_empty_positions(self):
         """
-        Test that an aperture with zero positions works with
-        n_threads > 1 (regression test for the chunking helper, which
-        must fall back to the serial path for zero chunks).
+        Test that an aperture with zero positions works with n_threads >
+        1 (regression test for the chunking helper, which must fall back
+        to the serial path for zero chunks).
         """
         data = np.ones((11, 11))
         aper = CircularAperture(np.empty((0, 2)), r=3.0)
@@ -1527,8 +1526,8 @@ def test_overridden_bbox_fallback():
     overrides ``bbox``.
 
     The bounds are normally computed from the aperture's vectorized
-    integer bounds without creating per-position BoundingBox objects.
-    An overridden ``bbox`` must fall back to reading the objects.
+    integer bounds without creating per-position BoundingBox objects. An
+    overridden ``bbox`` must fall back to reading the objects.
     """
     data = np.ones((60, 60))
     positions = [(20.0, 20.0), (35.5, 24.2), (10.1, 40.7)]
@@ -1569,8 +1568,8 @@ class TestCenterCutoutParity:
     @staticmethod
     def assert_cutout_lists_equal(fast_list, slow_list):
         """
-        Assert two per-source cutout lists are exactly equal,
-        including the data values under the mask.
+        Assert two per-source cutout lists are exactly equal, including
+        the data values under the mask.
         """
         for fast, slow in zip(fast_list, slow_list, strict=True):
             assert_equal(np.ma.getdata(fast), np.ma.getdata(slow))
@@ -1591,9 +1590,9 @@ class TestCenterCutoutParity:
     @pytest.mark.parametrize('use_error', [False, True])
     def test_matches_mask_path(self, use_sigma_clip, use_error):
         """
-        Test that the buffer-reconstructed cutouts equal the
-        mask-based cutouts, including non-finite pixels, partial
-        overlaps, and the no-overlap sentinel arrays.
+        Test that the buffer-reconstructed cutouts equal the mask-based
+        cutouts, including non-finite pixels, partial overlaps, and the
+        no-overlap sentinel arrays.
         """
         data, error, mask, positions = self.make_inputs()
         sigma_clip = (SigmaClip(sigma=2.0, maxiters=10) if use_sigma_clip
@@ -1654,9 +1653,9 @@ class TestCenterCutoutParity:
 
     def test_correct_mode_fallback(self):
         """
-        Test that mask_method='correct' uses the mask-based cutout
-        path (the mirrored error values are not recoverable from the
-        packed buffers) and still produces the corrected cutouts.
+        Test that mask_method='correct' uses the mask-based cutout path
+        (the mirrored error values are not recoverable from the packed
+        buffers) and still produces the corrected cutouts.
         """
         data = np.ones((50, 50))
         segm = np.zeros((50, 50), dtype=int)

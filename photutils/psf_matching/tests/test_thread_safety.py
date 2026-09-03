@@ -39,9 +39,8 @@ def _run_concurrently(task, n_threads=N_THREADS):
 
 def test_concurrent_make_kernel(psf1, psf2):
     """
-    Test that concurrent make_kernel calls on shared input arrays
-    return results identical to a serial call and do not modify the
-    inputs.
+    Test that concurrent make_kernel calls on shared input arrays return
+    results identical to a serial call and do not modify the inputs.
     """
     window = SplitCosineBellWindow(alpha=0.2, beta=0.3)
     psf1_orig = psf1.copy()
@@ -60,8 +59,8 @@ def test_concurrent_make_kernel(psf1, psf2):
 
 def test_concurrent_make_wiener_kernel(psf1, psf2):
     """
-    Test that concurrent make_wiener_kernel calls with a penalty
-    return results identical to a serial call.
+    Test that concurrent make_wiener_kernel calls with a penalty return
+    results identical to a serial call.
     """
     expected = make_wiener_kernel(psf1, psf2, penalty='laplacian')
 
@@ -74,9 +73,8 @@ def test_concurrent_make_wiener_kernel(psf1, psf2):
 
 def test_concurrent_resize_psf(psf1):
     """
-    Test that concurrent resize_psf calls on a shared input array
-    return results identical to a serial call and do not modify the
-    input.
+    Test that concurrent resize_psf calls on a shared input array return
+    results identical to a serial call and do not modify the input.
     """
     psf1_orig = psf1.copy()
     expected = resize_psf(psf1, 0.1, 0.05)

@@ -4,9 +4,9 @@
 Benchmarks for the photutils.morphology subpackage.
 
 The benchmarks cover the per-call cost of data_properties (catalog
-construction alone and with the morphological properties computed,
-with and without a mask, background, and WCS) and the scaling of gini
-with array size, with and without a mask.
+construction alone and with the morphological properties computed, with
+and without a mask, background, and WCS) and the scaling of gini with
+array size, with and without a mask.
 
 Run ``python benchmarks/bench_morphology.py --help`` to see the
 available options.

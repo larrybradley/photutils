@@ -2,8 +2,8 @@
 """
 Tools for segmentation-based masking of aperture photometry.
 
-These helpers validate the ``segmentation_image``,
-``labels``, and ``mask_method`` keywords shared by
+These helpers validate the ``segmentation_image``, ``labels``, and
+``mask_method`` keywords shared by
 `~photutils.aperture.PixelAperture._photometry`,
 `~photutils.aperture.AperturePhotometry`, and
 `~photutils.aperture.ApertureStats`. They also apply the local masking
@@ -25,8 +25,8 @@ SEG_METHOD_CODES = {'none': 0, 'mask': 1, 'source_only': 2, 'correct': 3}
 def process_segmentation_inputs(segmentation_image, labels,
                                 mask_method, positions, data_shape):
     """
-    Validate the segmentation-masking inputs and resolve the
-    per-aperture source labels.
+    Validate the segmentation-masking inputs and resolve the per-
+    aperture source labels.
 
     Parameters
     ----------
