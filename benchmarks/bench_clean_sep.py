@@ -21,11 +21,15 @@ The scenes are:
   in their wings, plus noise, which triggers many absorptions
 
 The per-source measurements agree with SEP to float32 precision, so
-the two codes remove the same labels except near the decision
-boundary. There, SEP occasionally keeps a source that photutils flags,
-because the SourceExtractor heap that selects the minarea-th brightest
-pixel descends into the wrong node during its sift-down and can leave
-a larger value at the root. The SEP cleaning cost is the difference
+the two codes remove the same labels apart from two documented
+differences. Near the decision boundary, SEP occasionally keeps a
+source that photutils flags, because the SourceExtractor heap that
+selects the minarea-th brightest pixel descends into the wrong node
+during its sift-down and can leave a larger value at the root. When
+three or more sources interact, SEP tests them in label order and
+lets an already-absorbed source absorb later ones, whereas photutils
+resolves the sources in order of decreasing flux and only lets
+surviving sources absorb. The SEP cleaning cost is the difference
 between its two runs.
 
 Requires the optional ``sep`` package. Run ``python
