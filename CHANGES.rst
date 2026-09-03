@@ -473,6 +473,12 @@ New Features
     typically ~3-15 times faster, depending on the number of labels and
     the fraction of labeled pixels. [#2464]
 
+  - Added a ``get_spurious_labels`` function implementing the
+    SourceExtractor CLEAN test. It identifies the segments that are
+    likely spurious detections in the wings of a brighter neighbor
+    and reports the source that absorbs each one, without modifying
+    the segmentation image. [#XXXX]
+
 - ``photutils.utils``
 
   - Added a new ``DeblendWarning`` class, a subclass of astropy's
