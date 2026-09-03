@@ -419,6 +419,12 @@ New Features
     windowed or quadratic centroid was substituted by the isophotal
     centroid or peak pixel, or the value is NaN. [#2450]
 
+  - Added a ``get_spurious_labels`` function implementing the
+    SourceExtractor CLEAN test. It identifies the segments that are
+    likely spurious detections in the wings of a brighter neighbor
+    and reports the source that absorbs each one, without modifying
+    the segmentation image. [#XXXX]
+
 - ``photutils.utils``
 
   - Added a new ``DeblendWarning`` class, a subclass of astropy's
