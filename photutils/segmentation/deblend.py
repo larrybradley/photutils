@@ -129,8 +129,8 @@ def deblend_sources(data, segmentation_image, n_pixels, *, labels=None,
         the threshold levels between the source minimum and maximum.
         The ``'exponential'`` and ``'sinh'`` modes differ in that
         the ``'exponential'`` levels are dependent on the source
-        maximum/minimum ratio (smaller ratios are more linear; larger
-        ratios are more exponential), while the ``'sinh'`` levels
+        maximum/minimum ratio (smaller ratios are more linear and
+        larger ratios are more exponential), while the ``'sinh'`` levels
         are not. Unlike the ``'exponential'`` mode, the ``'sinh'``
         and ``'linear'`` modes are well defined for sources with
         non-positive minimum data values. For such sources, the
@@ -162,10 +162,11 @@ def deblend_sources(data, segmentation_image, n_pixels, *, labels=None,
 
     n_processes : int, optional
         This keyword is deprecated and has no effect. Multiprocessing
-        no longer provides any benefit: the deblending computation is
-        now dominated by compiled code and its process startup and
-        data-pickling overheads made it slower than the serial
-        implementation. Use the ``n_threads`` keyword instead.
+        no longer provides any benefit. The deblending computation is
+        now dominated by compiled code, and the process startup and
+        data-pickling overheads of multiprocessing made it slower than
+        the serial implementation. Use the ``n_threads`` keyword
+        instead.
 
         .. deprecated:: 3.1
             The ``n_processes`` keyword is deprecated and will be
@@ -188,8 +189,8 @@ def deblend_sources(data, segmentation_image, n_pixels, *, labels=None,
         of the returned segmentation image is a dictionary that stores
         the input labels for which the deblending mode was changed
         to a fallback mode as arrays under ``'nonposmin_labels'``
-        (non-positive minimum data values; changed to "sinh") and
-        ``'n_markers_labels'`` (too many potential deblended sources;
+        (non-positive minimum data values, changed to "sinh") and
+        ``'n_markers_labels'`` (too many potential deblended sources,
         changed to "linear") keys. The dictionary is empty if no mode
         fallbacks occurred. The ``flags`` attribute of the returned
         segmentation image records per-source deblending provenance. See
@@ -262,8 +263,8 @@ def deblend_sources(data, segmentation_image, n_pixels, *, labels=None,
         labels = np.atleast_1d(labels)
         segmentation_image.check_labels(labels)
 
-    # Include only sources that have at least (2 * n_pixels);
-    # this is required for a source to be deblended into multiple
+    # Include only sources that have at least (2 * n_pixels).
+    # This is required for a source to be deblended into multiple
     # sources, each with a minimum of n_pixels
     mask = (segmentation_image.areas[
             segmentation_image.get_indices(labels)]
@@ -278,7 +279,7 @@ def deblend_sources(data, segmentation_image, n_pixels, *, labels=None,
     label_indices = segmentation_image.get_indices(labels)
     all_slices = [segmentation_image.slices[idx] for idx in label_indices]
 
-    # Contiguous, driver-compatible views of the inputs; casting the
+    # Contiguous, driver-compatible views of the inputs. Casting the
     # non-float data dtypes to float64 is exact for the threshold
     # comparisons, matching the NumPy promotion rules
     if data.dtype in (np.float32, np.float64):
@@ -293,8 +294,8 @@ def deblend_sources(data, segmentation_image, n_pixels, *, labels=None,
 
     n_chunks = min(int(n_threads), len(labels))
     if n_chunks > 1:
-        # The sources are divided into chunks processed concurrently;
-        # the results are assembled in the input order, so they are
+        # The sources are divided into chunks processed concurrently.
+        # The results are assembled in the input order, so they are
         # identical to the single-threaded computation
         chunk_indices = np.array_split(np.arange(len(labels)), n_chunks)
 
