@@ -262,6 +262,63 @@ Let's plot one of the deblended sources:
     fig.tight_layout()
 
 
+Removing Spurious Detections
+----------------------------
+
+Bright sources can produce spurious detections in their wings, for
+example fragments of a stellar halo or of a diffraction spike that
+rise above the detection threshold as separate segments or deblended
+children. The :func:`~photutils.segmentation.get_spurious_labels`
+function implements the `SourceExtractor`_ CLEAN test to identify
+them. Each source is described by a Moffat-like wing model built from
+its isophotal measurements. A fainter source is judged spurious when
+the wing model of a brighter neighbor, evaluated at the fainter
+source's centroid, exceeds the height of its ``n_pixels``-th brightest
+pixel above the threshold. The ``clean_param`` keyword sets the
+exponent of the wing model (the SourceExtractor ``CLEAN_PARAM``
+parameter).
+
+The function returns a table of the spurious labels and the label of
+the surviving source that absorbs each one. It does not modify the
+segmentation image, so you choose how to apply the result. Merging
+each spurious segment into its absorber matches SourceExtractor, which
+adds the pixels of a cleaned object to the object that absorbed it.
+Removing the spurious segments instead matches the SEP package, which
+drops them from its segmentation map. Here a faint blob sits in the
+wing of a bright star and is merged into the star's segment::
+
+    >>> import numpy as np
+    >>> from astropy.modeling.models import Gaussian2D
+    >>> from photutils.segmentation import (detect_sources,
+    ...                                     get_spurious_labels)
+    >>> y_grid, x_grid = np.mgrid[0:100, 0:60]
+    >>> star_data = (Gaussian2D(1000, 30, 70, 3.5, 3.5)(x_grid, y_grid)
+    ...              + Gaussian2D(7, 30, 52, 2.5, 2.5)(x_grid, y_grid))
+    >>> star_segm = detect_sources(star_data, 5.0, n_pixels=4)
+    >>> spurious = get_spurious_labels(star_data, star_segm, 5.0,
+    ...                                n_pixels=4)
+    >>> print(spurious)
+    label absorbed_by
+    ----- -----------
+        1           2
+    >>> for absorber in np.unique(spurious['absorbed_by']):
+    ...     labels = spurious['label'][spurious['absorbed_by'] == absorber]
+    ...     star_segm.reassign_labels(labels, absorber)
+    >>> star_segm.n_labels
+    1
+
+To drop the spurious segments instead, use
+``star_segm.remove_labels(spurious['label'])``.
+
+The ``data``, ``threshold``, and ``n_pixels`` inputs (and the
+``convolved_data`` keyword, if a convolved image was used for
+detection) should match those used to make the segmentation image.
+The test is a heuristic tuned for stellar profiles. A faint real
+companion or a piece of galaxy substructure within the modeled wing
+of a bright neighbor is flagged along with true spurious detections,
+so apply the result with care in crowded or extended fields.
+
+
 SourceFinder
 ------------
 
