@@ -75,6 +75,21 @@ python benchmarks/bench_catalog_sep.py
 python benchmarks/bench_catalog_sep.py --which benchmark --n-sources 4000
 ```
 
+## Spurious detections versus SEP (`bench_clean_sep.py`)
+
+Validation and benchmark of `get_spurious_labels` against SEP
+cleaning. For each scene (the blended Gaussian-pair field and a halo
+field of bright stars with faint sources in their wings), `sep.extract`
+is run without and with cleaning, the labels that vanish from the
+cleaned segmentation map are compared with the labels returned by
+`get_spurious_labels` on the same segmentation map, and the two are
+timed. Requires the optional `sep` package.
+
+```bash
+python benchmarks/bench_clean_sep.py
+python benchmarks/bench_clean_sep.py --halo-size 3000 --repeats 5
+```
+
 ## SourceCatalog cross-version validation (`validate_catalog_versions.py`)
 
 Validation of `SourceCatalog` results across photutils versions. The
