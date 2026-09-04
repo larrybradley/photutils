@@ -20,6 +20,19 @@ The scenes are:
 * a halo field: a few very bright stars with faint sources scattered
   in their wings, plus noise, which triggers many absorptions
 
+Both scenes are run with the ``'moffat'`` wing model, which SEP
+implements, and the ``'measured'`` wing model, which has no SEP
+counterpart and is timed and counted alongside. The halo field's
+stars are pure Gaussians, so a correct measured wing absorbs nothing
+there, and its measured count records the crowding limit of the
+estimator.
+
+A third scene has ground truth: a noisy field with a de Vaucouleurs
+galaxy and an exponential disk, real faint companions injected around
+both, and spurious fragments produced by the noise on the bulge's
+halo. It scores each wing model by the real companions and the other
+detections it absorbs near each galaxy.
+
 The per-source measurements agree with SEP to float32 precision, so
 the two codes remove the same labels apart from two documented
 differences. Near the decision boundary, SEP occasionally keeps a
@@ -42,11 +55,12 @@ from functools import partial
 
 import numpy as np
 from astropy.convolution import convolve
-from astropy.modeling.models import Gaussian2D
+from astropy.modeling.models import Gaussian2D, Sersic2D
 from bench_helpers import print_environment, time_best
 from bench_segmentation import N_PIXELS, THRESHOLD, make_inputs
 
-from photutils.segmentation import (SegmentationImage, get_spurious_labels,
+from photutils.segmentation import (SegmentationImage, detect_sources,
+                                    get_spurious_labels,
                                     make_2dgaussian_kernel)
 
 try:
@@ -60,6 +74,8 @@ except ImportError as exc:
 CLEAN_PARAM = 1.0
 HALO_THRESHOLD = 5.0
 HALO_N_PIXELS = 5
+WING_MODELS = ('moffat', 'measured')
+GALAXY_N_PIXELS = 5
 
 
 def make_halo_image(size, *, n_bright=5, n_wing=300, n_field=200, seed=0):
@@ -218,8 +234,9 @@ def compare_scene(name, data, threshold, n_pixels, kernel, *, repeats=3):
     convolved_data = convolve(data, kernel)
 
     print(f'\n-- {name} --')
-    print(f'{"variant":>12}{"objects":>9}{"SEP":>7}{"phot":>7}{"both":>7}'
-          f'{"SEP only":>10}{"phot only":>11}{"t_phot":>12}{"t_SEP":>12}')
+    print(f'{"variant":>12}{"objects":>9}{"SEP":>7}{"moffat":>8}'
+          f'{"both":>7}{"SEP only":>10}{"moffat only":>13}{"measured":>10}'
+          f'{"t_moffat":>10}{"t_measured":>12}{"t_SEP":>10}')
     for deblend in (False, True):
         sep_run = partial(run_sep, data, threshold, n_pixels, kernel32,
                           deblend=deblend)
@@ -228,25 +245,148 @@ def compare_scene(name, data, threshold, n_pixels, kernel, *, repeats=3):
         removed_sep = sep_removed_labels(segmap, segmap_clean)
 
         segm = SegmentationImage(segmap.astype(int))
-        bench = partial(get_spurious_labels, data, segm, threshold,
-                        n_pixels, convolved_data=convolved_data,
-                        clean_param=CLEAN_PARAM)
-        removed_phot = np.asarray(bench()['label'])
+        removed = {}
+        times = {}
+        for wing_model in WING_MODELS:
+            bench = partial(get_spurious_labels, data, segm, threshold,
+                            n_pixels, convolved_data=convolved_data,
+                            clean_param=CLEAN_PARAM, wing_model=wing_model)
+            removed[wing_model] = np.asarray(bench()['label'])
+            times[wing_model] = time_best(bench, repeats=repeats)
 
-        both = np.intersect1d(removed_sep, removed_phot)
-        sep_only = np.setdiff1d(removed_sep, removed_phot)
-        phot_only = np.setdiff1d(removed_phot, removed_sep)
-
-        t_phot = time_best(bench, repeats=repeats)
+        both = np.intersect1d(removed_sep, removed['moffat'])
+        sep_only = np.setdiff1d(removed_sep, removed['moffat'])
+        moffat_only = np.setdiff1d(removed['moffat'], removed_sep)
         t_sep = (time_best(partial(sep_run, clean=True), repeats=repeats)
                  - time_best(partial(sep_run, clean=False),
                              repeats=repeats))
 
         variant = 'deblend' if deblend else 'no deblend'
         print(f'{variant:>12}{segm.n_labels:>9}{len(removed_sep):>7}'
-              f'{len(removed_phot):>7}{len(both):>7}{len(sep_only):>10}'
-              f'{len(phot_only):>11}{f"{t_phot:.4f}s":>12}'
-              f'{f"{t_sep:.4f}s":>12}')
+              f'{len(removed["moffat"]):>8}{len(both):>7}{len(sep_only):>10}'
+              f'{len(moffat_only):>13}{len(removed["measured"]):>10}'
+              f'{f"{times["moffat"]:.4f}s":>10}'
+              f'{f"{times["measured"]:.4f}s":>12}{f"{t_sep:.4f}s":>10}')
+
+
+def make_galaxy_scene(size, *, kernel, seed=3):
+    """
+    Return a noisy field with two galaxies and injected companions.
+
+    A de Vaucouleurs galaxy and an exponential disk are placed in unit
+    Gaussian noise, and eight real faint companions are injected
+    around each at 1.5 to 2.5 isophotal radii. The noise riding on the
+    bulge's halo produces spurious detections on its own.
+
+    Parameters
+    ----------
+    size : int
+        The image size. The image is ``(size, size)``.
+
+    kernel : 2D `~numpy.ndarray`
+        The convolution kernel used for detection.
+
+    seed : int, optional
+        The random number generator seed.
+
+    Returns
+    -------
+    data : 2D `~numpy.ndarray`
+        The image.
+
+    convolved_data : 2D `~numpy.ndarray`
+        The convolved image.
+
+    threshold : float
+        The detection threshold, five times the convolved noise.
+
+    centers : 2D `~numpy.ndarray`
+        The ``(x, y)`` centers of the bulge and the disk.
+
+    companions : 2D `~numpy.ndarray`
+        The ``(x, y)`` positions of the injected companions.
+    """
+    rng = np.random.default_rng(seed)
+    yy, xx = np.mgrid[0:size, 0:size]
+    data = rng.normal(0.0, 1.0, (size, size))
+    bulge = Sersic2D(amplitude=60, r_eff=12, n=4, x_0=0.28 * size,
+                     y_0=0.5 * size, ellip=0.2, theta=0.5)
+    disk = Sersic2D(amplitude=60, r_eff=18, n=1, x_0=0.72 * size,
+                    y_0=0.5 * size, ellip=0.5, theta=1.0)
+    data += bulge(xx, yy) + disk(xx, yy)
+
+    companions = []
+    for galaxy, r_iso in ((bulge, 40.0), (disk, 45.0)):
+        for angle in np.linspace(0, 2 * np.pi, 8, endpoint=False):
+            radius = r_iso * rng.uniform(1.5, 2.5)
+            x = galaxy.x_0.value + radius * np.cos(angle)
+            y = galaxy.y_0.value + radius * np.sin(angle)
+            companions.append((x, y))
+            data += Gaussian2D(rng.uniform(2.0, 2.6), x, y, 2.0, 2.0)(xx, yy)
+
+    convolved_data = convolve(data, kernel)
+    noise = np.std(convolve(rng.normal(0.0, 1.0, (size, size)), kernel))
+    centers = np.array([(bulge.x_0.value, bulge.y_0.value),
+                        (disk.x_0.value, disk.y_0.value)])
+    return data, convolved_data, 5.0 * noise, centers, np.array(companions)
+
+
+def compare_galaxy_scene(size, *, kernel, repeats=3, seed=3):
+    """
+    Score each wing model on the galaxy field.
+
+    A detection within three pixels of an injected companion counts
+    as real, the two largest segments are the galaxies, and every
+    other detection within 120 pixels of a galaxy center counts as
+    spurious. Each model is scored by the real and spurious detections
+    it absorbs near each galaxy, and timed.
+
+    Parameters
+    ----------
+    size : int
+        The image size.
+
+    kernel : 2D `~numpy.ndarray`
+        The convolution kernel used for detection.
+
+    repeats : int, optional
+        The number of repeats for each timing (best time is kept).
+
+    seed : int, optional
+        The random number generator seed.
+    """
+    data, convolved_data, threshold, centers, companions = (
+        make_galaxy_scene(size, kernel=kernel, seed=seed))
+    segm = detect_sources(convolved_data, threshold, GALAXY_N_PIXELS)
+
+    x = np.array([0.5 * (slc[1].start + slc[1].stop) for slc in segm.slices])
+    y = np.array([0.5 * (slc[0].start + slc[0].stop) for slc in segm.slices])
+    d_companion = np.hypot(x[:, None] - companions[None, :, 0],
+                           y[:, None] - companions[None, :, 1]).min(axis=1)
+    is_galaxy = np.zeros(segm.n_labels, dtype=bool)
+    is_galaxy[np.argsort(np.asarray(segm.areas))[-2:]] = True
+    is_real = (d_companion < 3) & ~is_galaxy
+    is_other = ~is_real & ~is_galaxy
+    near = [np.hypot(x - cx, y - cy) < 120 for cx, cy in centers]
+
+    print(f'\n-- galaxy field, {size}x{size} image, {segm.n_labels} '
+          f'detections, {is_real.sum()} companions recovered --')
+    print(f'{"wing model":>12}{"bulge real":>12}{"bulge other":>13}'
+          f'{"disk real":>11}{"disk other":>12}{"time":>10}')
+    for wing_model in WING_MODELS:
+        bench = partial(get_spurious_labels, data, segm, threshold,
+                        GALAXY_N_PIXELS, convolved_data=convolved_data,
+                        clean_param=CLEAN_PARAM, wing_model=wing_model)
+        absorbed = np.isin(segm.labels, bench()['label'])
+        t_best = time_best(bench, repeats=repeats)
+        cells = []
+        for near_galaxy in near:
+            for kind in (is_real, is_other):
+                selected = near_galaxy & kind
+                cells.append(f'{(absorbed & selected).sum()}/'
+                             f'{selected.sum()}')
+        print(f'{wing_model:>12}{cells[0]:>12}{cells[1]:>13}{cells[2]:>11}'
+              f'{cells[3]:>12}{f"{t_best:.4f}s":>10}')
 
 
 def main():
@@ -261,6 +401,9 @@ def main():
                              'field (default: %(default)s)')
     parser.add_argument('--halo-size', type=int, default=1500,
                         help='image size of the halo field '
+                             '(default: %(default)s)')
+    parser.add_argument('--galaxy-size', type=int, default=600,
+                        help='image size of the galaxy field '
                              '(default: %(default)s)')
     parser.add_argument('--repeats', type=int, default=3,
                         help='number of repeats per timing. The best '
@@ -278,8 +421,8 @@ def main():
     print(f'sep {sep.__version__}')
     print('\n== get_spurious_labels versus SEP cleaning '
           f'(clean_param={CLEAN_PARAM}) ==')
-    print('SEP/phot = labels removed by each, both = removed by both, '
-          't_SEP = SEP clean minus no-clean time')
+    print('SEP/moffat/measured = labels removed by each, both = removed '
+          'by SEP and moffat, t_SEP = SEP clean minus no-clean time')
 
     kernel = make_2dgaussian_kernel(3.0, size=5).array  # as in make_inputs
 
@@ -294,6 +437,10 @@ def main():
     compare_scene(f'halo field, {data.shape[0]}x{data.shape[1]} image',
                   data, HALO_THRESHOLD, HALO_N_PIXELS, kernel,
                   repeats=args.repeats)
+
+    print('\n== wing models on a galaxy field (absorbed / total) ==')
+    compare_galaxy_scene(args.galaxy_size, kernel=kernel,
+                         repeats=args.repeats)
 
 
 if __name__ == '__main__':
