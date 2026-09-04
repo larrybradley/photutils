@@ -5,6 +5,8 @@ Tools for detecting sources in an image.
 
 import numpy as np
 
+from photutils.segmentation.clean import (_validate_clean_param,
+                                          get_spurious_labels)
 from photutils.segmentation.deblend import (_validate_deblend_kwargs,
                                             deblend_sources)
 from photutils.segmentation.detect import detect_sources
@@ -26,12 +28,13 @@ _FINDER_DEPRECATED_ATTRIBUTES = {
 
 class SourceFinder:
     """
-    Class to detect sources, including deblending, in an image using
-    segmentation.
+    Class to detect sources, including deblending and cleaning, in an
+    image using segmentation.
 
     This is a convenience class that combines the functionality
-    of `~photutils.segmentation.detect_sources` and
-    `~photutils.segmentation.deblend_sources`.
+    of `~photutils.segmentation.detect_sources`,
+    `~photutils.segmentation.deblend_sources`, and
+    `~photutils.segmentation.get_spurious_labels`.
 
     Sources are deblended using a combination of
     multi-thresholding and `watershed segmentation
@@ -106,9 +109,9 @@ class SourceFinder:
 
     relabel : bool, optional
         If `True` (default), then the segmentation image will be
-        relabeled after deblending such that the labels are in
-        consecutive order starting from 1. This keyword is ignored
-        unless ``deblend=True``.
+        relabeled after deblending and cleaning such that the labels
+        are in consecutive order starting from 1. This keyword is
+        ignored unless ``deblend=True`` or ``clean=True``.
 
     n_threads : int, optional
         The number of threads to use to deblend the sources. The
@@ -117,6 +120,24 @@ class SourceFinder:
         concurrently, producing results identical to the
         single-threaded computation. This keyword is ignored unless
         ``deblend=True``.
+
+    clean : bool, optional
+        Whether to merge spurious detections in the wings of brighter
+        sources into the sources that absorb them, using the
+        `SourceExtractor`_ CLEAN test implemented by
+        :func:`~photutils.segmentation.get_spurious_labels`. Cleaning
+        runs after deblending, so deblended children are eligible.
+        The detection image passed when calling the finder serves as
+        both the unfiltered and the convolved image of the test, and
+        the detection ``n_pixels`` sets the comparison level. The
+        default is `False`.
+
+    clean_param : float, optional
+        The exponent of the cleaning wing model, i.e., the
+        `SourceExtractor`_ ``CLEAN_PARAM`` parameter. Larger values
+        make the wings fall off more slowly and absorb more neighbors.
+        Must be positive. This keyword is ignored unless
+        ``clean=True``.
 
     nproc : int, optional
         This keyword is deprecated and has no effect. It was the name of
@@ -147,6 +168,7 @@ class SourceFinder:
     --------
     :func:`photutils.segmentation.detect_sources`
     :func:`photutils.segmentation.deblend_sources`
+    :func:`photutils.segmentation.get_spurious_labels`
 
     Examples
     --------
@@ -195,11 +217,12 @@ class SourceFinder:
     def __init__(self, n_pixels, *, connectivity=8, deblend=True, n_levels=32,
                  contrast=0.001, contrast_method=None,
                  mode='exponential', relabel=True,
-                 n_threads=1,
+                 n_threads=1, clean=False, clean_param=1.0,
                  nproc=1,  # noqa: ARG002
                  n_processes=1, progress_bar=True):
         self.n_pixels = as_pair('n_pixels', n_pixels, check_odd=False)
-        for name, value in (('deblend', deblend), ('relabel', relabel)):
+        for name, value in (('deblend', deblend), ('relabel', relabel),
+                            ('clean', clean)):
             if not isinstance(value, (bool, np.bool_)):
                 msg = f'{name} must be a boolean, got {value!r}'
                 raise TypeError(msg)
@@ -207,6 +230,7 @@ class SourceFinder:
                                  contrast_method=contrast_method,
                                  mode=mode, connectivity=connectivity,
                                  n_threads=n_threads)
+        _validate_clean_param(clean_param)
         self.deblend = deblend
         self.connectivity = connectivity
         self.n_levels = n_levels
@@ -215,13 +239,16 @@ class SourceFinder:
         self.mode = mode
         self.relabel = relabel
         self.n_threads = n_threads
+        self.clean = clean
+        self.clean_param = clean_param
         self.n_processes = n_processes
         self.progress_bar = progress_bar
 
     def __repr__(self):
         params = ('n_pixels', 'deblend', 'connectivity', 'n_levels',
                   'contrast', 'contrast_method', 'mode', 'relabel',
-                  'n_threads', 'n_processes', 'progress_bar')
+                  'n_threads', 'clean', 'clean_param', 'n_processes',
+                  'progress_bar')
         return make_repr(self, params)
 
     # Remove in 4.0
@@ -233,15 +260,17 @@ class SourceFinder:
     @deprecated_positional_kwargs(since='3.0', until='4.0')
     def __call__(self, data, threshold, mask=None):
         """
-        Detect sources, including deblending, in an image using
-        segmentation.
+        Detect sources, including deblending and cleaning, in an image
+        using segmentation.
 
         Parameters
         ----------
         data : 2D `~numpy.ndarray`
             The 2D array from which to detect sources. Typically, this
             array should be an image that has been convolved with a
-            smoothing kernel.
+            smoothing kernel. If ``clean=True``, the same array is
+            used for both the unfiltered and the convolved image of
+            the cleaning test.
 
         threshold : 2D `~numpy.ndarray` or float
             The data value or pixel-wise data values (as an array) to be
@@ -278,5 +307,42 @@ class SourceFinder:
                                           connectivity=self.connectivity,
                                           relabel=self.relabel,
                                           n_threads=self.n_threads)
+
+        if self.clean:
+            segment_img = self._clean(data, segment_img, threshold)
+
+        return segment_img
+
+    def _clean(self, data, segment_img, threshold):
+        """
+        Merge the spurious segments into the sources that absorb them.
+
+        Parameters
+        ----------
+        data : 2D `~numpy.ndarray`
+            The detection image.
+
+        segment_img : `~photutils.segmentation.SegmentationImage`
+            The segmentation image, modified in place.
+
+        threshold : 2D `~numpy.ndarray` or float
+            The detection threshold.
+
+        Returns
+        -------
+        segment_img : `~photutils.segmentation.SegmentationImage`
+            The cleaned segmentation image.
+        """
+        spurious = get_spurious_labels(data, segment_img, threshold,
+                                       self.n_pixels[0],
+                                       clean_param=self.clean_param)
+        if len(spurious) == 0:
+            return segment_img
+
+        for absorber in np.unique(spurious['absorbed_by']):
+            labels = spurious['label'][spurious['absorbed_by'] == absorber]
+            segment_img.reassign_labels(labels, absorber)
+        if self.relabel:
+            segment_img.relabel_consecutive()
 
         return segment_img

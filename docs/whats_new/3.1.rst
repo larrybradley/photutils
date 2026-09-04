@@ -709,7 +709,10 @@ segmentation image. Merge each spurious segment into its absorber with
 :meth:`~photutils.segmentation.SegmentationImage.reassign_labels` to
 match SourceExtractor, or drop the spurious segments with
 :meth:`~photutils.segmentation.SegmentationImage.remove_labels` to
-match the SEP package.
+match the SEP package. :class:`~photutils.segmentation.SourceFinder`
+has new ``clean`` and ``clean_param`` keywords that run the test
+after deblending and merge the spurious segments into their
+absorbers.
 
 
 ``GriddedPSFModel`` Performance Improvements
