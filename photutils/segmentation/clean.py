@@ -4,6 +4,8 @@ Module for identifying spurious detections in the wings of brighter
 sources.
 """
 
+import numbers
+
 import numpy as np
 from astropy.table import QTable
 from scipy.spatial import cKDTree
@@ -229,7 +231,9 @@ def _validate_clean_param(clean_param):
     ValueError
         If the value is not a positive finite number.
     """
-    if not np.isfinite(clean_param) or clean_param <= 0:
+    if (not isinstance(clean_param, numbers.Real)
+            or isinstance(clean_param, bool)
+            or not np.isfinite(clean_param) or clean_param <= 0):
         msg = ('clean_param must be a positive finite number, got '
                f'{clean_param!r}')
         raise ValueError(msg)
