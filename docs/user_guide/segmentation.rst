@@ -324,10 +324,12 @@ SourceFinder
 
 The :class:`~photutils.segmentation.SourceFinder` class
 is a convenience class that combines the functionality
-of `~photutils.segmentation.detect_sources` and
-`~photutils.segmentation.deblend_sources`. After defining the object
-with the desired detection and deblending parameters, you call it with
-the background-subtracted (convolved) image and threshold::
+of `~photutils.segmentation.detect_sources`,
+`~photutils.segmentation.deblend_sources`, and
+`~photutils.segmentation.get_spurious_labels`. After defining the
+object with the desired detection, deblending, and cleaning
+parameters, you call it with the background-subtracted (convolved)
+image and threshold::
 
     >>> from photutils.segmentation import SourceFinder
     >>> finder = SourceFinder(n_pixels=10)
@@ -337,6 +339,16 @@ the background-subtracted (convolved) image and threshold::
     shape: (300, 500)
     n_labels: 93
     labels: [ 1  2  3  4  5 ... 89 90 91 92 93]
+
+Cleaning is off by default. With ``clean=True``, the finder runs the
+spurious-detection test after deblending and merges each spurious
+segment into the source that absorbed it, with the ``clean_param``
+keyword setting the wing model exponent::
+
+    >>> finder = SourceFinder(n_pixels=10, clean=True)
+    >>> segment_map = finder(convolved_data, threshold)
+    >>> segment_map.n_labels
+    93
 
 
 Modifying a Segmentation Image
