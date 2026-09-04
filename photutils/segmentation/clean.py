@@ -79,8 +79,11 @@ def get_spurious_labels(data, segmentation_image, threshold, n_pixels, *,
     threshold : float or 2D `~numpy.ndarray`
         The detection threshold used to make the segmentation image. A
         2D array must have the same shape as ``data``. All values must
-        be positive. If ``data`` is a `~astropy.units.Quantity` array,
-        then ``threshold`` must have the same units.
+        be positive and finite. If ``data`` is a
+        `~astropy.units.Quantity` array, then ``threshold`` must have
+        the same units. With a 2D array, each pixel is compared with
+        its own threshold and the wing model of each source is
+        normalized with the mean threshold over its segment.
 
     n_pixels : int
         The minimum number of connected pixels used to detect the
@@ -282,18 +285,21 @@ def _measure_segments(data, convolved_data, segmentation_image, threshold,
     values = data.ravel()[idx]
     values = np.where(np.isfinite(values), values, -np.inf)
 
-    # The per-object threshold is the mean over the segment pixels
+    # The wing model is normalized with the mean threshold over the
+    # segment pixels
     thresh = np.add.reduceat(pixel_thresh, starts) / counts
     props['thresh'] = thresh
 
     # The unfiltered peak and the pixel counts above the threshold
-    # and above the level midway between the threshold and the peak
+    # and above the level midway between the threshold and the peak.
+    # Each pixel is compared with its own threshold.
     peak = np.maximum.reduceat(values, starts)
     thresh2 = (thresh + peak) / 2.0
-    above_thresh = values > np.repeat(thresh, counts)
-    above_thresh2 = values > np.repeat(thresh2, counts)
-    n_above = np.add.reduceat(above_thresh.astype(np.intp), starts)
-    n_above2 = np.add.reduceat(above_thresh2.astype(np.intp), starts)
+    pixel_thresh2 = (pixel_thresh + np.repeat(peak, counts)) / 2.0
+    n_above = np.add.reduceat((values > pixel_thresh).astype(np.intp),
+                              starts)
+    n_above2 = np.add.reduceat((values > pixel_thresh2).astype(np.intp),
+                               starts)
     props['abcor'] = _area_correction(thresh, thresh2, n_above2 - n_above,
                                       props['a'], props['b'])
 
