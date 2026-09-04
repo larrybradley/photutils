@@ -82,8 +82,12 @@ cleaning. For each scene (the blended Gaussian-pair field and a halo
 field of bright stars with faint sources in their wings), `sep.extract`
 is run without and with cleaning, the labels that vanish from the
 cleaned segmentation map are compared with the labels returned by
-`get_spurious_labels` on the same segmentation map, and the two are
-timed. Requires the optional `sep` package.
+`get_spurious_labels` on the same segmentation map with the `'moffat'`
+wing model, and both wing models are timed. A third scene, a noisy
+field with a de Vaucouleurs galaxy and an exponential disk with
+injected companions, scores each wing model by the real and spurious
+detections it absorbs near each galaxy. Requires the optional `sep`
+package.
 
 ```bash
 python benchmarks/bench_clean_sep.py
