@@ -104,6 +104,11 @@ def get_spurious_labels(data, segmentation_image, threshold, n_pixels, *,
         The exponent of the wing model, i.e., the `SourceExtractor`_
         ``CLEAN_PARAM`` parameter. Larger values make the wings fall
         off more slowly and absorb more neighbors. Must be positive.
+        SourceExtractor restricts it to the range 0.1 to 10. Below
+        that range the model collapses to a spike at the source center
+        and nothing outside the isophote is absorbed. Above it the
+        model is nearly flat at the source amplitude and every fainter
+        neighbor within the cleaning zone is absorbed.
 
     Returns
     -------
