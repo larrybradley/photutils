@@ -44,7 +44,7 @@ __all__ = ['batch_central_moments', 'batch_centroid_win',
            'batch_flux_radius_prepare', 'batch_flux_radius_solve',
            'batch_kron_radius', 'batch_kth_largest', 'batch_minmax_index',
            'batch_moment_err', 'batch_perimeter', 'batch_quad_boxes',
-           'batch_raw_moments', 'batch_row_nanmedian',
+           'batch_raw_moments', 'batch_row_nanquantile',
            'batch_segment_gather']
 
 
@@ -1969,13 +1969,16 @@ cdef double _select(double *values, Py_ssize_t n,
     return values[k]
 
 
-def batch_row_nanmedian(const double[:, ::1] values):
+def batch_row_nanquantile(const double[:, ::1] values, *,
+                          double quantile):
     """
-    Compute the median of the finite values in each row.
+    Compute a quantile of the finite values in each row.
 
     Each row is copied without its non-finite values into a scratch
-    buffer and its median is found by quickselect, so no row is fully
-    sorted. A row with no finite value gets NaN.
+    buffer and the quantile is found by quickselect, with linear
+    interpolation between the two nearest ranks as in
+    ``numpy.nanquantile``, so no row is fully sorted. A row with no
+    finite value gets NaN.
 
     Parameters
     ----------
@@ -1983,17 +1986,29 @@ def batch_row_nanmedian(const double[:, ::1] values):
         The values, with shape ``(n_rows, n_cols)``. They are not
         modified.
 
+    quantile : float
+        The quantile, between 0 and 1 inclusive.
+
     Returns
     -------
     result : 1D ndarray of float64
-        The median of the finite values of each row, with shape
+        The quantile of the finite values of each row, with shape
         ``(n_rows,)``.
+
+    Raises
+    ------
+    ValueError
+        If ``quantile`` is not between 0 and 1.
     """
     cdef Py_ssize_t n_rows = values.shape[0]
     cdef Py_ssize_t n_cols = values.shape[1]
-    cdef Py_ssize_t i, j, n
-    cdef double value, lower, upper
+    cdef Py_ssize_t i, j, n, lower
+    cdef double value, rank, fraction, low, high
     cdef double *buffer
+
+    if not (0.0 <= quantile <= 1.0):
+        msg = f'quantile must be between 0 and 1, got {quantile}'
+        raise ValueError(msg)
 
     result_arr = np.empty(n_rows, dtype=np.float64)
     cdef double[::1] result = result_arr
@@ -2015,18 +2030,16 @@ def batch_row_nanmedian(const double[:, ::1] values):
                         n += 1
                 if n == 0:
                     result[i] = NAN
-                elif n % 2 == 1:
-                    result[i] = _select(buffer, n, n // 2)
+                    continue
+                rank = quantile * (n - 1)
+                lower = <Py_ssize_t> floor(rank)
+                fraction = rank - lower
+                low = _select(buffer, n, lower)
+                if fraction > 0.0 and lower + 1 < n:
+                    high = _select(buffer, n, lower + 1)
+                    result[i] = low + fraction * (high - low)
                 else:
-                    upper = _select(buffer, n, n // 2)
-                    # The lower median is the largest value below the
-                    # upper one, which quickselect left in the first
-                    # half of the buffer
-                    lower = buffer[0]
-                    for j in range(1, n // 2):
-                        if buffer[j] > lower:
-                            lower = buffer[j]
-                    result[i] = 0.5 * (lower + upper)
+                    result[i] = low
     finally:
         free(buffer)
 
