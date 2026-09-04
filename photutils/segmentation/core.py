@@ -1082,19 +1082,24 @@ class SegmentationImage:
         """
         Reassign one or more label numbers.
 
-        Multiple input ``labels`` will all be reassigned to the same
-        ``new_label`` number. If ``new_label`` is already present in
-        the segmentation array, then it will be combined with the input
-        ``labels``. Note that both of these can result in a label that
-        is no longer pixel connected.
+        If ``new_label`` is a single number, all of the input
+        ``labels`` are reassigned to it. If ``new_label`` is an array
+        with one value per input label, each label is reassigned to
+        its own new label in a single pass. If a new label is already
+        present in the segmentation array, then it will be combined
+        with the input labels. Note that both of these can result in a
+        label that is no longer pixel connected.
 
         Parameters
         ----------
         labels : int, array_like (1D, int)
             The label numbers(s) to reassign.
 
-        new_label : int
-            The reassigned label number.
+        new_label : int or array_like (1D, int)
+            The reassigned label number, or one new label number for
+            each of the input ``labels``. Each label is reassigned
+            directly, so a new label that is itself among the input
+            ``labels`` is not followed further.
 
         relabel : bool, optional
             If `True`, then the segmentation array will be relabeled
@@ -1151,12 +1156,35 @@ class SegmentationImage:
                [1, 0, 0, 0, 0, 4],
                [1, 1, 0, 4, 4, 4],
                [1, 1, 0, 0, 4, 4]])
+
+        >>> data = np.array([[1, 1, 0, 0, 4, 4],
+        ...                  [0, 0, 0, 0, 0, 4],
+        ...                  [0, 0, 3, 3, 0, 0],
+        ...                  [7, 0, 0, 0, 0, 5],
+        ...                  [7, 7, 0, 5, 5, 5],
+        ...                  [7, 7, 0, 0, 5, 5]])
+        >>> segm = SegmentationImage(data)
+        >>> segm.reassign_labels(labels=[1, 7], new_label=[4, 5])
+        >>> segm.data
+        array([[4, 4, 0, 0, 4, 4],
+               [0, 0, 0, 0, 0, 4],
+               [0, 0, 3, 3, 0, 0],
+               [5, 0, 0, 0, 0, 5],
+               [5, 5, 0, 5, 5, 5],
+               [5, 5, 0, 0, 5, 5]])
         """
         self.check_labels(labels)
 
         labels = np.atleast_1d(labels)
         if labels.size == 0:
             return
+
+        new_label = np.asarray(new_label)
+        if new_label.ndim > 1 or (new_label.ndim == 1
+                                  and new_label.shape != labels.shape):
+            msg = ('new_label must be a single label or have one label '
+                   'for each of the input labels')
+            raise ValueError(msg)
 
         dtype = self.data.dtype  # keep the original dtype
         relabel_map = np.zeros(self.max_label + 1, dtype=dtype)
