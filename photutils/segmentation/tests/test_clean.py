@@ -351,6 +351,18 @@ class TestMeasuredWingModel:
                                      wing_model='measured')
         assert len(result) == 0
 
+    def test_victim_wing_not_attributed_to_absorber(self):
+        # The faint blob's own sub-threshold wing and the star's wing
+        # cover part of the near blob's annulus at the faint blob's
+        # radius. The near blob's own light there is negligible, so it
+        # must not absorb the faint blob, and the Gaussian star absorbs
+        # nothing in the measured mode.
+        data = make_scene([STAR, NEAR_BLOB, FAINT_BLOB])
+        segm = detect_sources(data, THRESHOLD, N_PIXELS)
+        result = get_spurious_labels(data, segm, THRESHOLD, N_PIXELS,
+                                     wing_model='measured')
+        assert len(result) == 0
+
     def test_other_sources_excluded_from_annulus(self):
         # A bright third source on the annulus does not raise the
         # measured wing, because its pixels are excluded

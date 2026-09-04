@@ -12,7 +12,7 @@ from astropy.table import QTable
 from scipy.spatial import cKDTree
 
 from photutils.segmentation._batch_catalog import (batch_kth_largest,
-                                                   batch_row_nanmedian)
+                                                   batch_row_nanquantile)
 from photutils.segmentation.catalog import SourceCatalog
 from photutils.segmentation.core import SegmentationImage
 from photutils.utils._quantity_helpers import process_quantities
@@ -28,10 +28,12 @@ CLEAN_ZONE = 10.0
 MAX_MODEL_ARG = 1e10
 
 # The measured wing model samples each annulus at this many angles
-# around the ellipse and at two radii. Fewer than MIN_ANNULUS_PIXELS
-# usable samples give a wing of zero.
+# around the ellipse and at two radii, and takes this quantile of the
+# usable samples. Fewer than MIN_ANNULUS_PIXELS usable samples give a
+# wing of zero.
 N_ANNULUS_ANGLES = 96
 MIN_ANNULUS_PIXELS = 10
+ANNULUS_QUANTILE = 0.25
 
 # The number of pairs measured at once by the measured wing model
 PAIR_CHUNK = 2048
@@ -61,11 +63,16 @@ def get_spurious_labels(data, segmentation_image, threshold, n_pixels, *,
     ``ellipse_cxy`` coefficients), and the profile is normalized to
     fall to the detection threshold at the source's isophotal extent.
     The ``'measured'`` model instead measures the brighter source's
-    actual light at the fainter source's distance. It is the median
-    of ``convolved_data`` (or ``data``) over an elliptical annulus of
-    the brighter source, in the same elliptical metric, at the fainter
-    source's elliptical radius, sampled around the ellipse and
-    excluding the pixels of every other source.
+    actual light at the fainter source's distance. It is the lower
+    quartile of ``convolved_data`` (or ``data``) sampled around an
+    elliptical annulus of the brighter source, in the same elliptical
+    metric, at the fainter source's elliptical radius. The pixels of
+    every segment other than the brighter source's are excluded, but
+    the light of other sources outside their segments is not, so the
+    lower quartile is used because it measures the level present
+    around at least three quarters of the annulus and ignores light
+    from the fainter source's own wing or from a third source that
+    covers less of it.
 
     The sources are considered in order of decreasing flux, with ties
     broken by label. A source is spurious if the wing model of any
@@ -138,18 +145,20 @@ def get_spurious_labels(data, segmentation_image, threshold, n_pixels, *,
         SourceExtractor model, a prior tuned for stellar profiles that
         overestimates the wings of galaxies, especially exponential
         disks, and can absorb real neighbors around them.
-        ``'measured'`` uses the brighter source's own light measured
-        in an elliptical annulus at the fainter source's distance, so
-        it follows whatever profile the source has. An annulus with
-        fewer than 10 usable pixels (finite, and not part of another
-        source) gives a wing of zero, so nothing is absorbed on
-        missing data. The measured wing includes all light in the
-        annulus that is not part of a segment, so in crowded regions
-        the below-threshold wings of other sources and any residual
-        background raise it and are attributed to the brighter
-        source. The measured model is recommended for fields with
-        resolved galaxies and is slower because each pair samples the
-        image.
+        ``'measured'`` uses the brighter source's own light, the
+        lower quartile of the samples around an elliptical annulus at
+        the fainter source's distance, so it follows whatever profile
+        the source has. An annulus with fewer than 10 usable samples
+        (finite, and not part of another segment) gives a wing of
+        zero, so nothing is absorbed on missing data. The samples
+        include the light outside every segment, so the fainter
+        source's own wing and the wings of third sources are present.
+        The lower quartile ignores them as long as they cover less
+        than three quarters of the annulus, which fails only in
+        crowded regions or with a residual background, where the
+        extra light is attributed to the brighter source. The measured
+        model is recommended for fields with resolved galaxies and
+        costs a few times the default model.
 
     Returns
     -------
@@ -615,13 +624,16 @@ def _measured_wings(props, eater, victim, convolved_data, segment_data):
     Each pair's annulus is sampled at ``N_ANNULUS_ANGLES`` angles
     around the absorber's ellipse, at the victim's elliptical radius
     plus and minus a quarter of the annulus width, and the wing is
-    the median of the samples that are finite and belong to the
-    absorber or to no source. The annulus half width in the elliptical
-    metric is the inverse of the semiminor axis, so the annulus is
-    about two pixels wide along the minor axis. A pair with fewer
-    than ``MIN_ANNULUS_PIXELS`` usable samples gets a wing of zero.
-    The pairs are processed in chunks so that the sample arrays stay
-    small.
+    the ``ANNULUS_QUANTILE`` quantile of the samples that are finite
+    and belong to the absorber or to no segment. The lower quartile
+    rather than the median makes the wing insensitive to the victim's
+    own sub-threshold wing and to third sources unless they cover
+    more than three quarters of the annulus. The annulus half width
+    in the elliptical metric is the inverse of the semiminor axis, so
+    the annulus is about two pixels wide along the minor axis. A pair
+    with fewer than ``MIN_ANNULUS_PIXELS`` usable samples gets a wing
+    of zero. The pairs are processed in chunks so that the sample
+    arrays stay small.
 
     Parameters
     ----------
@@ -688,6 +700,7 @@ def _measured_wings(props, eater, victim, convolved_data, segment_data):
                   & ((seg == 0) | (seg == labels[sl, None, None])))
         values = np.where(usable, values, np.nan).reshape(len(values), -1)
         n_usable = np.count_nonzero(usable, axis=(1, 2))
-        medians = batch_row_nanmedian(np.ascontiguousarray(values))
-        wings[sl] = np.where(n_usable >= MIN_ANNULUS_PIXELS, medians, 0.0)
+        levels = batch_row_nanquantile(np.ascontiguousarray(values),
+                                       quantile=ANNULUS_QUANTILE)
+        wings[sl] = np.where(n_usable >= MIN_ANNULUS_PIXELS, levels, 0.0)
     return wings
