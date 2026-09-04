@@ -1321,19 +1321,24 @@ class SegmentationImage:
         """
         Reassign one or more label numbers.
 
-        Multiple input ``labels`` will all be reassigned to the same
-        ``new_label`` number. If ``new_label`` is already present in
-        the segmentation array, then it will be combined with the input
-        ``labels``. Note that both of these can result in a label that
-        is no longer pixel connected.
+        If ``new_label`` is a single number, all of the input
+        ``labels`` are reassigned to it. If ``new_label`` is an array
+        with one value per input label, each label is reassigned to
+        its own new label in a single pass. If a new label is already
+        present in the segmentation array, then it will be combined
+        with the input labels. Note that both of these can result in a
+        label that is no longer pixel connected.
 
         Parameters
         ----------
         labels : int, array_like (1D, int)
             The label number(s) to reassign.
 
-        new_label : int
-            The reassigned label number.
+        new_label : int or array_like (1D, int)
+            The reassigned label number, or one new label number for
+            each of the input ``labels``. Each label is reassigned
+            directly, so a new label that is itself among the input
+            ``labels`` is not followed further.
 
         relabel : bool, optional
             If `True`, then the segmentation array will be relabeled
@@ -1343,9 +1348,11 @@ class SegmentationImage:
         Raises
         ------
         ValueError
-            If any input ``labels`` are invalid, or if ``new_label`` is
-            negative, is not an integer, or cannot be represented in
-            the dtype of the segmentation array.
+            If any input ``labels`` are invalid, if an array
+            ``new_label`` does not have one value for each of the input
+            ``labels``, or if any new label is negative, is not an
+            integer, or cannot be represented in the dtype of the
+            segmentation array.
 
         Examples
         --------
@@ -1398,27 +1405,52 @@ class SegmentationImage:
                [1, 0, 0, 0, 0, 4],
                [1, 1, 0, 4, 4, 4],
                [1, 1, 0, 0, 4, 4]])
+
+        >>> data = np.array([[1, 1, 0, 0, 4, 4],
+        ...                  [0, 0, 0, 0, 0, 4],
+        ...                  [0, 0, 3, 3, 0, 0],
+        ...                  [7, 0, 0, 0, 0, 5],
+        ...                  [7, 7, 0, 5, 5, 5],
+        ...                  [7, 7, 0, 0, 5, 5]])
+        >>> segm = SegmentationImage(data)
+        >>> segm.reassign_labels(labels=[1, 7], new_label=[4, 5])
+        >>> segm.data
+        array([[4, 4, 0, 0, 4, 4],
+               [0, 0, 0, 0, 0, 4],
+               [0, 0, 3, 3, 0, 0],
+               [5, 0, 0, 0, 0, 5],
+               [5, 5, 0, 5, 5, 5],
+               [5, 5, 0, 0, 5, 5]])
         """
         self.check_labels(labels)
+        labels = np.atleast_1d(labels)
 
-        # The new label is zero or a label value that the dtype of the
+        # The object dtype keeps Python integers that are too large for
+        # any integer dtype, so that they can be reported below
+        new_label = np.asarray(new_label, dtype=object)
+        if new_label.ndim > 1 or (new_label.ndim == 1
+                                  and new_label.shape != labels.shape):
+            msg = ('new_label must be a single label or have one label '
+                   'for each of the input labels')
+            raise ValueError(msg)
+
+        # Each new label is zero or a label value that the dtype of the
         # segmentation array can hold
-        valid = np.ndim(new_label) == 0
-        if valid:
+        max_label = np.iinfo(self.data.dtype).max
+        for value in new_label.ravel():
             try:
-                valid = int(new_label) == new_label
+                valid = int(value) == value and value >= 0
             except (TypeError, ValueError, OverflowError):
                 valid = False
-        if not valid or new_label < 0:
-            msg = 'new_label must be a nonnegative integer'
-            raise ValueError(msg)
-        new_label = int(new_label)
-        if new_label > np.iinfo(self.data.dtype).max:
-            msg = (f'new_label {new_label} cannot be represented in the '
-                   f'dtype of the segmentation array ({self.data.dtype})')
-            raise ValueError(msg)
+            if not valid:
+                msg = 'new_label must be a nonnegative integer'
+                raise ValueError(msg)
+            if value > max_label:
+                msg = (f'new_label {value} cannot be represented in the '
+                       f'dtype of the segmentation array ({self.data.dtype})')
+                raise ValueError(msg)
+        new_label = new_label.astype(self.data.dtype)
 
-        labels = np.atleast_1d(labels)
         if labels.size == 0:
             # No label is reassigned, but the existing labels may not
             # be consecutive

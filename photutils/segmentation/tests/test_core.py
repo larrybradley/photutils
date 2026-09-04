@@ -1104,8 +1104,7 @@ class TestSegmentationImage:
         assert segm.n_labels == 0
         assert_equal(segm.data, 0)
 
-    @pytest.mark.parametrize('new_label', [-1, 2.5, np.nan, 'a', [1, 2],
-                                           None])
+    @pytest.mark.parametrize('new_label', [-1, 2.5, np.nan, 'a', None])
     def test_reassign_labels_invalid_new_label(self, new_label):
         """
         Test that a negative or noninteger new label raises an error
@@ -3237,3 +3236,84 @@ def test_label_stats_reset_on_reassignment():
     segm.remove_label(1)
     assert segm.slices == [slc for slc in find_objects(segm.data)
                            if slc is not None]
+
+
+class TestReassignLabelsArray:
+    """
+    Tests of reassign_labels with one new label per input label.
+    """
+
+    data = np.array([[1, 1, 0, 0, 4, 4],
+                     [0, 0, 0, 0, 0, 4],
+                     [0, 0, 3, 3, 0, 0],
+                     [7, 0, 0, 0, 0, 5],
+                     [7, 7, 0, 5, 5, 5],
+                     [7, 7, 0, 0, 5, 5]])
+
+    def test_array_new_label(self):
+        segm = SegmentationImage(self.data.copy())
+        segm.reassign_labels([1, 7], [4, 5])
+        expected = self.data.copy()
+        expected[expected == 1] = 4
+        expected[expected == 7] = 5
+        assert_equal(segm.data, expected)
+        assert_equal(segm.labels, [3, 4, 5])
+
+    def test_array_new_label_relabel(self):
+        segm = SegmentationImage(self.data.copy())
+        segm.reassign_labels([1, 7], [4, 5], relabel=True)
+        assert_equal(segm.labels, [1, 2, 3])
+        assert segm.data[0, 0] == segm.data[0, 4]
+        assert segm.data[3, 0] == segm.data[3, 5]
+
+    def test_array_new_label_matches_loop(self):
+        segm1 = SegmentationImage(self.data.copy())
+        segm1.reassign_labels([1, 7], [4, 5])
+        segm2 = SegmentationImage(self.data.copy())
+        segm2.reassign_labels(1, 4)
+        segm2.reassign_labels(7, 5)
+        assert_equal(segm1.data, segm2.data)
+
+    @pytest.mark.parametrize('new_label', [[4], [4, 5, 6], [[4, 5]]])
+    def test_invalid_new_label_shape(self, new_label):
+        segm = SegmentationImage(self.data.copy())
+        match = 'new_label must be a single label or have one label'
+        with pytest.raises(ValueError, match=match):
+            segm.reassign_labels([1, 7], new_label)
+        with pytest.raises(ValueError, match=match):
+            segm.reassign_label(1, [4, 5])
+        assert_equal(segm.data, self.data)
+
+    @pytest.mark.parametrize('new_label', [[4, -1], [4, 2.5], [4, np.nan],
+                                           [4, 'a'], [4, None]])
+    def test_invalid_new_label_value(self, new_label):
+        """
+        Test that a negative or noninteger value in an array of new
+        labels raises an error and leaves the image unchanged.
+        """
+        segm = SegmentationImage(self.data.copy())
+        match = 'new_label must be a nonnegative integer'
+        with pytest.raises(ValueError, match=match):
+            segm.reassign_labels([1, 7], new_label)
+        assert_equal(segm.data, self.data)
+
+    def test_new_label_dtype(self):
+        """
+        Test that a value in an array of new labels that the dtype of
+        the segmentation array cannot hold raises an error, and that
+        the largest value it can hold is accepted.
+        """
+        segm = SegmentationImage(self.data.astype(np.uint8))
+        match = 'new_label 256 cannot be represented'
+        with pytest.raises(ValueError, match=match):
+            segm.reassign_labels([1, 7], [4, 256])
+        assert_equal(segm.data, self.data)
+
+        segm.reassign_labels([1, 7], [4, 255])
+        assert segm.data.dtype == np.uint8
+        assert_equal(segm.labels, [3, 4, 5, 255])
+
+    def test_empty_labels(self):
+        segm = SegmentationImage(self.data.copy())
+        segm.reassign_labels([], [])
+        assert_equal(segm.data, self.data)

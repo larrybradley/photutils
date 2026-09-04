@@ -7,60 +7,16 @@ import astropy.units as u
 import numpy as np
 import pytest
 from astropy.convolution import convolve
-from astropy.modeling.models import Gaussian2D
 from astropy.table import QTable
 from numpy.testing import assert_equal
 
 from photutils.segmentation import (SegmentationImage, detect_sources,
                                     get_spurious_labels,
                                     make_2dgaussian_kernel)
-
-THRESHOLD = 5.0
-N_PIXELS = 4
-
-
-def make_scene(sources, shape=(100, 60)):
-    """
-    Return a noiseless image of Gaussian sources.
-
-    Parameters
-    ----------
-    sources : list of tuple
-        The ``(amplitude, x, y, sigma)`` of each source.
-
-    shape : tuple of int, optional
-        The image shape.
-
-    Returns
-    -------
-    data : 2D `~numpy.ndarray`
-        The image.
-    """
-    yy, xx = np.mgrid[0:shape[0], 0:shape[1]]
-    data = np.zeros(shape)
-    for amplitude, x, y, sigma in sources:
-        data += Gaussian2D(amplitude, x, y, sigma, sigma)(xx, yy)
-    return data
-
-
-def labels_at(segm, sources):
-    """
-    Return the segment label at the center of each source.
-
-    Parameters
-    ----------
-    segm : `~photutils.segmentation.SegmentationImage`
-        The segmentation image.
-
-    sources : list of tuple
-        The ``(amplitude, x, y, sigma)`` of each source.
-
-    Returns
-    -------
-    labels : list of int
-        The labels.
-    """
-    return [int(segm.data[int(y), int(x)]) for _, x, y, _ in sources]
+from photutils.segmentation.tests._wing_scene import (FAINT_BLOB, FAR_BLOB,
+                                                      N_PIXELS, NEAR_BLOB,
+                                                      STAR, THRESHOLD,
+                                                      labels_at, make_scene)
 
 
 def as_dict(result):
@@ -80,21 +36,6 @@ def as_dict(result):
     return {int(label): int(absorber)
             for label, absorber in zip(result['label'],
                                        result['absorbed_by'], strict=True)}
-
-
-# A bright star with a faint blob inside its cleaning zone. The blob
-# is well outside the star's isophote (its own segment) but the star's
-# model wing at the blob exceeds the blob's n_pixels-th brightest
-# pixel above the threshold.
-STAR = (1000.0, 30.0, 70.0, 3.5)
-NEAR_BLOB = (7.0, 30.0, 52.0, 2.5)
-
-# A very faint blob within the near blob's cleaning zone and within
-# the star's cleaning zone.
-FAINT_BLOB = (5.3, 30.0, 40.0, 3.0)
-
-# A faint blob far from everything.
-FAR_BLOB = (7.0, 30.0, 12.0, 2.5)
 
 
 @pytest.fixture
@@ -357,7 +298,8 @@ class TestGetSpuriousLabelsInputs:
         with pytest.raises(ValueError, match=match):
             get_spurious_labels(data, segm, THRESHOLD, n_pixels)
 
-    @pytest.mark.parametrize('clean_param', [0.0, -1.0, np.nan, np.inf])
+    @pytest.mark.parametrize('clean_param',
+                             [0.0, -1.0, np.nan, np.inf, True, 'x'])
     def test_invalid_clean_param(self, star_scene, clean_param):
         data, segm = star_scene
         match = 'clean_param must be a positive finite number'
