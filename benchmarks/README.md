@@ -90,6 +90,15 @@ python benchmarks/bench_clean_sep.py
 python benchmarks/bench_clean_sep.py --halo-size 3000 --repeats 5
 ```
 
+The `clean_vs_sep.ipynb` notebook in this directory illustrates each
+difference between the two codes with a scene that drives SEP into
+it: the heap that selects the comparison level (its sift-down bug and
+its skipped pixel), the label-order dependence of the pairwise pass,
+the mean-threshold pixel counts in the area correction, and the holes
+SEP leaves in its cleaned segmentation map. Run it from the
+`benchmarks` directory so that it can import the halo field from
+`bench_clean_sep.py`.
+
 ## SourceCatalog cross-version validation (`validate_catalog_versions.py`)
 
 Validation of `SourceCatalog` results across photutils versions. The
