@@ -2260,3 +2260,47 @@ def test_segment_deprecations(segm_data):
     match = 'attribute was deprecated'
     with pytest.warns(AstropyDeprecationWarning, match=match):
         _ = segments[0].data_ma
+
+
+class TestReassignLabelsArray:
+    """
+    Tests of reassign_labels with one new label per input label.
+    """
+
+    data = np.array([[1, 1, 0, 0, 4, 4],
+                     [0, 0, 0, 0, 0, 4],
+                     [0, 0, 3, 3, 0, 0],
+                     [7, 0, 0, 0, 0, 5],
+                     [7, 7, 0, 5, 5, 5],
+                     [7, 7, 0, 0, 5, 5]])
+
+    def test_array_new_label(self):
+        segm = SegmentationImage(self.data.copy())
+        segm.reassign_labels([1, 7], [4, 5])
+        expected = self.data.copy()
+        expected[expected == 1] = 4
+        expected[expected == 7] = 5
+        assert_equal(segm.data, expected)
+        assert_equal(segm.labels, [3, 4, 5])
+
+    def test_array_new_label_relabel(self):
+        segm = SegmentationImage(self.data.copy())
+        segm.reassign_labels([1, 7], [4, 5], relabel=True)
+        assert_equal(segm.labels, [1, 2, 3])
+        assert segm.data[0, 0] == segm.data[0, 4]
+        assert segm.data[3, 0] == segm.data[3, 5]
+
+    def test_array_new_label_matches_loop(self):
+        segm1 = SegmentationImage(self.data.copy())
+        segm1.reassign_labels([1, 7], [4, 5])
+        segm2 = SegmentationImage(self.data.copy())
+        segm2.reassign_labels(1, 4)
+        segm2.reassign_labels(7, 5)
+        assert_equal(segm1.data, segm2.data)
+
+    @pytest.mark.parametrize('new_label', [[4], [4, 5, 6], [[4, 5]]])
+    def test_invalid_new_label_shape(self, new_label):
+        segm = SegmentationImage(self.data.copy())
+        match = 'new_label must be a single label or have one label'
+        with pytest.raises(ValueError, match=match):
+            segm.reassign_labels([1, 7], new_label)

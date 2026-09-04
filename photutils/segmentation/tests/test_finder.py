@@ -14,6 +14,10 @@ from numpy.testing import assert_equal
 from photutils.datasets import make_100gaussians_image
 from photutils.segmentation.finder import SourceFinder
 from photutils.segmentation.flags import SEGMENTATION_FLAGS
+from photutils.segmentation.tests._wing_scene import (FAR_BLOB, N_PIXELS,
+                                                      NEAR_BLOB, STAR,
+                                                      THRESHOLD, labels_at,
+                                                      make_scene)
 from photutils.segmentation.utils import make_2dgaussian_kernel
 from photutils.utils.exceptions import NoDetectionsWarning
 
@@ -140,6 +144,7 @@ def test_finder_n_threads():
     ({'n_threads': True}, 'n_threads must be a positive integer'),
     ({'clean_param': 0.0}, 'clean_param must be a positive finite number'),
     ({'clean_param': np.nan}, 'clean_param must be a positive finite number'),
+    ({'clean_param': True}, 'clean_param must be a positive finite number'),
 ])
 def test_finder_invalid_kwargs(kwargs, match):
     """
@@ -178,81 +183,73 @@ class TestSourceFinderClean:
     Tests of the clean keyword.
     """
 
-    star = (1000.0, 30.0, 70.0, 3.5)
-    near_blob = (7.0, 30.0, 52.0, 2.5)
-    far_blob = (7.0, 30.0, 12.0, 2.5)
-    threshold = 5.0
-    n_pixels = 4
-
-    @staticmethod
-    def make_scene(sources):
-        yy, xx = np.mgrid[0:100, 0:60]
-        data = np.zeros((100, 60))
-        for amplitude, x, y, sigma in sources:
-            data += Gaussian2D(amplitude, x, y, sigma, sigma)(xx, yy)
-        return data
-
     def test_clean_merges_spurious_segment(self):
-        data = self.make_scene([self.star, self.near_blob])
-        segm = SourceFinder(n_pixels=self.n_pixels)(data, self.threshold)
+        data = make_scene([STAR, NEAR_BLOB])
+        segm = SourceFinder(n_pixels=N_PIXELS)(data, THRESHOLD)
         assert segm.n_labels == 2
 
-        finder = SourceFinder(n_pixels=self.n_pixels, clean=True)
+        finder = SourceFinder(n_pixels=N_PIXELS, clean=True)
         assert 'clean=True' in repr(finder)
-        cleaned = finder(data, self.threshold)
+        cleaned = finder(data, THRESHOLD)
         assert cleaned.n_labels == 1
         assert_equal(cleaned.labels, [1])
         # The blob pixels now belong to the star's segment
         assert_equal(cleaned.data > 0, segm.data > 0)
 
+    def test_clean_with_units(self):
+        data = make_scene([STAR, NEAR_BLOB])
+        finder = SourceFinder(n_pixels=N_PIXELS, clean=True)
+        expected = finder(data, THRESHOLD)
+        cleaned = finder(data << u.uJy, THRESHOLD * u.uJy)
+        assert_equal(cleaned.data, expected.data)
+
     def test_clean_without_relabel(self):
-        data = self.make_scene([self.star, self.near_blob])
-        finder = SourceFinder(n_pixels=self.n_pixels, clean=True,
-                              relabel=False)
-        cleaned = finder(data, self.threshold)
-        star = cleaned.data[70, 30]
+        data = make_scene([STAR, NEAR_BLOB])
+        finder = SourceFinder(n_pixels=N_PIXELS, clean=True, relabel=False)
+        cleaned = finder(data, THRESHOLD)
+        star, blob = labels_at(cleaned, [STAR, NEAR_BLOB])
         assert cleaned.n_labels == 1
         assert star == 2
-        assert cleaned.data[52, 30] == star
+        assert blob == star
 
     def test_clean_nothing_spurious(self):
-        data = self.make_scene([self.star, self.far_blob])
-        expected = SourceFinder(n_pixels=self.n_pixels)(data, self.threshold)
-        finder = SourceFinder(n_pixels=self.n_pixels, clean=True)
-        cleaned = finder(data, self.threshold)
+        data = make_scene([STAR, FAR_BLOB])
+        expected = SourceFinder(n_pixels=N_PIXELS)(data, THRESHOLD)
+        finder = SourceFinder(n_pixels=N_PIXELS, clean=True)
+        cleaned = finder(data, THRESHOLD)
         assert_equal(cleaned.data, expected.data)
 
     def test_clean_param(self):
-        data = self.make_scene([self.star, self.near_blob])
-        finder = SourceFinder(n_pixels=self.n_pixels, clean=True,
+        data = make_scene([STAR, NEAR_BLOB])
+        finder = SourceFinder(n_pixels=N_PIXELS, clean=True,
                               clean_param=0.05)
         assert 'clean_param=0.05' in repr(finder)
-        assert finder(data, self.threshold).n_labels == 2
+        assert finder(data, THRESHOLD).n_labels == 2
 
     def test_clean_without_deblend(self):
-        data = self.make_scene([self.star, self.near_blob])
-        finder = SourceFinder(n_pixels=self.n_pixels, deblend=False,
-                              clean=True)
-        assert finder(data, self.threshold).n_labels == 1
+        data = make_scene([STAR, NEAR_BLOB])
+        finder = SourceFinder(n_pixels=N_PIXELS, deblend=False, clean=True)
+        assert finder(data, THRESHOLD).n_labels == 1
 
     def test_clean_keeps_deblend_flags(self):
         # A blended pair with a spurious blob in its wing. The blob is
         # merged into a deblended child, whose deblending provenance
         # flag survives the merge and the relabeling.
         pair = [(1000.0, 30.0, 70.0, 3.5), (1000.0, 42.0, 70.0, 3.5)]
-        data = self.make_scene([*pair, self.near_blob])
-        segm = SourceFinder(n_pixels=self.n_pixels)(data, self.threshold)
+        data = make_scene([*pair, NEAR_BLOB])
+        segm = SourceFinder(n_pixels=N_PIXELS)(data, THRESHOLD)
         assert segm.n_labels == 3
 
-        finder = SourceFinder(n_pixels=self.n_pixels, clean=True)
-        cleaned = finder(data, self.threshold)
+        finder = SourceFinder(n_pixels=N_PIXELS, clean=True)
+        cleaned = finder(data, THRESHOLD)
         assert cleaned.n_labels == 2
         assert_equal(cleaned.labels, [1, 2])
         assert np.all(cleaned.flags & SEGMENTATION_FLAGS.DEBLENDED)
-        assert cleaned.data[52, 30] == cleaned.data[70, 30]
+        star, blob = labels_at(cleaned, [pair[0], NEAR_BLOB])
+        assert blob == star
 
     def test_clean_no_sources(self):
         data = np.zeros((50, 50))
-        finder = SourceFinder(n_pixels=self.n_pixels, clean=True)
+        finder = SourceFinder(n_pixels=N_PIXELS, clean=True)
         with pytest.warns(NoDetectionsWarning):
-            assert finder(data, self.threshold) is None
+            assert finder(data, THRESHOLD) is None

@@ -247,9 +247,8 @@ class SourceFinder:
     2
     >>> spurious = get_spurious_labels(data, segment_map, 5.0, n_pixels=4,
     ...                                convolved_data=convolved_data)
-    >>> for absorber in np.unique(spurious['absorbed_by']):
-    ...     labels = spurious['label'][spurious['absorbed_by'] == absorber]
-    ...     segment_map.reassign_labels(labels, absorber)
+    >>> segment_map.reassign_labels(spurious['label'],
+    ...                             spurious['absorbed_by'])
     >>> segment_map.n_labels
     1
     """
@@ -384,10 +383,9 @@ class SourceFinder:
         if len(spurious) == 0:
             return segment_img
 
-        for absorber in np.unique(spurious['absorbed_by']):
-            labels = spurious['label'][spurious['absorbed_by'] == absorber]
-            segment_img.reassign_labels(labels, absorber)
-        if self.relabel:
-            segment_img.relabel_consecutive()
-
+        # Every absorber is a surviving source, so the merge is one
+        # direct reassignment of each spurious label to its absorber
+        segment_img.reassign_labels(spurious['label'],
+                                    spurious['absorbed_by'],
+                                    relabel=self.relabel)
         return segment_img
