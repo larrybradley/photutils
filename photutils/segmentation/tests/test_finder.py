@@ -145,6 +145,7 @@ def test_finder_n_threads():
     ({'clean_param': 0.0}, 'clean_param must be a positive finite number'),
     ({'clean_param': np.nan}, 'clean_param must be a positive finite number'),
     ({'clean_param': True}, 'clean_param must be a positive finite number'),
+    ({'wing_model': 'gaussian'}, "wing_model must be 'moffat' or 'measured'"),
 ])
 def test_finder_invalid_kwargs(kwargs, match):
     """
@@ -247,6 +248,18 @@ class TestSourceFinderClean:
         assert np.all(cleaned.flags & SEGMENTATION_FLAGS.DEBLENDED)
         star, blob = labels_at(cleaned, [pair[0], NEAR_BLOB])
         assert blob == star
+
+    def test_wing_model(self):
+        # A pure Gaussian star has no measurable wing, so the measured
+        # model keeps the blob that the Moffat prior absorbs
+        data = make_scene([STAR, NEAR_BLOB])
+        finder = SourceFinder(n_pixels=N_PIXELS, clean=True,
+                              wing_model='measured')
+        assert "wing_model='measured'" in repr(finder)
+        assert finder(data, THRESHOLD).n_labels == 2
+        finder = SourceFinder(n_pixels=N_PIXELS, clean=True,
+                              wing_model='moffat')
+        assert finder(data, THRESHOLD).n_labels == 1
 
     def test_clean_no_sources(self):
         data = np.zeros((50, 50))
