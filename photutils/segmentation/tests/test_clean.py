@@ -203,6 +203,35 @@ class TestGetSpuriousLabels:
         result = get_spurious_labels(data, segm, threshold, N_PIXELS)
         assert as_dict(result) == expected
 
+    def test_pixel_counts_use_pixel_thresholds(self):
+        # A star with a broad halo, whose area correction is below its
+        # cap, and a faint blob at the edge of its reach. Raising the
+        # threshold on one half of the star's segment and lowering it
+        # on the other keeps the mean threshold, so the wing model
+        # normalization and the blob's level are unchanged, but fewer
+        # star pixels exceed their own thresholds. The smaller area
+        # correction lowers the wing model and the blob survives.
+        core = (40.0, 30.0, 70.0, 1.0)
+        halo = (7.0, 30.0, 70.0, 12.0)
+        blob = (6.0, 30.0, 24.0, 2.0)
+        data = make_scene([core, halo, blob], shape=(120, 60))
+        segm = detect_sources(data, THRESHOLD, N_PIXELS)
+        star_label, blob_label = labels_at(segm, [core, blob])
+        result = get_spurious_labels(data, segm, THRESHOLD, N_PIXELS)
+        assert as_dict(result) == {blob_label: star_label}
+
+        _, xx = np.mgrid[0:120, 0:60]
+        left = (segm.data == star_label) & (xx < 30)
+        right = (segm.data == star_label) & (xx >= 30)
+        threshold = np.full(data.shape, THRESHOLD)
+        threshold[left] += 4.5
+        threshold[right] -= (4.5 * np.count_nonzero(left)
+                             / np.count_nonzero(right))
+        assert np.isclose(threshold[segm.data == star_label].mean(),
+                          THRESHOLD)
+        result = get_spurious_labels(data, segm, threshold, N_PIXELS)
+        assert len(result) == 0
+
     def test_convolved_data(self):
         data = make_scene([STAR, NEAR_BLOB])
         kernel = make_2dgaussian_kernel(3.0, size=5)
