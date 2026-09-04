@@ -326,9 +326,9 @@ New Features
     the segmentation image. Its ``wing_model`` keyword selects the
     analytic SourceExtractor Moffat wing or a wing measured from the
     brighter source's own light, which follows galaxy profiles.
-    ``SourceFinder`` has new ``clean`` and ``clean_param`` keywords to
-    run the test after deblending and merge the spurious segments into
-    their absorbers. [#2414]
+    ``SourceFinder`` has new ``clean``, ``clean_param``, and
+    ``wing_model`` keywords to run the test after deblending and merge
+    the spurious segments into their absorbers. [#2414]
 
 - ``photutils.utils``
 

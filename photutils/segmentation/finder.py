@@ -6,6 +6,7 @@ Tools for detecting sources in an image.
 import numpy as np
 
 from photutils.segmentation.clean import (_validate_clean_param,
+                                          _validate_wing_model,
                                           get_spurious_labels)
 from photutils.segmentation.deblend import (_validate_deblend_kwargs,
                                             deblend_sources)
@@ -139,7 +140,18 @@ class SourceFinder:
         Must be positive. SourceExtractor restricts it to the range
         0.1 to 10, outside of which the test either absorbs nothing or
         absorbs every fainter neighbor within the cleaning zone. This
-        keyword is ignored unless ``clean=True``.
+        keyword is ignored unless ``clean=True`` and
+        ``wing_model='moffat'``.
+
+    wing_model : {'moffat', 'measured'}, optional
+        The cleaning wing model. ``'moffat'`` (default) is the
+        analytic SourceExtractor model, a prior tuned for stellar
+        profiles. ``'measured'`` uses the brighter source's own light
+        measured in an elliptical annulus at the fainter source's
+        distance, which follows galaxy profiles. See
+        :func:`~photutils.segmentation.get_spurious_labels` for the
+        details and caveats. This keyword is ignored unless
+        ``clean=True``.
 
     nproc : int, optional
         This keyword is deprecated and has no effect. It was the name of
@@ -264,6 +276,7 @@ class SourceFinder:
                  contrast=0.001, contrast_method=None,
                  mode='exponential', relabel=True,
                  n_threads=1, clean=False, clean_param=1.0,
+                 wing_model='moffat',
                  nproc=1,  # noqa: ARG002
                  n_processes=1, progress_bar=True):
         self.n_pixels = as_pair('n_pixels', n_pixels, check_odd=False)
@@ -277,6 +290,7 @@ class SourceFinder:
                                  mode=mode, connectivity=connectivity,
                                  n_threads=n_threads)
         _validate_clean_param(clean_param)
+        _validate_wing_model(wing_model)
         self.deblend = deblend
         self.connectivity = connectivity
         self.n_levels = n_levels
@@ -287,14 +301,15 @@ class SourceFinder:
         self.n_threads = n_threads
         self.clean = clean
         self.clean_param = clean_param
+        self.wing_model = wing_model
         self.n_processes = n_processes
         self.progress_bar = progress_bar
 
     def __repr__(self):
         params = ('n_pixels', 'deblend', 'connectivity', 'n_levels',
                   'contrast', 'contrast_method', 'mode', 'relabel',
-                  'n_threads', 'clean', 'clean_param', 'n_processes',
-                  'progress_bar')
+                  'n_threads', 'clean', 'clean_param', 'wing_model',
+                  'n_processes', 'progress_bar')
         return make_repr(self, params)
 
     # Remove in 4.0
@@ -381,7 +396,8 @@ class SourceFinder:
         """
         spurious = get_spurious_labels(data, segment_img, threshold,
                                        self.n_pixels[0],
-                                       clean_param=self.clean_param)
+                                       clean_param=self.clean_param,
+                                       wing_model=self.wing_model)
         if len(spurious) == 0:
             return segment_img
 

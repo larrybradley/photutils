@@ -312,10 +312,15 @@ To drop the spurious segments instead, use
 The ``data``, ``threshold``, and ``n_pixels`` inputs (and the
 ``convolved_data`` keyword, if a convolved image was used for
 detection) should match those used to make the segmentation image.
-The test is a heuristic tuned for stellar profiles. A faint real
-companion or a piece of galaxy substructure within the modeled wing
-of a bright neighbor is flagged along with true spurious detections,
-so apply the result with care in crowded or extended fields.
+The default wing model is a heuristic tuned for stellar profiles. It
+overestimates the wings of galaxies, especially exponential disks,
+so a faint real companion of a galaxy can be flagged along with true
+spurious detections. The ``wing_model='measured'`` option instead
+measures the brighter source's own light in an elliptical annulus at
+the fainter source's distance, which follows whatever profile the
+source has and is recommended for fields with resolved galaxies. In
+crowded regions the measured wing also includes the below-threshold
+light of other sources, so apply either result with care there.
 
 
 SourceFinder
@@ -342,7 +347,9 @@ image and threshold::
 Cleaning is off by default. With ``clean=True``, the finder runs the
 spurious-detection test after deblending and merges each spurious
 segment into the source that absorbed it, with the ``clean_param``
-keyword setting the wing model exponent. On the star and faint blob
+and ``wing_model`` keywords passed through to
+:func:`~photutils.segmentation.get_spurious_labels`. On the star and
+faint blob
 image from the previous section, the finder detects two sources and
 cleaning merges the blob into the star's segment::
 
