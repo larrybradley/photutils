@@ -301,9 +301,8 @@ wing of a bright star and is merged into the star's segment::
     label absorbed_by
     ----- -----------
         1           2
-    >>> for absorber in np.unique(spurious['absorbed_by']):
-    ...     labels = spurious['label'][spurious['absorbed_by'] == absorber]
-    ...     star_segm.reassign_labels(labels, absorber)
+    >>> star_segm.reassign_labels(spurious['label'],
+    ...                           spurious['absorbed_by'])
     >>> star_segm.n_labels
     1
 
@@ -343,12 +342,16 @@ image and threshold::
 Cleaning is off by default. With ``clean=True``, the finder runs the
 spurious-detection test after deblending and merges each spurious
 segment into the source that absorbed it, with the ``clean_param``
-keyword setting the wing model exponent::
+keyword setting the wing model exponent. On the star and faint blob
+image from the previous section, the finder detects two sources and
+cleaning merges the blob into the star's segment::
 
-    >>> finder = SourceFinder(n_pixels=10, clean=True)
-    >>> segment_map = finder(convolved_data, threshold)
-    >>> segment_map.n_labels
-    93
+    >>> finder = SourceFinder(n_pixels=4)
+    >>> finder(star_data, 5.0).n_labels
+    2
+    >>> finder = SourceFinder(n_pixels=4, clean=True)
+    >>> finder(star_data, 5.0).n_labels
+    1
 
 
 Modifying a Segmentation Image
