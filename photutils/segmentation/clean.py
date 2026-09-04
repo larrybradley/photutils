@@ -202,10 +202,7 @@ def get_spurious_labels(data, segmentation_image, threshold, n_pixels, *,
         msg = f'n_pixels must be a positive integer, got {n_pixels!r}'
         raise ValueError(msg)
 
-    if not np.isfinite(clean_param) or clean_param <= 0:
-        msg = ('clean_param must be a positive finite number, got '
-               f'{clean_param!r}')
-        raise ValueError(msg)
+    _validate_clean_param(clean_param)
 
     props = _measure_segments(data, convolved_data, segmentation_image,
                               threshold, int(n_pixels))
@@ -215,6 +212,27 @@ def get_spurious_labels(data, segmentation_image, threshold, n_pixels, *,
     spurious = np.flatnonzero(absorbed_by >= 0)
     return QTable({'label': labels[spurious],
                    'absorbed_by': labels[absorbed_by[spurious]]})
+
+
+def _validate_clean_param(clean_param):
+    """
+    Validate the wing model exponent shared by `get_spurious_labels`
+    and `~photutils.segmentation.SourceFinder`.
+
+    Parameters
+    ----------
+    clean_param : float
+        The value to validate.
+
+    Raises
+    ------
+    ValueError
+        If the value is not a positive finite number.
+    """
+    if not np.isfinite(clean_param) or clean_param <= 0:
+        msg = ('clean_param must be a positive finite number, got '
+               f'{clean_param!r}')
+        raise ValueError(msg)
 
 
 def _measure_segments(data, convolved_data, segmentation_image, threshold,
