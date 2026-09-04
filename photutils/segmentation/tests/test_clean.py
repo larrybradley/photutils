@@ -264,6 +264,103 @@ class TestGetSpuriousLabels:
         assert n_blob > 3
 
 
+class TestMeasuredWingModel:
+    """
+    Tests of the measured wing model.
+    """
+
+    # A star with a broad halo. The marginal blob crosses the threshold
+    # only with the halo underneath it, the real blob exceeds the
+    # threshold on its own, and the outer blob lies beyond the halo.
+    core = (40.0, 30.0, 70.0, 1.0)
+    halo = (7.0, 30.0, 70.0, 12.0)
+    marginal_blob = (4.6, 30.0, 45.0, 3.0)
+    real_blob = (6.0, 30.0, 45.0, 2.0)
+    outer_blob = (6.0, 30.0, 10.0, 2.0)
+
+    def test_default_is_moffat(self, star_scene):
+        data, segm = star_scene
+        expected = as_dict(get_spurious_labels(data, segm, THRESHOLD,
+                                               N_PIXELS))
+        result = get_spurious_labels(data, segm, THRESHOLD, N_PIXELS,
+                                     wing_model='moffat')
+        assert as_dict(result) == expected
+
+    def test_invalid_wing_model(self, star_scene):
+        data, segm = star_scene
+        match = "wing_model must be 'moffat' or 'measured'"
+        with pytest.raises(ValueError, match=match):
+            get_spurious_labels(data, segm, THRESHOLD, N_PIXELS,
+                                wing_model='gaussian')
+
+    def test_gaussian_star_keeps_blob(self, star_scene):
+        # A pure Gaussian star has no measurable light at the blob,
+        # so the blob survives, while the Moffat prior absorbs it
+        data, segm = star_scene
+        star, blob = labels_at(segm, [STAR, NEAR_BLOB])
+        moffat = get_spurious_labels(data, segm, THRESHOLD, N_PIXELS)
+        assert as_dict(moffat) == {blob: star}
+        measured = get_spurious_labels(data, segm, THRESHOLD, N_PIXELS,
+                                       wing_model='measured')
+        assert len(measured) == 0
+
+    def test_halo_absorbs_marginal_blob(self):
+        data = make_scene([self.core, self.halo, self.marginal_blob])
+        segm = detect_sources(data, THRESHOLD, N_PIXELS)
+        star, blob = labels_at(segm, [self.core, self.marginal_blob])
+        result = get_spurious_labels(data, segm, THRESHOLD, N_PIXELS,
+                                     wing_model='measured')
+        assert as_dict(result) == {blob: star}
+
+    def test_halo_keeps_real_blob(self):
+        # The real blob sits on the same halo, but its own light lifts
+        # its level above the measured halo
+        data = make_scene([self.core, self.halo, self.real_blob])
+        segm = detect_sources(data, THRESHOLD, N_PIXELS)
+        result = get_spurious_labels(data, segm, THRESHOLD, N_PIXELS,
+                                     wing_model='measured')
+        assert len(result) == 0
+
+    def test_halo_keeps_outer_blob(self):
+        data = make_scene([self.core, self.halo, self.outer_blob])
+        segm = detect_sources(data, THRESHOLD, N_PIXELS)
+        result = get_spurious_labels(data, segm, THRESHOLD, N_PIXELS,
+                                     wing_model='measured')
+        assert len(result) == 0
+
+    def test_clean_param_ignored(self):
+        data = make_scene([self.core, self.halo, self.marginal_blob])
+        segm = detect_sources(data, THRESHOLD, N_PIXELS)
+        expected = as_dict(get_spurious_labels(data, segm, THRESHOLD,
+                                               N_PIXELS,
+                                               wing_model='measured'))
+        result = get_spurious_labels(data, segm, THRESHOLD, N_PIXELS,
+                                     wing_model='measured',
+                                     clean_param=0.05)
+        assert as_dict(result) == expected
+
+    def test_non_finite_annulus_falls_back(self):
+        # With no usable pixels in the annulus, the measured wing is
+        # zero and nothing is absorbed
+        data = make_scene([self.core, self.halo, self.marginal_blob])
+        segm = detect_sources(data, THRESHOLD, N_PIXELS)
+        convolved_data = data.copy()
+        convolved_data[segm.data == 0] = np.nan
+        result = get_spurious_labels(data, segm, THRESHOLD, N_PIXELS,
+                                     convolved_data=convolved_data,
+                                     wing_model='measured')
+        assert len(result) == 0
+
+    def test_other_sources_excluded_from_annulus(self):
+        # A bright third source on the annulus does not raise the
+        # measured wing, because its pixels are excluded
+        data = make_scene([STAR, NEAR_BLOB, (500.0, 8.0, 52.0, 2.0)])
+        segm = detect_sources(data, THRESHOLD, N_PIXELS)
+        result = get_spurious_labels(data, segm, THRESHOLD, N_PIXELS,
+                                     wing_model='measured')
+        assert len(result) == 0
+
+
 class TestGetSpuriousLabelsInputs:
     def test_invalid_segmentation_image(self, star_scene):
         data, segm = star_scene
