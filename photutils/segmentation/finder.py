@@ -170,6 +170,20 @@ class SourceFinder:
     :func:`photutils.segmentation.deblend_sources`
     :func:`photutils.segmentation.get_spurious_labels`
 
+    Notes
+    -----
+    With ``clean=True``, the finder passes its single detection
+    image to :func:`~photutils.segmentation.get_spurious_labels`
+    as both the unfiltered ``data`` and the ``convolved_data``.
+    The test's centroids, moments, fluxes, and comparison levels
+    come from the convolved image in either case, so this affects
+    only the area correction of the wing model, which uses the
+    unfiltered peak and pixel counts and is capped at 1 for
+    Gaussian-like sources. To give the test the unfiltered image as
+    well, as `SourceExtractor`_ does when a filter is used, run the
+    detection, deblending, and cleaning steps explicitly (see the
+    second example).
+
     Examples
     --------
     .. plot::
@@ -207,6 +221,37 @@ class SourceFinder:
         ax1.imshow(data, norm=norm, origin='lower')
         segment_map.imshow(ax=ax2)
         fig.tight_layout()
+
+    The finder with ``clean=True`` is equivalent to running the
+    steps explicitly with the detection image alone. To clean with
+    both the unfiltered and the convolved image, run the steps
+    yourself. Here a faint blob in the wing of a bright star is
+    merged into the star's segment:
+
+    >>> import numpy as np
+    >>> from astropy.convolution import convolve
+    >>> from astropy.modeling.models import Gaussian2D
+    >>> from photutils.segmentation import (deblend_sources,
+    ...                                     detect_sources,
+    ...                                     get_spurious_labels,
+    ...                                     make_2dgaussian_kernel)
+    >>> yy, xx = np.mgrid[0:100, 0:60]
+    >>> data = (Gaussian2D(1000, 30, 70, 3.5, 3.5)(xx, yy)
+    ...         + Gaussian2D(7, 30, 52, 2.5, 2.5)(xx, yy))
+    >>> kernel = make_2dgaussian_kernel(3.0, size=5)
+    >>> convolved_data = convolve(data, kernel)
+    >>> segment_map = detect_sources(convolved_data, 5.0, n_pixels=4)
+    >>> segment_map = deblend_sources(convolved_data, segment_map,
+    ...                               n_pixels=4)
+    >>> segment_map.n_labels
+    2
+    >>> spurious = get_spurious_labels(data, segment_map, 5.0, n_pixels=4,
+    ...                                convolved_data=convolved_data)
+    >>> for absorber in np.unique(spurious['absorbed_by']):
+    ...     labels = spurious['label'][spurious['absorbed_by'] == absorber]
+    ...     segment_map.reassign_labels(labels, absorber)
+    >>> segment_map.n_labels
+    1
     """
 
     @deprecated_renamed_argument('npixels', 'n_pixels', '3.0', until='4.0')
