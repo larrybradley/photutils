@@ -32,6 +32,7 @@ free-threaded Python builds.
 
 import numpy as np
 
+from libc.stdlib cimport free, malloc
 from scipy.optimize.cython_optimize cimport brentq, zeros_full_output
 
 from photutils.segmentation._batch_results import BatchFluxRadiusArgs
@@ -41,8 +42,9 @@ from photutils.aperture._batch_overlap cimport (_circle_pixel_frac,
 
 __all__ = ['batch_central_moments', 'batch_centroid_win',
            'batch_flux_radius_prepare', 'batch_flux_radius_solve',
-           'batch_kron_radius', 'batch_minmax_index', 'batch_moment_err',
-           'batch_perimeter', 'batch_quad_boxes', 'batch_raw_moments',
+           'batch_kron_radius', 'batch_kth_largest', 'batch_minmax_index',
+           'batch_moment_err', 'batch_perimeter', 'batch_quad_boxes',
+           'batch_raw_moments', 'batch_row_nanmedian',
            'batch_segment_gather']
 
 
@@ -1769,6 +1771,266 @@ def batch_segment_gather(const double[:, ::1] values, *,
                         packed[pos] = values[iy, ix]
                         pos += 1
     return packed_arr, offsets_arr, counts_arr
+
+
+cdef double _kth_largest(const double *values, Py_ssize_t n,
+                         double *heap, Py_ssize_t k) noexcept nogil:
+    """
+    Return the k-th largest of ``n`` values with a k-element min-heap.
+
+    Non-finite values are ignored. The heap holds the ``k`` largest
+    values seen so far with the smallest at the root, so the root is
+    the k-th largest once ``k`` values have been seen.
+
+    Parameters
+    ----------
+    values : const double*
+        The values.
+
+    n : Py_ssize_t
+        The number of values.
+
+    heap : double*
+        Scratch space for ``k`` doubles.
+
+    k : Py_ssize_t
+        The rank, starting from 1 for the largest value.
+
+    Returns
+    -------
+    result : double
+        The k-th largest value, or NaN if fewer than ``k`` values are
+        finite.
+    """
+    cdef Py_ssize_t i, j, parent, child, size = 0
+    cdef double value, swap
+
+    for i in range(n):
+        value = values[i]
+        if not isfinite(value):
+            continue
+        if size < k:
+            # Push and sift up
+            j = size
+            heap[j] = value
+            size += 1
+            while j > 0:
+                parent = (j - 1) // 2
+                if heap[parent] <= heap[j]:
+                    break
+                swap = heap[parent]
+                heap[parent] = heap[j]
+                heap[j] = swap
+                j = parent
+        elif value > heap[0]:
+            # Replace the root and sift down
+            heap[0] = value
+            j = 0
+            while True:
+                child = 2 * j + 1
+                if child >= k:
+                    break
+                if child + 1 < k and heap[child + 1] < heap[child]:
+                    child += 1
+                if heap[j] <= heap[child]:
+                    break
+                swap = heap[child]
+                heap[child] = heap[j]
+                heap[j] = swap
+                j = child
+
+    if size < k:
+        return NAN
+    return heap[0]
+
+
+def batch_kth_largest(const double[::1] values, *,
+                      const Py_ssize_t[::1] offsets,
+                      const Py_ssize_t[::1] counts, Py_ssize_t k):
+    """
+    Find the k-th largest value of each source in a packed array.
+
+    The packed layout is that of `batch_segment_gather`: the values of
+    source ``i`` are ``values[offsets[i]:offsets[i] + counts[i]]``.
+    Non-finite values are ignored, and a source with fewer than ``k``
+    finite values gets NaN. Each source is scanned once with a
+    k-element heap, so the cost is linear in the number of values for
+    small ``k`` and no source is sorted.
+
+    Parameters
+    ----------
+    values : 1D ndarray of float64 (C-contiguous)
+        The packed values of all sources.
+
+    offsets : 1D ndarray of intp (C-contiguous)
+        The start offset of each source in ``values``, with shape
+        ``(n_sources + 1,)``.
+
+    counts : 1D ndarray of intp (C-contiguous)
+        The number of values of each source, with shape
+        ``(n_sources,)``.
+
+    k : int
+        The rank, starting from 1 for the largest value.
+
+    Returns
+    -------
+    result : 1D ndarray of float64
+        The k-th largest value of each source, with shape
+        ``(n_sources,)``.
+
+    Raises
+    ------
+    ValueError
+        If ``k`` is not positive, if ``offsets`` does not have one
+        more element than ``counts``, or if a source's values extend
+        beyond ``values``.
+    """
+    cdef Py_ssize_t n_src = counts.shape[0]
+    cdef Py_ssize_t i
+    cdef double *heap
+
+    if k < 1:
+        msg = f'k must be a positive integer, got {k}'
+        raise ValueError(msg)
+    if offsets.shape[0] != n_src + 1:
+        msg = 'offsets must have one more element than counts'
+        raise ValueError(msg)
+    for i in range(n_src):
+        if (offsets[i] < 0 or counts[i] < 0
+                or offsets[i] + counts[i] > values.shape[0]):
+            msg = 'offsets and counts must index within values'
+            raise ValueError(msg)
+
+    result_arr = np.empty(n_src, dtype=np.float64)
+    cdef double[::1] result = result_arr
+
+    heap = <double *> malloc(k * sizeof(double))
+    if heap == NULL:
+        raise MemoryError
+    try:
+        with nogil:
+            for i in range(n_src):
+                result[i] = _kth_largest(&values[offsets[i]], counts[i],
+                                         heap, k)
+    finally:
+        free(heap)
+
+    return result_arr
+
+
+cdef double _select(double *values, Py_ssize_t n,
+                    Py_ssize_t k) noexcept nogil:
+    """
+    Return the k-th smallest of ``n`` values by quickselect.
+
+    The values are reordered in place.
+
+    Parameters
+    ----------
+    values : double*
+        The values, which are partially sorted on return.
+
+    n : Py_ssize_t
+        The number of values.
+
+    k : Py_ssize_t
+        The zero-based rank of the value to return.
+
+    Returns
+    -------
+    result : double
+        The k-th smallest value.
+    """
+    cdef Py_ssize_t left = 0, right = n - 1, i, j
+    cdef double pivot, swap
+
+    while right > left:
+        pivot = values[(left + right) // 2]
+        i = left
+        j = right
+        while i <= j:
+            while values[i] < pivot:
+                i += 1
+            while values[j] > pivot:
+                j -= 1
+            if i <= j:
+                swap = values[i]
+                values[i] = values[j]
+                values[j] = swap
+                i += 1
+                j -= 1
+        if k <= j:
+            right = j
+        elif k >= i:
+            left = i
+        else:
+            break
+    return values[k]
+
+
+def batch_row_nanmedian(const double[:, ::1] values):
+    """
+    Compute the median of the finite values in each row.
+
+    Each row is copied without its non-finite values into a scratch
+    buffer and its median is found by quickselect, so no row is fully
+    sorted. A row with no finite value gets NaN.
+
+    Parameters
+    ----------
+    values : 2D ndarray of float64 (C-contiguous)
+        The values, with shape ``(n_rows, n_cols)``. They are not
+        modified.
+
+    Returns
+    -------
+    result : 1D ndarray of float64
+        The median of the finite values of each row, with shape
+        ``(n_rows,)``.
+    """
+    cdef Py_ssize_t n_rows = values.shape[0]
+    cdef Py_ssize_t n_cols = values.shape[1]
+    cdef Py_ssize_t i, j, n
+    cdef double value, lower, upper
+    cdef double *buffer
+
+    result_arr = np.empty(n_rows, dtype=np.float64)
+    cdef double[::1] result = result_arr
+    if n_rows == 0 or n_cols == 0:
+        result_arr[:] = NAN
+        return result_arr
+
+    buffer = <double *> malloc(n_cols * sizeof(double))
+    if buffer == NULL:
+        raise MemoryError
+    try:
+        with nogil:
+            for i in range(n_rows):
+                n = 0
+                for j in range(n_cols):
+                    value = values[i, j]
+                    if isfinite(value):
+                        buffer[n] = value
+                        n += 1
+                if n == 0:
+                    result[i] = NAN
+                elif n % 2 == 1:
+                    result[i] = _select(buffer, n, n // 2)
+                else:
+                    upper = _select(buffer, n, n // 2)
+                    # The lower median is the largest value below the
+                    # upper one, which quickselect left in the first
+                    # half of the buffer
+                    lower = buffer[0]
+                    for j in range(1, n // 2):
+                        if buffer[j] > lower:
+                            lower = buffer[j]
+                    result[i] = 0.5 * (lower + upper)
+    finally:
+        free(buffer)
+
+    return result_arr
 
 
 def batch_minmax_index(const double[:, ::1] values, *,
