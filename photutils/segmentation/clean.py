@@ -6,10 +6,13 @@ sources.
 
 import numbers
 
+import astropy.units as u
 import numpy as np
 from astropy.table import QTable
 from scipy.spatial import cKDTree
 
+from photutils.segmentation._batch_catalog import (batch_kth_largest,
+                                                   batch_row_nanmedian)
 from photutils.segmentation.catalog import SourceCatalog
 from photutils.segmentation.core import SegmentationImage
 from photutils.utils._quantity_helpers import process_quantities
@@ -24,9 +27,14 @@ CLEAN_ZONE = 10.0
 # argument, as in SourceExtractor
 MAX_MODEL_ARG = 1e10
 
-# The minimum number of usable pixels in an annulus of the measured
-# wing model. Below this, the measured wing is zero.
+# The measured wing model samples each annulus at this many angles
+# around the ellipse and at two radii. Fewer than MIN_ANNULUS_PIXELS
+# usable samples give a wing of zero.
+N_ANNULUS_ANGLES = 96
 MIN_ANNULUS_PIXELS = 10
+
+# The number of pairs measured at once by the measured wing model
+PAIR_CHUNK = 2048
 
 
 def get_spurious_labels(data, segmentation_image, threshold, n_pixels, *,
@@ -56,8 +64,8 @@ def get_spurious_labels(data, segmentation_image, threshold, n_pixels, *,
     actual light at the fainter source's distance. It is the median
     of ``convolved_data`` (or ``data``) over an elliptical annulus of
     the brighter source, in the same elliptical metric, at the fainter
-    source's elliptical radius, excluding the pixels of every other
-    source.
+    source's elliptical radius, sampled around the ellipse and
+    excluding the pixels of every other source.
 
     The sources are considered in order of decreasing flux, with ties
     broken by label. A source is spurious if the wing model of any
@@ -328,9 +336,9 @@ def _measure_segments(data, convolved_data, segmentation_image, threshold,
     props : dict
         A dictionary of 1D arrays, one entry per label in increasing
         label order, with the keys ``'label'``, ``'x'``, ``'y'``,
-        ``'a'``, ``'b'``, ``'cxx'``, ``'cyy'``, ``'cxy'``, ``'flux'``,
-        ``'npix'``, ``'thresh'``, ``'abcor'``, and ``'mthresh'``.
-        Non-finite pixels are ignored in every quantity.
+        ``'a'``, ``'b'``, ``'cxx'``, ``'cyy'``, ``'cxy'``, ``'theta'``,
+        ``'flux'``, ``'npix'``, ``'thresh'``, ``'abcor'``, and
+        ``'mthresh'``. Non-finite pixels are ignored in every quantity.
     """
     catalog = SourceCatalog(convolved_data, segmentation_image)
     props = {'label': np.asarray(catalog.labels),
@@ -341,57 +349,50 @@ def _measure_segments(data, convolved_data, segmentation_image, threshold,
              'cxx': np.asarray(catalog.ellipse_cxx.value),
              'cyy': np.asarray(catalog.ellipse_cyy.value),
              'cxy': np.asarray(catalog.ellipse_cxy.value),
+             'theta': np.asarray(catalog.orientation.to_value(u.rad)),
              'flux': np.asarray(catalog.segment_flux)}
 
-    # Gather the segment pixels grouped by label, with the pixels of
-    # each segment ordered by decreasing height above the threshold
-    labels_flat = segmentation_image.data.ravel()
-    idx = np.flatnonzero(labels_flat)
-    if threshold.ndim == 0:
-        pixel_thresh = np.full(idx.shape, float(threshold))
-    else:
-        pixel_thresh = threshold.ravel()[idx]
-    excess = convolved_data.ravel()[idx] - pixel_thresh
-    finite_excess = np.isfinite(excess)
-    excess = np.where(finite_excess, excess, -np.inf)
-    order = np.argsort(-excess)
-    order = order[np.argsort(labels_flat[idx][order], kind='stable')]
-    idx = idx[order]
-    pixel_thresh = pixel_thresh[order]
-    excess = excess[order]
-    finite_excess = finite_excess[order]
-    _, starts, counts = np.unique(labels_flat[idx], return_index=True,
-                                  return_counts=True)
-    n_finite = np.add.reduceat(finite_excess.astype(np.intp), starts)
-    props['npix'] = n_finite
+    # Pack the finite segment pixels of every source with the
+    # catalog's compiled gather. Each source spans
+    # values[offsets[i]:offsets[i + 1]], and a source with no finite
+    # pixel holds one NaN placeholder.
+    conv_values, offsets, counts = catalog._segment_gather(convolved_data)
+    starts = offsets[:-1]
+    sizes = np.diff(offsets)
+    props['npix'] = counts.astype(float)
 
-    values = data.ravel()[idx]
-    values = np.where(np.isfinite(values), values, -np.inf)
+    data_values = catalog._segment_gather(data)[0]
+    data_values = np.where(np.isfinite(data_values), data_values, -np.inf)
+    if threshold.ndim == 0:
+        pixel_thresh = np.full(conv_values.shape, float(threshold))
+    else:
+        threshold = np.ascontiguousarray(threshold, dtype=float)
+        pixel_thresh = catalog._segment_gather(threshold)[0]
 
     # The wing model is normalized with the mean threshold over the
     # segment pixels
-    thresh = np.add.reduceat(pixel_thresh, starts) / counts
+    thresh = np.add.reduceat(pixel_thresh, starts) / np.maximum(counts, 1)
     props['thresh'] = thresh
 
     # The unfiltered peak and the pixel counts above the threshold
     # and above the level midway between the threshold and the peak.
     # Each pixel is compared with its own threshold.
-    peak = np.maximum.reduceat(values, starts)
+    peak = np.maximum.reduceat(data_values, starts)
     thresh2 = (thresh + peak) / 2.0
-    pixel_thresh2 = (pixel_thresh + np.repeat(peak, counts)) / 2.0
-    n_above = np.add.reduceat((values > pixel_thresh).astype(np.intp),
+    pixel_thresh2 = (pixel_thresh + np.repeat(peak, sizes)) / 2.0
+    n_above = np.add.reduceat((data_values > pixel_thresh).astype(np.intp),
                               starts)
-    n_above2 = np.add.reduceat((values > pixel_thresh2).astype(np.intp),
+    n_above2 = np.add.reduceat((data_values > pixel_thresh2).astype(np.intp),
                                starts)
     props['abcor'] = _area_correction(thresh, thresh2, n_above2 - n_above,
                                       props['a'], props['b'])
 
     # The comparison level is the height of the n_pixels-th brightest
     # pixel above the threshold (zero for segments with fewer pixels)
-    mthresh = np.zeros(len(starts))
-    enough = n_finite >= n_pixels
-    mthresh[enough] = excess[starts[enough] + n_pixels - 1]
-    props['mthresh'] = mthresh
+    excess = np.ascontiguousarray(conv_values - pixel_thresh)
+    kth = batch_kth_largest(excess, offsets=offsets, counts=counts,
+                            k=n_pixels)
+    props['mthresh'] = np.where(np.isfinite(kth), kth, 0.0)
 
     return props
 
@@ -611,14 +612,16 @@ def _measured_wings(props, eater, victim, convolved_data, segment_data):
     Measure the light of each absorbing source at the elliptical
     radius of its potential victim.
 
-    For each absorber, the image is sampled over the bounding box of
-    its largest annulus once, and each victim's wing is the median of
-    the finite pixels within half a width of its elliptical radius
-    that belong to the absorber or to no source. The annulus half
-    width in the elliptical metric is the inverse of the semiminor
-    axis, so the annulus is about two pixels wide along the minor
-    axis. An annulus with fewer than ``MIN_ANNULUS_PIXELS`` usable
-    pixels gives a wing of zero.
+    Each pair's annulus is sampled at ``N_ANNULUS_ANGLES`` angles
+    around the absorber's ellipse, at the victim's elliptical radius
+    plus and minus a quarter of the annulus width, and the wing is
+    the median of the samples that are finite and belong to the
+    absorber or to no source. The annulus half width in the elliptical
+    metric is the inverse of the semiminor axis, so the annulus is
+    about two pixels wide along the minor axis. A pair with fewer
+    than ``MIN_ANNULUS_PIXELS`` usable samples gets a wing of zero.
+    The pairs are processed in chunks so that the sample arrays stay
+    small.
 
     Parameters
     ----------
@@ -641,38 +644,50 @@ def _measured_wings(props, eater, victim, convolved_data, segment_data):
         The measured wing values.
     """
     ny, nx = convolved_data.shape
-    wings = np.zeros(len(eater))
-    for e in np.unique(eater):
-        pairs = np.flatnonzero(eater == e)
-        xe = props['x'][e]
-        ye = props['y'][e]
-        cxx = props['cxx'][e]
-        cyy = props['cyy'][e]
-        cxy = props['cxy'][e]
-        half_width = 1.0 / props['b'][e]
+    n_pairs = len(eater)
+    wings = np.zeros(n_pairs)
 
-        # The elliptical radii of this absorber's potential victims
-        dx = props['x'][victim[pairs]] - xe
-        dy = props['y'][victim[pairs]] - ye
-        radii = np.sqrt(cxx * dx**2 + cyy * dy**2 + cxy * dx * dy)
+    xe = props['x'][eater]
+    ye = props['y'][eater]
+    a = props['a'][eater]
+    b = props['b'][eater]
+    labels = props['label'][eater]
+    dx = props['x'][victim] - xe
+    dy = props['y'][victim] - ye
+    radius = np.sqrt(props['cxx'][eater] * dx**2 + props['cyy'][eater] * dy**2
+                     + props['cxy'][eater] * dx * dy)
+    half_width = 1.0 / b
+    cos_theta = np.cos(props['theta'][eater])
+    sin_theta = np.sin(props['theta'][eater])
 
-        # The bounding box of the largest annulus
-        extent = int(np.ceil(props['a'][e] * (radii.max() + half_width)))
-        x0 = max(int(xe) - extent, 0)
-        x1 = min(int(xe) + extent + 2, nx)
-        y0 = max(int(ye) - extent, 0)
-        y1 = min(int(ye) + extent + 2, ny)
-        yy, xx = np.mgrid[y0:y1, x0:x1]
-        ddx = xx - xe
-        ddy = yy - ye
-        r_box = np.sqrt(cxx * ddx**2 + cyy * ddy**2 + cxy * ddx * ddy)
-        values = convolved_data[y0:y1, x0:x1]
-        labels = segment_data[y0:y1, x0:x1]
-        usable = (np.isfinite(values)
-                  & ((labels == 0) | (labels == props['label'][e])))
+    angles = np.linspace(0.0, 2.0 * np.pi, N_ANNULUS_ANGLES, endpoint=False)
+    cos_t = np.cos(angles)
+    sin_t = np.sin(angles)
+    ring_offsets = np.array([-0.5, 0.5])
 
-        for k, radius in zip(pairs, radii, strict=True):
-            annulus = usable & (np.abs(r_box - radius) <= half_width)
-            if np.count_nonzero(annulus) >= MIN_ANNULUS_PIXELS:
-                wings[k] = np.median(values[annulus])
+    for start in range(0, n_pairs, PAIR_CHUNK):
+        sl = slice(start, start + PAIR_CHUNK)
+        # Sample radii with shape (n_chunk, 2, 1) and unit ellipse
+        # points with shape (1, 1, n_angles)
+        r = (radius[sl, None, None]
+             + half_width[sl, None, None] * ring_offsets[None, :, None])
+        ux = a[sl, None, None] * cos_t
+        uy = b[sl, None, None] * sin_t
+        cos_th = cos_theta[sl, None, None]
+        sin_th = sin_theta[sl, None, None]
+        px = r * (ux * cos_th - uy * sin_th)
+        py = r * (ux * sin_th + uy * cos_th)
+        ix = np.rint(xe[sl, None, None] + px).astype(np.intp)
+        iy = np.rint(ye[sl, None, None] + py).astype(np.intp)
+        inside = (ix >= 0) & (ix < nx) & (iy >= 0) & (iy < ny)
+        ix = np.clip(ix, 0, nx - 1)
+        iy = np.clip(iy, 0, ny - 1)
+        values = convolved_data[iy, ix]
+        seg = segment_data[iy, ix]
+        usable = (inside & np.isfinite(values)
+                  & ((seg == 0) | (seg == labels[sl, None, None])))
+        values = np.where(usable, values, np.nan).reshape(len(values), -1)
+        n_usable = np.count_nonzero(usable, axis=(1, 2))
+        medians = batch_row_nanmedian(np.ascontiguousarray(values))
+        wings[sl] = np.where(n_usable >= MIN_ANNULUS_PIXELS, medians, 0.0)
     return wings
