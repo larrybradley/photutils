@@ -136,8 +136,10 @@ class SourceFinder:
         The exponent of the cleaning wing model, i.e., the
         `SourceExtractor`_ ``CLEAN_PARAM`` parameter. Larger values
         make the wings fall off more slowly and absorb more neighbors.
-        Must be positive. This keyword is ignored unless
-        ``clean=True``.
+        Must be positive. SourceExtractor restricts it to the range
+        0.1 to 10, outside of which the test either absorbs nothing or
+        absorbs every fainter neighbor within the cleaning zone. This
+        keyword is ignored unless ``clean=True``.
 
     nproc : int, optional
         This keyword is deprecated and has no effect. It was the name of
