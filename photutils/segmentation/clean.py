@@ -24,27 +24,40 @@ CLEAN_ZONE = 10.0
 # argument, as in SourceExtractor
 MAX_MODEL_ARG = 1e10
 
+# The minimum number of usable pixels in an annulus of the measured
+# wing model. Below this, the measured wing is zero.
+MIN_ANNULUS_PIXELS = 10
+
 
 def get_spurious_labels(data, segmentation_image, threshold, n_pixels, *,
-                        convolved_data=None, clean_param=1.0):
+                        convolved_data=None, clean_param=1.0,
+                        wing_model='moffat'):
     """
     Identify the segments that are likely spurious detections in the
     wings of a brighter neighbor.
 
-    This function implements the `SourceExtractor`_ CLEAN test. Each
-    source is described by a Moffat-like wing model built from its
-    isophotal measurements. The model amplitude comes from the source
-    flux and ellipse area, the radial argument is measured in the
-    source's own elliptical metric (its ``ellipse_cxx``,
-    ``ellipse_cyy``, and ``ellipse_cxy`` coefficients), and the model
-    is normalized to fall to the detection threshold at the source's
-    isophotal extent. For each pair of sources whose centroids lie
-    within ten times the sum of their semimajor axes, the wing model
-    of the brighter source is evaluated at the centroid of the fainter
-    one. If that value exceeds the height of the fainter source's
-    ``n_pixels``-th brightest pixel above the threshold, the fainter
-    source would not have been detected on its own and is flagged as
-    spurious.
+    This function implements the `SourceExtractor`_ CLEAN test. For
+    each pair of sources whose centroids lie within ten times the sum
+    of their semimajor axes, the wing of the brighter source is
+    evaluated at the centroid of the fainter one. If that value
+    exceeds the height of the fainter source's ``n_pixels``-th
+    brightest pixel above the threshold, the fainter source would not
+    have been detected on its own and is flagged as spurious.
+
+    The wing is described by one of two models (see ``wing_model``).
+    The ``'moffat'`` model is the SourceExtractor one. Each source is
+    described by a Moffat-like profile built from its isophotal
+    measurements. The amplitude comes from the source flux and ellipse
+    area, the radial argument is measured in the source's own
+    elliptical metric (its ``ellipse_cxx``, ``ellipse_cyy``, and
+    ``ellipse_cxy`` coefficients), and the profile is normalized to
+    fall to the detection threshold at the source's isophotal extent.
+    The ``'measured'`` model instead measures the brighter source's
+    actual light at the fainter source's distance. It is the median
+    of ``convolved_data`` (or ``data``) over an elliptical annulus of
+    the brighter source, in the same elliptical metric, at the fainter
+    source's elliptical radius, excluding the pixels of every other
+    source.
 
     The sources are considered in order of decreasing flux, with ties
     broken by label. A source is spurious if the wing model of any
@@ -101,14 +114,29 @@ def get_spurious_labels(data, segmentation_image, threshold, n_pixels, *,
         have the same units.
 
     clean_param : float, optional
-        The exponent of the wing model, i.e., the `SourceExtractor`_
-        ``CLEAN_PARAM`` parameter. Larger values make the wings fall
-        off more slowly and absorb more neighbors. Must be positive.
-        SourceExtractor restricts it to the range 0.1 to 10. Below
-        that range the model collapses to a spike at the source center
-        and nothing outside the isophote is absorbed. Above it the
-        model is nearly flat at the source amplitude and every fainter
-        neighbor within the cleaning zone is absorbed.
+        The exponent of the ``'moffat'`` wing model, i.e., the
+        `SourceExtractor`_ ``CLEAN_PARAM`` parameter. Larger values
+        make the wings fall off more slowly and absorb more neighbors.
+        Must be positive. SourceExtractor restricts it to the range
+        0.1 to 10. Below that range the model collapses to a spike at
+        the source center and nothing outside the isophote is
+        absorbed. Above it the model is nearly flat at the source
+        amplitude and every fainter neighbor within the cleaning zone
+        is absorbed. This keyword is ignored by the ``'measured'``
+        wing model.
+
+    wing_model : {'moffat', 'measured'}, optional
+        The wing model. ``'moffat'`` (default) is the analytic
+        SourceExtractor model, a prior tuned for stellar profiles that
+        overestimates the wings of galaxies, especially exponential
+        disks, and can absorb real neighbors around them.
+        ``'measured'`` uses the brighter source's own light measured
+        in an elliptical annulus at the fainter source's distance, so
+        it follows whatever profile the source has. An annulus with
+        fewer than 10 usable pixels (finite, and not part of another
+        source) gives a wing of zero, so nothing is absorbed on
+        missing data. The measured model is slower because each pair
+        samples the image.
 
     Returns
     -------
@@ -211,9 +239,14 @@ def get_spurious_labels(data, segmentation_image, threshold, n_pixels, *,
 
     _validate_clean_param(clean_param)
 
+    if wing_model not in ('moffat', 'measured'):
+        msg = f"wing_model must be 'moffat' or 'measured', got {wing_model!r}"
+        raise ValueError(msg)
+
     props = _measure_segments(data, convolved_data, segmentation_image,
                               threshold, int(n_pixels))
-    absorbed_by = _find_absorbers(props, clean_param)
+    absorbed_by = _find_absorbers(props, clean_param, wing_model,
+                                  convolved_data, segmentation_image.data)
 
     labels = props['label']
     spurious = np.flatnonzero(absorbed_by >= 0)
@@ -380,7 +413,8 @@ def _area_correction(thresh, thresh2, darea, a, b):
     return abcor
 
 
-def _find_absorbers(props, clean_param):
+def _find_absorbers(props, clean_param, wing_model, convolved_data,
+                    segment_data):
     """
     Run the pairwise wing-model test and return the absorber of each
     source.
@@ -392,6 +426,15 @@ def _find_absorbers(props, clean_param):
 
     clean_param : float
         The wing model exponent.
+
+    wing_model : {'moffat', 'measured'}
+        The wing model.
+
+    convolved_data : 2D `~numpy.ndarray`
+        The image whose pixel values define the measured wings.
+
+    segment_data : 2D `~numpy.ndarray`
+        The segmentation array.
 
     Returns
     -------
@@ -423,7 +466,11 @@ def _find_absorbers(props, clean_param):
     first = rank[i] < rank[j]
     eater = np.where(first, i, j)
     victim = np.where(first, j, i)
-    model = _wing_model(props, eater, victim, clean_param)
+    if wing_model == 'moffat':
+        model = _wing_model(props, eater, victim, clean_param)
+    else:
+        model = _measured_wings(props, eater, victim, convolved_data,
+                                segment_data)
     absorbs = model > props['mthresh'][victim]
     eater = eater[absorbs]
     victim = victim[absorbs]
@@ -534,3 +581,75 @@ def _wing_model(props, eater, victim, clean_param):
                                     + props['cxy'][eater] * dx * dy)
         return np.where((arg > 1.0) & (arg < MAX_MODEL_ARG),
                         amp[eater] * arg**(-clean_param), 0.0)
+
+
+def _measured_wings(props, eater, victim, convolved_data, segment_data):
+    """
+    Measure the light of each absorbing source at the elliptical
+    radius of its potential victim.
+
+    For each absorber, the image is sampled over the bounding box of
+    its largest annulus once, and each victim's wing is the median of
+    the finite pixels within half a width of its elliptical radius
+    that belong to the absorber or to no source. The annulus half
+    width in the elliptical metric is the inverse of the semiminor
+    axis, so the annulus is about two pixels wide along the minor
+    axis. An annulus with fewer than ``MIN_ANNULUS_PIXELS`` usable
+    pixels gives a wing of zero.
+
+    Parameters
+    ----------
+    props : dict
+        The per-segment quantities from `_measure_segments`.
+
+    eater, victim : 1D `~numpy.ndarray`
+        The indices of the absorbing and potential victim sources of
+        each pair.
+
+    convolved_data : 2D `~numpy.ndarray`
+        The image whose pixel values define the wings.
+
+    segment_data : 2D `~numpy.ndarray`
+        The segmentation array.
+
+    Returns
+    -------
+    wings : 1D `~numpy.ndarray`
+        The measured wing values.
+    """
+    ny, nx = convolved_data.shape
+    wings = np.zeros(len(eater))
+    for e in np.unique(eater):
+        pairs = np.flatnonzero(eater == e)
+        xe = props['x'][e]
+        ye = props['y'][e]
+        cxx = props['cxx'][e]
+        cyy = props['cyy'][e]
+        cxy = props['cxy'][e]
+        half_width = 1.0 / props['b'][e]
+
+        # The elliptical radii of this absorber's potential victims
+        dx = props['x'][victim[pairs]] - xe
+        dy = props['y'][victim[pairs]] - ye
+        radii = np.sqrt(cxx * dx**2 + cyy * dy**2 + cxy * dx * dy)
+
+        # The bounding box of the largest annulus
+        extent = int(np.ceil(props['a'][e] * (radii.max() + half_width)))
+        x0 = max(int(xe) - extent, 0)
+        x1 = min(int(xe) + extent + 2, nx)
+        y0 = max(int(ye) - extent, 0)
+        y1 = min(int(ye) + extent + 2, ny)
+        yy, xx = np.mgrid[y0:y1, x0:x1]
+        ddx = xx - xe
+        ddy = yy - ye
+        r_box = np.sqrt(cxx * ddx**2 + cyy * ddy**2 + cxy * ddx * ddy)
+        values = convolved_data[y0:y1, x0:x1]
+        labels = segment_data[y0:y1, x0:x1]
+        usable = (np.isfinite(values)
+                  & ((labels == 0) | (labels == props['label'][e])))
+
+        for k, radius in zip(pairs, radii, strict=True):
+            annulus = usable & (np.abs(r_box - radius) <= half_width)
+            if np.count_nonzero(annulus) >= MIN_ANNULUS_PIXELS:
+                wings[k] = np.median(values[annulus])
+    return wings
