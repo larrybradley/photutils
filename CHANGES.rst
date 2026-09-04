@@ -323,9 +323,12 @@ New Features
     SourceExtractor CLEAN test. It identifies the segments that are
     likely spurious detections in the wings of a brighter neighbor
     and reports the source that absorbs each one, without modifying
-    the segmentation image. ``SourceFinder`` has new ``clean`` and
-    ``clean_param`` keywords to run the test after deblending and
-    merge the spurious segments into their absorbers. [#2414]
+    the segmentation image. Its ``wing_model`` keyword selects the
+    analytic SourceExtractor Moffat wing or a wing measured from the
+    brighter source's own light, which follows galaxy profiles.
+    ``SourceFinder`` has new ``clean`` and ``clean_param`` keywords to
+    run the test after deblending and merge the spurious segments into
+    their absorbers. [#2414]
 
 - ``photutils.utils``
 
