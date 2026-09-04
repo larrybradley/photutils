@@ -135,8 +135,13 @@ def get_spurious_labels(data, segmentation_image, threshold, n_pixels, *,
         it follows whatever profile the source has. An annulus with
         fewer than 10 usable pixels (finite, and not part of another
         source) gives a wing of zero, so nothing is absorbed on
-        missing data. The measured model is slower because each pair
-        samples the image.
+        missing data. The measured wing includes all light in the
+        annulus that is not part of a segment, so in crowded regions
+        the below-threshold wings of other sources and any residual
+        background raise it and are attributed to the brighter
+        source. The measured model is recommended for fields with
+        resolved galaxies and is slower because each pair samples the
+        image.
 
     Returns
     -------
@@ -238,10 +243,7 @@ def get_spurious_labels(data, segmentation_image, threshold, n_pixels, *,
         raise ValueError(msg)
 
     _validate_clean_param(clean_param)
-
-    if wing_model not in ('moffat', 'measured'):
-        msg = f"wing_model must be 'moffat' or 'measured', got {wing_model!r}"
-        raise ValueError(msg)
+    _validate_wing_model(wing_model)
 
     props = _measure_segments(data, convolved_data, segmentation_image,
                               threshold, int(n_pixels))
@@ -274,6 +276,27 @@ def _validate_clean_param(clean_param):
             or not np.isfinite(clean_param) or clean_param <= 0):
         msg = ('clean_param must be a positive finite number, got '
                f'{clean_param!r}')
+        raise ValueError(msg)
+
+
+def _validate_wing_model(wing_model):
+    """
+    Validate the wing model name shared by `get_spurious_labels` and
+    `~photutils.segmentation.SourceFinder`.
+
+    Parameters
+    ----------
+    wing_model : str
+        The value to validate.
+
+    Raises
+    ------
+    ValueError
+        If the value is not ``'moffat'`` or ``'measured'``.
+    """
+    if wing_model not in ('moffat', 'measured'):
+        msg = ("wing_model must be 'moffat' or 'measured', got "
+               f'{wing_model!r}')
         raise ValueError(msg)
 
 
