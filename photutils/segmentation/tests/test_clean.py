@@ -149,11 +149,20 @@ class TestGetSpuriousLabels:
 
     def test_absorbed_source_does_not_absorb(self):
         # A broad faint blob is absorbed by the star. A very faint
-        # blob within the broad blob's cleaning zone but outside the
-        # star's zone is not absorbed, because its only potential
-        # absorber does not survive.
+        # blob within the broad blob's reach but outside the star's
+        # zone is not absorbed, because its only potential absorber
+        # does not survive.
         broad = (5.5, 30.0, 40.0, 6.0)
-        faint = (5.3, 30.0, 21.0, 3.0)
+        faint = (5.3, 30.0, 22.0, 3.0)
+
+        # Without the star, the broad blob's wing reaches the faint
+        # blob
+        data = make_scene([broad, faint])
+        segm = detect_sources(data, THRESHOLD, N_PIXELS)
+        broad_label, faint_label = labels_at(segm, [broad, faint])
+        result = get_spurious_labels(data, segm, THRESHOLD, N_PIXELS)
+        assert as_dict(result) == {faint_label: broad_label}
+
         data = make_scene([STAR, broad, faint])
         segm = detect_sources(data, THRESHOLD, N_PIXELS)
         star, broad_label, faint_label = labels_at(segm,
