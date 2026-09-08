@@ -760,16 +760,23 @@ iteration are reported in the new ``smoothing_kernel_shape`` and
 previous behavior is available with ``smoothing_kernel='quartic'``
 and ``fit_shape=5``.
 
-The build now converges when at least a ``converged_fraction``
-(default 0.95) of the successfully fitted stars have settled to the
-requested ``center_accuracy``, instead of requiring every star. A few
-spurious detections or contaminated cutouts whose centers never
-settle previously forced the build to run to ``maxiters``. The
+ePSF building is also faster. The build now converges when at least
+a ``converged_fraction`` (default 0.95) of the successfully fitted
+stars have settled to the requested ``center_accuracy``, instead of
+requiring every star. A few spurious detections or contaminated
+cutouts whose centers never settle previously forced the build to
+run to ``maxiters``; on a real sample of about 2000 stars with 30
+percent spurious detections, the build now stops after 6 iterations
+instead of 100, in 21 seconds instead of about 5 minutes. The
 fraction achieved is reported in the new ``converged_fraction``
 attribute of the results, and ``converged_fraction=1.0`` restores the
-previous behavior. The star fitting step is also faster because the
-ePSF spline interpolators are built once per iteration instead of
-once per star.
+previous behavior. Each iteration is also about 20 percent faster
+(25 percent at an oversampling of 4) because the ePSF spline
+interpolators are built once per iteration instead of once per star
+and the star residuals are stacked in a single vectorized operation.
+A new ``benchmarks/bench_epsf_builder.py`` script times the build
+versus the number of stars and the oversampling factor and the
+stages of a build iteration.
 
 The ePSF building user guide now includes guidelines for choosing
 the oversampling factor and the star sample, e.g., using at least
