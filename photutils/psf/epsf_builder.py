@@ -923,8 +923,9 @@ class EPSFBuildResults:
 
     converged : bool
         Whether the building process converged based on the center
-        accuracy criterion. `True` if star centers moved less than the
-        specified accuracy between the final iterations.
+        accuracy criterion. `True` if at least the ``converged_fraction``
+        of the successfully fitted stars moved by less than the
+        specified center accuracy between the final iterations.
 
     final_center_accuracy : float
         The maximum center displacement in the final iteration, in
@@ -2590,8 +2591,11 @@ class EPSFBuilder:
         - iterations: Number of iterations performed
         - converged: Whether convergence was achieved
         - final_center_accuracy: Final center movement accuracy
+        - converged_fraction: Fraction of stars that met the accuracy
         - n_excluded_stars: Number of stars excluded due to fit failures
         - excluded_star_indices: Indices of excluded stars
+        - smoothing_kernel_shape: Smoothing kernel of the final iteration
+        - fit_shape: Fitting box of the final iteration
         """
         if epsf is not None:
             if not np.array_equal(epsf.oversampling, self.oversampling):

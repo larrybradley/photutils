@@ -12,17 +12,19 @@ generally difficult to model. `Anderson and King 2000 (PASP 112, 1360)
 showed that accurate stellar photometry and astrometry can be derived
 by modeling the net PSF, which they call the effective PSF (ePSF). The
 ePSF is an empirical model describing what fraction of a star's light
-will land in a particular pixel. The constructed ePSF is typically
+will land in a particular pixel. The constructed ePSF may be
 oversampled with respect to the detector pixels.
 
-The oversampling in the ePSF is crucial because it captures the PSF
-pixel phase effect. Since stars can land at fractional pixel positions
-on the detector, the PSF appearance varies depending on the star's
-position within a pixel. By building an oversampled ePSF, we capture
-this phase information across the full pixel-to-pixel variation.
-This allows for more accurate PSF modeling and improved photometric
-measurements, as the PSF can be interpolated to the exact position of
-any star.
+Oversampling matters when the PSF is undersampled by the detector,
+e.g., a FWHM of only one or two pixels. Since stars can land at
+fractional pixel positions on the detector, the appearance of such
+a PSF varies with the star's position within a pixel, and an
+oversampled ePSF captures this pixel-phase variation so that the PSF
+can be interpolated to the exact position of any star. When the PSF is
+well sampled (a FWHM of a few pixels or more), an ePSF with no
+oversampling already captures its shape, and a larger oversampling
+factor only adds noise and requires more stars (see
+:ref:`epsf-guidelines`).
 
 
 Building an ePSF
@@ -47,11 +49,11 @@ sample of stars. However, the step of creating a good sample of stars
 generally requires visual inspection and manual selection to ensure
 stars are sufficiently isolated and of good quality (e.g., no cosmic
 rays, detector artifacts, etc.). To produce a good ePSF, one should have
-a reasonably large sample of stars (e.g., several hundred) in order to
-fully sample the PSF over the oversampled grid and to help reduce the
-effects of noise. Otherwise, the resulting ePSF may have holes or may be
-noisy. See :ref:`epsf-guidelines` for guidance on choosing the
-oversampling factor and the star sample.
+a reasonably large sample of stars (e.g., several hundred for an
+oversampling factor of 4) in order to sample the PSF at all subpixel
+phases and to help reduce the effects of noise. Otherwise, the
+resulting ePSF may be noisy or biased. See :ref:`epsf-guidelines` for
+guidance on choosing the oversampling factor and the star sample.
 
 Let's start by loading a simulated HST/WFC3 image in the F160W band::
 
@@ -273,13 +275,16 @@ Constructing the ePSF
 
 With the star cutouts, we are ready to construct the ePSF with the
 :class:`~photutils.psf.EPSFBuilder` class. We'll create an ePSF with
-an oversampling factor of 4. Here we limit the maximum number of
-iterations to 3 (to limit its run time), but in practice one should use
-about 10 or more iterations. The :class:`~photutils.psf.EPSFBuilder`
-class has many options to control the ePSF build process, including
-changing the recentering function, the smoothing kernel, and the
-convergence accuracy. Please see the :class:`~photutils.psf.EPSFBuilder`
-documentation for further details.
+an oversampling factor of 4, which is appropriate for these
+undersampled stars (a FWHM of about 1.5 pixels). Here we limit the
+maximum number of iterations to 3 (to limit its run time). In practice
+the default of 10 iterations is usually enough, and the build stops
+early once the star centers have converged. The
+:class:`~photutils.psf.EPSFBuilder` class has many options to control
+the ePSF build process, including the smoothing kernel, the fitting
+box, the recentering function, and the convergence criterion. Please
+see the :class:`~photutils.psf.EPSFBuilder` documentation for further
+details.
 
 We first initialize an :class:`~photutils.psf.EPSFBuilder` instance with
 our desired parameters and then input the cutouts of our selected stars
@@ -311,6 +316,13 @@ information about the build process::
     3
     >>> result.n_excluded_stars  # doctest: +REMOTE_DATA
     0
+
+The results also report the fraction of stars whose centers converged
+(``converged_fraction``), the largest center movement in the final
+iteration (``final_center_accuracy``), and the smoothing kernel and
+fitting box that were used (``smoothing_kernel_shape`` and
+``fit_shape``). See `~photutils.psf.EPSFBuildResults` for the full
+list.
 
 The returned ``epsf`` is an `~photutils.psf.ImagePSF` object, and
 ``fitted_stars`` is a new `~photutils.psf.EPSFStars` object with the
@@ -401,7 +413,7 @@ polynomial kernel whose width is 0.7 times the FWHM of the ePSF,
 measured in each iteration along its narrowest axis. The width is
 rounded to an odd number of grid points, and no smoothing is applied
 when it would be smaller than 5 grid points, i.e., for heavily
-undersampled ePSFs with fewer than about 7 grid points per FWHM,
+undersampled ePSFs with fewer than about 5 grid points per FWHM,
 where a fixed 5x5 kernel would lower the peak of the ePSF. The chosen
 kernel shape is reported in the ``smoothing_kernel_shape`` attribute
 of the results. If the FWHM cannot be measured, the ``'quartic'``
@@ -466,6 +478,18 @@ throughput). If they do not, set ``constrain_fluxes=False``::
     ...                            constrain_fluxes=False,
     ...                            progress_bar=False)  # doctest: +REMOTE_DATA
 
+To link stars across images, provide a single catalog with sky
+coordinates and multiple `~astropy.nddata.NDData` objects, each with a
+valid WCS:
+
+.. doctest-skip::
+
+    >>> import astropy.units as u
+    >>> from astropy.coordinates import SkyCoord
+    >>> catalog = Table()
+    >>> catalog['skycoord'] = SkyCoord(ra=[...]*u.deg, dec=[...]*u.deg)
+    >>> stars = extract_stars([nddata1, nddata2], catalog, size=25)
+
 Customizing the ePSF Fitting
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -476,11 +500,12 @@ for fitting. The default is ``'auto'``, which uses a square box of
 twice the FWHM of the ePSF (measured in each iteration along its
 narrowest axis), with a minimum of 5 pixels and a maximum of the star
 cutout size. The chosen box is reported in the ``fit_shape``
-attribute of the results. A box that is much smaller than the star,
-such as the 5-pixel box used for HST data, uses only the flat core of
-a well-sampled star, which biases the fitted centers and can prevent
-the build from converging. Using a smaller box can speed up the
-fitting process while still capturing the core of the PSF::
+attribute of the results. A fixed box can be given instead. A smaller
+box speeds up the fitting, but it should still cover the core of the
+star. A box that is much smaller than the star, such as the 5-pixel
+box designed for HST data applied to a well-sampled star, uses only
+the flat core of the star, which biases the fitted centers and can
+prevent the build from converging::
 
     >>> epsf_builder = EPSFBuilder(oversampling=4, maxiters=3,
     ...                            fit_shape=7,
@@ -531,28 +556,6 @@ any of the `~astropy.nddata.NDUncertainty` subclasses (e.g.,
     >>> uncertainty = StdDevUncertainty(np.sqrt(np.abs(data)))  # doctest: +REMOTE_DATA, +SKIP
     >>> nddata = NDData(data=data, uncertainty=uncertainty)  # doctest: +REMOTE_DATA, +SKIP
 
-
-Linked Stars for Dithered Images
---------------------------------
-
-When building an ePSF from multiple dithered images, you can link
-stars across images to ensure they are constrained to have the same
-sky coordinates. This is done by providing a single catalog with sky
-coordinates and multiple `~astropy.nddata.NDData` objects, each with a
-valid WCS.
-
-The :func:`~photutils.psf.extract_stars` function will create
-`~photutils.psf.LinkedEPSFStar` objects that link the corresponding star
-cutouts from each image. During the ePSF building process, linked stars
-are constrained to have the same sky coordinate across all images.
-
-.. doctest-skip::
-
-    >>> import astropy.units as u
-    >>> from astropy.coordinates import SkyCoord
-    >>> catalog = Table()
-    >>> catalog['skycoord'] = SkyCoord(ra=[...]*u.deg, dec=[...]*u.deg)
-    >>> stars = extract_stars([nddata1, nddata2], catalog, size=25)
 
 
 .. _epsf-guidelines:
