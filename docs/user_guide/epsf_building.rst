@@ -50,7 +50,8 @@ rays, detector artifacts, etc.). To produce a good ePSF, one should have
 a reasonably large sample of stars (e.g., several hundred) in order to
 fully sample the PSF over the oversampled grid and to help reduce the
 effects of noise. Otherwise, the resulting ePSF may have holes or may be
-noisy.
+noisy. See :ref:`epsf-guidelines` for guidance on choosing the
+oversampling factor and the star sample.
 
 Let's start by loading a simulated HST/WFC3 image in the F160W band::
 
@@ -196,7 +197,8 @@ objects) and the `~astropy.nddata.NDData` objects must contain valid
 `~astropy.wcs.WCS` objects. In the case of using multiple images (i.e.,
 dithered images) and a single catalog, the same physical star will be
 "linked" across images, meaning it will be constrained to have the same
-sky coordinate in each input image.
+sky coordinate and, by default, the same flux in each input image (see
+:ref:`epsf-linked-stars`).
 
 Let's extract the 25 x 25 pixel cutouts of our selected stars::
 
@@ -416,6 +418,32 @@ emitted. In that case the star sample should be inspected for stars
 with different PSFs, saturated or contaminated cutouts, or spurious
 detections.
 
+.. _epsf-linked-stars:
+
+Linked Stars from Dithered Images
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+When the same star is observed in several dithered images, the
+cutouts can be linked as a `~photutils.psf.LinkedEPSFStar` (this
+happens automatically when :func:`~photutils.psf.extract_stars` is
+given multiple images and a single catalog of sky coordinates).
+After each fitting iteration, the builder constrains the centers of
+the linked stars to a single sky coordinate and, by default, their
+fluxes to their mean value. Averaging both the positions and the
+fluxes across dithers is the key step of `Anderson and King 2000
+(PASP 112, 1360)
+<https://ui.adsabs.harvard.edu/abs/2000PASP..112.1360A/abstract>`_
+that breaks the degeneracy between the flux of a star and its subpixel
+position caused by intra-pixel sensitivity variations. Without it,
+the pixel-phase dependence of the individual flux measurements is
+absorbed into the ePSF. The flux constraint assumes that the linked
+images have the same flux scale (e.g., the same exposure time and
+throughput). If they do not, set ``constrain_fluxes=False``::
+
+    >>> epsf_builder = EPSFBuilder(oversampling=4, maxiters=3,
+    ...                            constrain_fluxes=False,
+    ...                            progress_bar=False)  # doctest: +REMOTE_DATA
+
 Customizing the ePSF Fitting
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -496,3 +524,72 @@ are constrained to have the same sky coordinate across all images.
     >>> catalog = Table()
     >>> catalog['skycoord'] = SkyCoord(ra=[...]*u.deg, dec=[...]*u.deg)
     >>> stars = extract_stars([nddata1, nddata2], catalog, size=25)
+
+
+.. _epsf-guidelines:
+
+Guidelines for Building a Good ePSF
+-----------------------------------
+
+The quality of an ePSF depends more on the input stars and on a
+sensible choice of the oversampling factor than on the other builder
+parameters. The following guidelines are based on `Anderson and King
+2000 (PASP 112, 1360)
+<https://ui.adsabs.harvard.edu/abs/2000PASP..112.1360A/abstract>`_ and
+on the systematic tests of `Godden and Blundell 2026 (RASTI 5, 1)
+<https://doi.org/10.1093/rasti/rzaf063>`_.
+
+Choosing the oversampling factor
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The ePSF is tabulated on a grid with a spacing of ``1 / oversampling``
+detector pixels and is evaluated between grid points by cubic spline
+interpolation. The interpolation is accurate when there are at least
+about four grid points per FWHM of the ePSF, so a good rule of thumb
+is ``oversampling >= 4 / FWHM`` with the FWHM in pixels (measured
+along the narrowest direction of an elongated PSF). For example, use
+an oversampling of 3 or 4 for a FWHM of 1.5 pixels, 2 for a FWHM of
+2 pixels, and 1 for a FWHM of 4 pixels or more.
+
+Do not use a larger oversampling factor than the data require. A
+pixel-integrated PSF has essentially no structure on scales smaller
+than a pixel once the PSF is well sampled, so extra grid points add no
+information. They do, however, divide the star samples among more
+grid cells and make the ePSF noisier, and they require more stars.
+For well-sampled data (a FWHM of a few pixels or more), an
+oversampling of 1 is usually the best choice.
+
+Choosing the star sample
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+Each of the ``oversampling**2`` subpixel cells within a pixel must be
+sampled by the centers of several stars. With randomly placed stars,
+plan on at least about 10 stars per cell, i.e., roughly ``10 *
+oversampling**2`` stars (about 40 for an oversampling of 2, 90 for 3,
+and 160 for 4), and considerably more if the stars are faint. Godden
+and Blundell estimate that about 240 randomly placed stars are needed
+for an oversampling of 4 to have a 95 percent probability of at least
+six samples in every cell. A set of exposures dithered by fractions
+of a pixel that uniformly cover the subpixel phases is far more
+effective than random placement and also allows the star fluxes and
+positions to be constrained across images (see
+:ref:`epsf-linked-stars`).
+
+The stars should be bright but unsaturated, isolated (no neighbors
+within the cutout), free of cosmic rays and detector artifacts, and
+have a clean background subtraction so that the total flux of each
+cutout is a reliable normalization. Just as important, all of the
+stars must share the same PSF. Do not combine exposures with different
+seeing or focus, and do not mix regions of the field where the PSF
+differs unless the variation is small compared to the accuracy you
+need. Heterogeneous stars produce pixel-to-pixel noise in the
+oversampled grid that biases the fitted star centers toward particular
+subpixel phases, and the builder emits a warning if the subpixel
+phases of the fitted centers are strongly non-uniform at the end of
+the build. In that case, inspect the star sample rather than
+increasing the number of iterations.
+
+Finally, check the result. The subpixel phases of the fitted star
+centers should be uniformly distributed, and the fitted fluxes and
+positions of the stars (or of an independent set of stars) should not
+depend on their subpixel phase.
