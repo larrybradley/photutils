@@ -787,6 +787,17 @@ Bug Fixes
     filter metadata is missing. The missing values left stray spaces in
     the title. [#2347]
 
+  - Fixed a checkerboard pattern in ePSFs built by ``EPSFBuilder``
+    with ``oversampling`` greater than one from heterogeneous or
+    contaminated stars. Each star pixel residual is now deposited on
+    every oversampled grid point inside its footprint, so that every
+    star contributes to every grid point regardless of its subpixel
+    phase, and power at and above one cycle per input pixel (where
+    the star-pixel sampling lattice aliases onto the oversampled
+    grid) is removed from the ePSF in each iteration. A warning is
+    now emitted if the subpixel phases of the fitted star centers are
+    strongly non-uniform, which indicates biased star centers. [#XXXX]
+
 - ``photutils.psf_matching``
 
   - ``make_wiener_kernel`` now validates a custom ``penalty`` array.
