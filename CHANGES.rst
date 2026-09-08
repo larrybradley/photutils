@@ -829,6 +829,11 @@ Bug Fixes
     now emitted if the subpixel phases of the fitted star centers are
     strongly non-uniform, which indicates biased star centers. [#XXXX]
 
+  - Fixed an all-zero row and column at one edge of the ePSF built by
+    ``EPSFBuilder``. The recentering step shifts the ePSF with its
+    spline, and the edge that moved outside the grid was filled with
+    zero instead of being extrapolated. [#XXXX]
+
 - ``photutils.psf_matching``
 
   - ``make_wiener_kernel`` now validates a custom ``penalty`` array.
