@@ -1100,7 +1100,14 @@ class EPSFBuilder:
         step. The predefined ``'quartic'`` and ``'quadratic'`` kernels
         are derived from fourth and second degree polynomials,
         respectively. Alternatively, a custom 2D array can be input. If
-        `None` then no smoothing will be performed.
+        `None` then no smoothing will be performed. The kernels are
+        applied on the oversampled grid, so their physical width
+        depends on the oversampling factor. For heavily undersampled
+        ePSFs with only a few grid points per FWHM, the kernels can
+        lower the peak of the ePSF and `None` is a reasonable choice.
+        Power at and above one cycle per input pixel is always removed
+        from the ePSF along oversampled axes, independently of this
+        parameter.
 
     sigma_clip : `astropy.stats.SigmaClip` instance, optional
         A `~astropy.stats.SigmaClip` object that defines the sigma

@@ -403,6 +403,14 @@ provide a custom 2D array, or set it to `None` for no smoothing::
     ...                            smoothing_kernel='quadratic',
     ...                            progress_bar=False)  # doctest: +REMOTE_DATA
 
+The kernels are applied on the oversampled grid, so their physical
+width is ``5 / oversampling`` input pixels. For a heavily undersampled
+ePSF with only about four to six grid points per FWHM, even the
+``'quartic'`` kernel lowers the peak of the ePSF, and
+``smoothing_kernel=None`` is a reasonable choice, especially when the
+stars have high signal-to-noise. Smoothing is most useful for
+well-sampled ePSFs built from noisy or few stars.
+
 Independently of the smoothing kernel, when the oversampling factor is
 greater than one the builder removes power at and above one cycle per
 input pixel from the ePSF along each oversampled axis in every
