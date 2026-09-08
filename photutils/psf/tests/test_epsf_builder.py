@@ -23,7 +23,8 @@ from photutils.psf import (CircularGaussianPRF, EPSFBuilder, EPSFBuildResults,
                            EPSFFitter, EPSFStar, EPSFStars, ImagePSF,
                            extract_stars, make_psf_model_image)
 from photutils.psf.epsf_builder import (_CoordinateTransformer, _EPSFValidator,
-                                        _ProgressReporter, _SmoothingKernel)
+                                        _ProgressReporter, _SmoothingKernel,
+                                        _weighted_nanmedian)
 from photutils.psf.epsf_stars import LinkedEPSFStar
 from photutils.utils._optional_deps import HAS_TQDM
 
@@ -1587,8 +1588,9 @@ class TestEPSFBuilder:
             star._excluded_from_fit = True
 
         # Now resample residuals should handle no good stars
-        result = builder._resample_residuals(stars, epsf)
+        result, weights = builder._resample_residuals(stars, epsf)
         assert result.shape[0] == 0  # No good stars
+        assert weights is None
 
     def test_resample_residual_output(self, epsf_test_data):
         """
@@ -2727,3 +2729,142 @@ def test_invalid_recentering_maxiters(value):
     match = 'recentering_maxiters must be a strictly-positive integer'
     with pytest.raises(ValueError, match=match):
         EPSFBuilder(recentering_maxiters=value)
+
+
+def test_invalid_resampling():
+    match = "resampling must be 'nearest' or 'bilinear'"
+    with pytest.raises(ValueError, match=match):
+        EPSFBuilder(resampling='cubic', progress_bar=False)
+
+
+@pytest.mark.parametrize('resampling', ['nearest', 'bilinear'])
+def test_resample_residual_grid_parity(resampling):
+    """
+    With oversampling=2, nearest-grid-point resampling deposits a
+    star only on one parity of the oversampled grid along each axis
+    (chosen by its subpixel phase). Bilinear resampling spreads each
+    star over both parities.
+    """
+    data = _make_gaussian_star_data()
+    star = EPSFStar(data, cutout_center=(5.25, 5.25))
+    stars = EPSFStars([star])
+    builder = EPSFBuilder(oversampling=2, resampling=resampling,
+                          progress_bar=False)
+    epsf = builder._create_initial_epsf(stars)
+    weights = np.zeros(epsf.data.shape)
+    resid = builder._resample_residual(star, epsf, out_weights=weights)
+
+    finite = np.isfinite(resid)
+    assert finite.any()
+    assert_array_equal(finite, weights > 0)
+    even_cols = finite[:, 0::2].any()
+    odd_cols = finite[:, 1::2].any()
+    if resampling == 'nearest':
+        assert even_cols != odd_cols
+        assert_array_equal(weights[finite], 1.0)
+    else:
+        assert even_cols
+        assert odd_cols
+        # A pixel at a quarter-pixel phase is split evenly between the
+        # two neighboring grid points along each axis
+        assert_allclose(np.unique(weights[finite]), [0.25])
+
+
+def test_resample_residual_bilinear_values():
+    """
+    Bilinear resampling deposits the same residual value in each of
+    the grid points surrounding a star pixel, and grid points with no
+    contribution are NaN.
+    """
+    data = _make_gaussian_star_data()
+    star = EPSFStar(data, cutout_center=(5.0, 5.0))
+    stars = EPSFStars([star])
+    builder = EPSFBuilder(oversampling=2, resampling='bilinear',
+                          progress_bar=False)
+    epsf = builder._create_initial_epsf(stars)
+    resid, weights = builder._resample_residuals(stars, epsf)
+    assert resid.shape[0] == 1
+    assert weights.shape == resid.shape
+
+    # The star is at integer phase, so every star pixel lands exactly
+    # on a grid point and the deposit reduces to nearest-grid-point
+    nearest = EPSFBuilder(oversampling=2, resampling='nearest',
+                          progress_bar=False)
+    resid_nearest = nearest._resample_residual(star, epsf)
+    finite = np.isfinite(resid_nearest)
+    assert_allclose(resid[0][finite], resid_nearest[finite])
+    assert np.all(np.isnan(resid[0][~finite]))
+    assert_array_equal(weights[0][~finite], 0.0)
+
+
+def test_weighted_nanmedian():
+    rng = np.random.default_rng(0)
+    data = rng.normal(size=(9, 4, 5))
+    data[2, 1, 1] = np.nan
+    data[:, 0, 0] = np.nan
+    weights = np.ones(data.shape)
+
+    # Equal weights reproduce nanmedian, including all-NaN columns
+    result = _weighted_nanmedian(data, weights)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', RuntimeWarning)
+        expected = np.nanmedian(data, axis=0)
+    assert_allclose(result, expected)
+
+    # Zero-weight values are ignored
+    weights[3:] = 0.0
+    result = _weighted_nanmedian(data, weights)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', RuntimeWarning)
+        expected = np.nanmedian(data[:3], axis=0)
+    assert_allclose(result, expected)
+
+    # A hand-computed weighted median
+    values = np.array([1.0, 2.0, 3.0, 10.0]).reshape(4, 1, 1)
+    wts = np.array([1.0, 1.0, 1.0, 5.0]).reshape(4, 1, 1)
+    assert_allclose(_weighted_nanmedian(values, wts), [[10.0]])
+    wts = np.array([3.0, 1.0, 1.0, 1.0]).reshape(4, 1, 1)
+    assert_allclose(_weighted_nanmedian(values, wts), [[1.5]])
+
+
+@pytest.mark.parametrize('oversamp', [1, 2, 4])
+def test_build_oversampling_bilinear(oversamp):
+    """
+    Bilinear residual resampling recovers the input PSF for stars
+    with random subpixel phases.
+    """
+    rng = np.random.default_rng(0)
+    fwhm = 7.0
+    n_side = 6
+    offset = 40
+    y, x = np.mgrid[0:n_side, 0:n_side] * offset + offset
+    sources = Table()
+    sources['x_0'] = x.ravel() + rng.uniform(-0.5, 0.5, n_side**2)
+    sources['y_0'] = y.ravel() + rng.uniform(-0.5, 0.5, n_side**2)
+    sources['fwhm'] = np.full(n_side**2, fwhm)
+    psf_model = CircularGaussianPRF(fwhm=fwhm)
+    size = n_side * offset + offset
+    data = make_model_image((size, size), psf_model, sources)
+    stars_tbl = Table()
+    stars_tbl['x'] = sources['x_0']
+    stars_tbl['y'] = sources['y_0']
+    stars = extract_stars(NDData(data), stars_tbl, size=25)
+
+    builder = EPSFBuilder(oversampling=oversamp, resampling='bilinear',
+                          maxiters=15, progress_bar=False)
+    epsf, results = builder(stars)
+    assert_allclose(epsf.data.sum(), oversamp**2, rtol=0.02)
+
+    size = epsf.data.shape[0]
+    cen = (size - 1) / 2
+    model = CircularGaussianPRF(flux=1, x_0=cen, y_0=cen,
+                                fwhm=oversamp * fwhm)
+    yy, xx = np.mgrid[0:size, 0:size]
+    psf = model(xx, yy) * oversamp**2
+    assert_allclose(epsf.data, psf, atol=5e-4)
+
+    # With only a few stars per subpixel phase cell, the recovered
+    # centers scatter at the level of a few hundredths of a pixel
+    # for both resampling methods
+    assert_allclose(results.center_flat[:, 0], sources['x_0'], atol=0.1)
+    assert_allclose(results.center_flat[:, 1], sources['y_0'], atol=0.1)

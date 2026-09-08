@@ -55,6 +55,123 @@ def _fitter_accepts_weights(fitter):
                    for p in spec.parameters.values()))
 
 
+def _deposit_bilinear(x, y, values, shape):
+    """
+    Deposit values onto a 2D grid using bilinear weights.
+
+    Each value is split among the four grid points surrounding its
+    (x, y) position, with weights given by the fractional distances to
+    those grid points. Values with non-finite data are ignored, as are
+    grid points outside the grid.
+
+    Parameters
+    ----------
+    x, y : 1D `~numpy.ndarray`
+        The (x, y) positions in grid pixel coordinates.
+
+    values : 1D `~numpy.ndarray`
+        The values to deposit.
+
+    shape : tuple of int
+        The (ny, nx) shape of the output grid.
+
+    Returns
+    -------
+    sums : 2D `~numpy.ndarray`
+        The weighted sum of the deposited values at each grid point.
+
+    weights : 2D `~numpy.ndarray`
+        The sum of the weights at each grid point.
+    """
+    finite = np.isfinite(values)
+    x = x[finite]
+    y = y[finite]
+    values = values[finite]
+
+    x0 = np.floor(x).astype(int)
+    y0 = np.floor(y).astype(int)
+    dx = x - x0
+    dy = y - y0
+
+    ny, nx = shape
+    size = ny * nx
+    sums = np.zeros(size)
+    weights = np.zeros(size)
+    corners = ((x0, y0, (1.0 - dx) * (1.0 - dy)),
+               (x0 + 1, y0, dx * (1.0 - dy)),
+               (x0, y0 + 1, (1.0 - dx) * dy),
+               (x0 + 1, y0 + 1, dx * dy))
+    for xi, yi, wt in corners:
+        mask = (xi >= 0) & (xi < nx) & (yi >= 0) & (yi < ny) & (wt > 0)
+        if not np.any(mask):
+            continue
+        idx = yi[mask] * nx + xi[mask]
+        sums += np.bincount(idx, weights=wt[mask] * values[mask],
+                            minlength=size)
+        weights += np.bincount(idx, weights=wt[mask], minlength=size)
+
+    return sums.reshape(shape), weights.reshape(shape)
+
+
+def _weighted_nanmedian(data, weights):
+    """
+    Compute the weighted median along the first axis, ignoring NaNs.
+
+    The weighted median is the smallest value at which the cumulative
+    weight reaches half of the total weight. When the cumulative
+    weight equals exactly half of the total at that value, the result
+    is the mean of that value and the next larger one, which
+    reproduces the usual median for equal weights.
+
+    Parameters
+    ----------
+    data : 3D `~numpy.ndarray`
+        The input data. NaN values are ignored.
+
+    weights : 3D `~numpy.ndarray`
+        The weights, with the same shape as ``data``. Values with zero
+        weight are ignored.
+
+    Returns
+    -------
+    result : 2D `~numpy.ndarray`
+        The weighted median along the first axis. Positions with no
+        finite, positively weighted values are NaN.
+    """
+    weights = np.where(np.isfinite(data), weights, 0.0)
+
+    # Sort the values and carry the weights along. Values with zero
+    # weight are set to NaN so that they sort last and never separate
+    # two positively weighted values.
+    data = np.where(weights > 0, data, np.nan)
+    order = np.argsort(data, axis=0)
+    data = np.take_along_axis(data, order, axis=0)
+    weights = np.take_along_axis(weights, order, axis=0)
+
+    cumweights = np.cumsum(weights, axis=0)
+    total = cumweights[-1]
+    half = 0.5 * total
+
+    # The first index at which the cumulative weight reaches half of
+    # the total weight
+    idx = np.sum(cumweights < half, axis=0)
+    idx = np.minimum(idx, data.shape[0] - 1)
+    idx = idx[np.newaxis]
+    result = np.take_along_axis(data, idx, axis=0)[0]
+    cum_at = np.take_along_axis(cumweights, idx, axis=0)[0]
+
+    # Average with the next larger value when the cumulative weight
+    # lands exactly on the half-way point
+    idx_next = np.minimum(idx + 1, data.shape[0] - 1)
+    next_value = np.take_along_axis(data, idx_next, axis=0)[0]
+    tie = np.isclose(cum_at, half) & np.isfinite(next_value) & (total > 0)
+    result = np.where(tie, 0.5 * (result + next_value), result)
+
+    result[total <= 0] = np.nan
+
+    return result
+
+
 class _SmoothingKernel:
     """
     Utility class for ePSF smoothing kernel generation and convolution.
@@ -1013,6 +1130,24 @@ class EPSFBuilder:
         when stacking the ePSF residuals in each iteration step. If
         `None` then no sigma clipping will be performed.
 
+    resampling : {'nearest', 'bilinear'}, optional
+        The method used to resample each star's residual image onto
+        the oversampled ePSF grid in each iteration step. With
+        ``'nearest'``, each star pixel is assigned to the nearest
+        oversampled grid point and the residuals are combined with a
+        sigma-clipped median. With ``'bilinear'``, each star pixel
+        is split among the four surrounding grid points with bilinear
+        weights and the residuals are combined with a sigma-clipped
+        weighted median. For ``oversampling`` greater than one,
+        ``'nearest'`` assigns each star pixel to a single oversampled
+        grid point, so neighboring grid points are estimated from
+        different subsets of stars. ``'bilinear'`` lets each star
+        pixel contribute to its neighboring grid points, which reduces
+        the pixel-to-pixel noise of the ePSF grid when the stars are
+        heterogeneous (e.g., a varying PSF, contaminated cutouts, or
+        low signal-to-noise) at the cost of a slight smoothing of the
+        residuals.
+
     recentering_func : callable, optional
         A callable object that is used to calculate the centroid of a
         2D array. The callable must accept a 2D `~numpy.ndarray`, have
@@ -1090,10 +1225,10 @@ class EPSFBuilder:
 
     def __init__(self, *, oversampling=4, shape=None,
                  smoothing_kernel='quartic', sigma_clip=SIGMA_CLIP,
-                 recentering_func=centroid_com, recentering_boxsize=(5, 5),
-                 recentering_maxiters=20, center_accuracy=1.0e-3,
-                 fitter=None, fit_shape=5, fitter_maxiters=100,
-                 maxiters=10, progress_bar=True):
+                 resampling='nearest', recentering_func=centroid_com,
+                 recentering_boxsize=(5, 5), recentering_maxiters=20,
+                 center_accuracy=1.0e-3, fitter=None, fit_shape=5,
+                 fitter_maxiters=100, maxiters=10, progress_bar=True):
 
         # Validate and store oversampling using the validator
         self.oversampling = _EPSFValidator.validate_oversampling(
@@ -1130,6 +1265,11 @@ class EPSFBuilder:
             # instead of in the middle of a build
             _SmoothingKernel.get_kernel(smoothing_kernel)
         self.smoothing_kernel = smoothing_kernel
+
+        if resampling not in ('nearest', 'bilinear'):
+            msg = "resampling must be 'nearest' or 'bilinear'"
+            raise ValueError(msg)
+        self.resampling = resampling
 
         # Handle fitter parameter - accept both astropy Fitter and
         # deprecated EPSFFitter for backward compatibility
@@ -1282,7 +1422,8 @@ class EPSFBuilder:
         return ImagePSF(data=data, origin=origin_xy, oversampling=oversampling,
                         fill_value=0.0)
 
-    def _resample_residual(self, star, epsf, *, out_image=None):
+    def _resample_residual(self, star, epsf, *, out_image=None,
+                           out_weights=None):
         """
         Compute a normalized residual image in the oversampled ePSF
         grid.
@@ -1291,7 +1432,8 @@ class EPSFBuilder:
         normalized ePSF model from the normalized star at the location
         of the star in the undersampled grid. The normalized residual
         image is then resampled from the undersampled star grid to the
-        oversampled ePSF grid.
+        oversampled ePSF grid using the configured ``resampling``
+        method.
 
         Parameters
         ----------
@@ -1304,6 +1446,10 @@ class EPSFBuilder:
         out_image : 2D `~numpy.ndarray`, optional
             A 2D array to hold the resampled residual image. If `None`,
             a new array will be created.
+
+        out_weights : 2D `~numpy.ndarray`, optional
+            A 2D array to hold the resampling weights. If `None`, the
+            weights are not returned.
 
         Returns
         -------
@@ -1320,13 +1466,29 @@ class EPSFBuilder:
                                     y=yidx_centered,
                                     flux=1.0, x_0=0.0, y_0=0.0))
 
-        # Use coordinate transformer to map to the oversampled ePSF grid
-        xidx, yidx = self._coord_transformer.star_to_epsf_coords(
-            xidx_centered, yidx_centered, epsf.origin)
-
         epsf_shape = epsf.data.shape
         if out_image is None:
             out_image = np.full(epsf_shape, np.nan)
+
+        if self.resampling == 'bilinear':
+            x_over, y_over = (
+                self._coord_transformer.undersampled_to_oversampled(
+                    xidx_centered, yidx_centered))
+            x_over = x_over + epsf.origin[0]
+            y_over = y_over + epsf.origin[1]
+            sums, weights = _deposit_bilinear(x_over, y_over, stardata,
+                                              epsf_shape)
+            has_data = weights > 0
+            out_image[has_data] = sums[has_data] / weights[has_data]
+            out_image[~has_data] = np.nan
+            if out_weights is not None:
+                out_weights[:] = weights
+
+            return out_image
+
+        # Use coordinate transformer to map to the oversampled ePSF grid
+        xidx, yidx = self._coord_transformer.star_to_epsf_coords(
+            xidx_centered, yidx_centered, epsf.origin)
 
         mask = np.logical_and(np.logical_and(xidx >= 0, xidx < epsf_shape[1]),
                               np.logical_and(yidx >= 0, yidx < epsf_shape[0]))
@@ -1334,6 +1496,8 @@ class EPSFBuilder:
         yidx_ = yidx[mask]
 
         out_image[yidx_, xidx_] = stardata[mask]
+        if out_weights is not None:
+            out_weights[yidx_, xidx_] = 1.0
 
         return out_image
 
@@ -1353,24 +1517,34 @@ class EPSFBuilder:
         -------
         epsf_resid : 3D `~numpy.ndarray`
             A 3D cube containing the resampled residual images.
+
+        epsf_weights : 3D `~numpy.ndarray` or `None`
+            A 3D cube containing the resampling weights, or `None` for
+            ``'nearest'`` resampling.
         """
         epsf_shape = epsf.data.shape
         n_good_stars = stars.n_good_stars
+        shape = (n_good_stars, epsf_shape[0], epsf_shape[1])
+        bilinear = self.resampling == 'bilinear'
 
         if n_good_stars == 0:
-            # Return empty array with correct shape
-            return np.zeros((0, epsf_shape[0], epsf_shape[1]))
+            # Return empty arrays with correct shape
+            epsf_resid = np.zeros(shape)
+            epsf_weights = np.zeros(shape) if bilinear else None
+            return epsf_resid, epsf_weights
 
         # Pre-allocate with NaN (default for missing data)
-        shape = (n_good_stars, epsf_shape[0], epsf_shape[1])
         epsf_resid = np.full(shape, np.nan)
+        epsf_weights = np.zeros(shape) if bilinear else None
 
         # Loop over stars and compute residuals directly into the
-        # pre-allocated array
+        # pre-allocated arrays
         for i, star in enumerate(stars.all_good_stars):
-            self._resample_residual(star, epsf, out_image=epsf_resid[i])
+            out_weights = epsf_weights[i] if bilinear else None
+            self._resample_residual(star, epsf, out_image=epsf_resid[i],
+                                    out_weights=out_weights)
 
-        return epsf_resid
+        return epsf_resid, epsf_weights
 
     def _smooth_epsf(self, epsf_data):
         """
@@ -1579,16 +1753,19 @@ class EPSFBuilder:
             epsf = self._create_initial_epsf(stars)
 
         # Compute a 3D stack of 2D residual images
-        residuals = self._resample_residuals(stars, epsf)
+        residuals, weights = self._resample_residuals(stars, epsf)
 
-        # Compute the sigma-clipped median along the 3D stack
+        # Compute the sigma-clipped (weighted) median along the 3D stack
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', category=RuntimeWarning)
             warnings.simplefilter('ignore', category=AstropyUserWarning)
             if self._sigma_clip is not None:
                 residuals = self._sigma_clip(residuals, axis=0, masked=False,
                                              return_bounds=False)
-            residuals = nanmedian(residuals, axis=0)
+            if weights is None:
+                residuals = nanmedian(residuals, axis=0)
+            else:
+                residuals = _weighted_nanmedian(residuals, weights)
 
         # Interpolate any missing data (np.nan values) in the residual
         # image
