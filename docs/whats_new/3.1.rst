@@ -760,6 +760,17 @@ iteration are reported in the new ``smoothing_kernel_shape`` and
 previous behavior is available with ``smoothing_kernel='quartic'``
 and ``fit_shape=5``.
 
+The build now converges when at least a ``converged_fraction``
+(default 0.95) of the successfully fitted stars have settled to the
+requested ``center_accuracy``, instead of requiring every star. A few
+spurious detections or contaminated cutouts whose centers never
+settle previously forced the build to run to ``maxiters``. The
+fraction achieved is reported in the new ``converged_fraction``
+attribute of the results, and ``converged_fraction=1.0`` restores the
+previous behavior. The star fitting step is also faster because the
+ePSF spline interpolators are built once per iteration instead of
+once per star.
+
 The ePSF building user guide now includes guidelines for choosing
 the oversampling factor and the star sample, e.g., using at least
 about four grid points per FWHM, not using an oversampling factor
