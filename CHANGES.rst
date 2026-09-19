@@ -992,6 +992,18 @@ API Changes
     and y pixel scales. The radii are unchanged for undistorted WCS with
     orthogonal pixel axes. [#2425]
 
+  - The ``ApertureStats`` ``covariance`` is now regularized by raising
+    each eigenvalue to at least ``1/12`` pixel**2 instead of adding
+    ``1/12`` to both diagonal elements when the determinant is below
+    ``(1/12)**2``. Thin sources that are unresolved along only their
+    minor axis are now regularized, the variance along a resolved axis
+    is no longer inflated, and the result is continuous. This affects
+    the covariance-derived shape properties of unresolved sources
+    (those with the ``singular_covariance`` flag). An exactly thin
+    tilted source, whose covariance determinant is zero apart from
+    rounding, is now regularized instead of having NaN shape
+    properties. [#2436]
+
 - ``photutils.datasets``
 
   - ``make_model_image`` now also skips sources that have a
@@ -1198,6 +1210,26 @@ API Changes
   - ``detect_sources`` now emits an ``AstropyUserWarning`` if the
     ``threshold`` is negative or, for a threshold array, has any
     negative values. [#2429]
+
+  - The ``SourceCatalog`` ``covariance`` is now regularized by raising
+    each eigenvalue to at least ``1/12`` pixel**2 instead of adding
+    ``1/12`` to both diagonal elements when the determinant is below
+    ``(1/12)**2``. Thin sources that are unresolved along only their
+    minor axis are now regularized, the variance along a resolved axis
+    is no longer inflated, and the result is continuous. This affects
+    the covariance-derived shape properties of unresolved sources
+    (those with the ``singular_covariance`` flag) and the quantities
+    that are derived from their shape, such as the Kron aperture and the
+    windowed centroid and its errors. The singularity correction of the
+    centroid errors now raises the error variance along each principal
+    axis of the error covariance to the pixel-variance floor instead of
+    adding the floor to both variances, so the error along a resolved
+    axis is no longer inflated. It is applied to any source whose error
+    covariance is nearly singular, whatever the source shape. An exactly
+    thin tilted source, whose covariance determinant is zero apart from
+    rounding, is now regularized instead of having NaN shape properties.
+    The regularized values no longer match SourceExtractor for
+    unresolved sources. [#2436]
 
 - ``photutils.utils``
 
