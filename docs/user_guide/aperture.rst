@@ -793,8 +793,8 @@ and the ``sum_method`` footprint used by the sum properties (``sum``,
 flag is evaluated on the ``sum_method`` footprint, while the
 ``'sigma_clipped'``, ``'all_clipped'``, and ``'too_few_pixels'``
 flags are evaluated on the value-statistics footprint. The
-``'undefined_shape'`` and ``'singular_covariance'`` flags are always
-evaluated. Accessing ``flags`` computes the sum, moment, and covariance
+``'undefined_shape'``, ``'singular_covariance'``, and
+``'centroid_outside'`` flags are always evaluated. Accessing ``flags`` computes the sum, moment, and covariance
 quantities if they have not already been computed (the results are
 cached and shared with the corresponding properties), so the flag values
 never depend on which properties were accessed first.
@@ -857,8 +857,12 @@ an aperture on background-subtracted data are negative about half of
 the time. Including them lets the positive and negative noise cancel
 on average, which keeps the centroid and the shape properties nearly
 unbiased. For a faint source the image moments can be too noisy to
-define a shape. In that case the ``'undefined_shape'`` flag is set or
-the covariance-derived shape properties are NaN.
+define a shape. The ``'undefined_shape'`` flag is set when the net flux
+is not positive or when the second-order moments are not positive
+semidefinite, in which case the covariance-derived shape properties
+are NaN. The centroid of such a source is not bounded by the aperture,
+and the ``'centroid_outside'`` flag is set when it lies outside the
+aperture bounding box.
 
 The input ``sum_method`` and ``subpixels`` keywords are used to
 determine the aperture-mask method only for the sum-related properties:
