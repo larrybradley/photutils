@@ -138,6 +138,13 @@ New Features
     from North toward East, computed by transporting the pixel
     covariance matrix through the local WCS Jacobian. [#2433]
 
+  - ``ApertureStats``, ``AperturePhotometry``, and
+    ``aperture_photometry`` now read C-contiguous ``float32`` data and
+    error arrays directly in their compiled code, instead of first
+    converting them to full-image ``float64`` copies. The results are
+    unchanged, because all calculations are still performed in
+    ``float64``. [#2439]
+
 - ``photutils.background``
 
   - Updated ``LocalBackground`` so that ``Quantity`` input data is
@@ -373,10 +380,17 @@ New Features
     [#2411]
 
   - Added a ``release_cache`` method to ``SourceCatalog`` to free the
-    cached full-image working arrays used by the compiled code. For
-    input arrays that are not C-contiguous ``float64`` arrays (e.g.,
-    ``float32`` data), the cache can hold several times the memory of
-    the input data. [#2439]
+    cached full-image working arrays used by the compiled code. Working
+    copies are made when the input image arrays do not have a common
+    ``float32`` or ``float64`` dtype. [#2439]
+
+  - ``SourceCatalog`` now reads C-contiguous ``float32`` image arrays
+    and ``int32`` segmentation images directly in its compiled code,
+    instead of first converting them to full-image ``float64`` and
+    ``intp`` copies. For a 4088 x 4088 ``float32`` image with error and
+    convolved data arrays, this reduces the memory held by the catalog
+    from about 580 MB to about 50 MB. The results are unchanged, because
+    all calculations are still performed in ``float64``. [#2439]
 
 - ``photutils.utils``
 
@@ -465,6 +479,11 @@ Bug Fixes
     ``ApertureStats.error_sum_cutout`` values are now the pixel errors
     multiplied by the aperture mask weights, so their quadrature sum
     equals ``sum_err``. [#2398]
+
+  - Fixed ``ApertureStats.error_sum_cutout`` being calculated in
+    ``float32`` precision for a ``float32`` input ``error`` array. It is
+    now calculated in ``float64``, as are all of the other statistics.
+    [#2439]
 
 - ``photutils.background``
 
@@ -916,6 +935,11 @@ Bug Fixes
   - Fixed the ``SourceCatalog`` ``kron_flux_err`` and
     ``circular_photometry`` flux errors so that each pixel variance is
     weighted by the squared aperture overlap fraction. [#2398]
+
+  - Fixed ``SourceCatalog.background_centroid`` being calculated in
+    ``float32`` precision for a ``float32`` input ``background`` array.
+    It is now calculated in ``float64``, as are all of the other source
+    properties. [#2439]
 
 - ``photutils.utils``
 

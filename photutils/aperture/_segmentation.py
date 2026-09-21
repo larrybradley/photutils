@@ -22,6 +22,30 @@ MASK_METHODS = ('none', 'mask', 'source_only', 'correct')
 SEG_METHOD_CODES = {'none': 0, 'mask': 1, 'source_only': 2, 'correct': 3}
 
 
+def batch_segmentation_image(segmentation):
+    """
+    Return the segmentation array in the form read by the batch Cython
+    drivers.
+
+    Parameters
+    ----------
+    segmentation : `~numpy.ndarray`
+        The integer segmentation array.
+
+    Returns
+    -------
+    result : `~numpy.ndarray`
+        The C-contiguous array. The drivers read 32-bit (C ``int``) and
+        `numpy.intp` arrays directly, so those are returned without a
+        copy if they are already C-contiguous. Any other dtype is
+        converted to `numpy.intp`.
+    """
+    dtype = segmentation.dtype
+    if dtype not in (np.dtype(np.intc), np.dtype(np.intp)):
+        dtype = np.intp
+    return np.ascontiguousarray(segmentation, dtype=dtype)
+
+
 def process_segmentation_inputs(segmentation_image, labels,
                                 mask_method, positions, data_shape):
     """
@@ -92,7 +116,7 @@ def process_segmentation_inputs(segmentation_image, labels,
         msg = 'segmentation_image must have an integer data type'
         raise ValueError(msg)
 
-    segm = np.ascontiguousarray(segm, dtype=np.intp)
+    segm = batch_segmentation_image(segm)
 
     positions = np.atleast_2d(positions)
     n_positions = positions.shape[0]

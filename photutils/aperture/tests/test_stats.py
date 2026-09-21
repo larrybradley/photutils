@@ -1756,6 +1756,131 @@ class TestBoundedMemory:
         assert peak < 2 * 40 * _BLOCK_MAX_PIXELS
 
 
+class TestInputDtypes:
+    """
+    Tests that the compiled code reads float32 and float64 images and
+    int32 and intp segmentation images directly, with identical
+    results.
+    """
+
+    @staticmethod
+    def make_segmentation(shape, positions):
+        """
+        Make a segmentation image with a square segment at each
+        position and the matching labels.
+        """
+        segm = np.zeros(shape, dtype=int)
+        for label, (xpos, ypos) in enumerate(positions, start=1):
+            xidx = int(np.clip(xpos, 0, shape[1] - 1))
+            yidx = int(np.clip(ypos, 0, shape[0] - 1))
+            segm[max(yidx - 4, 0):yidx + 5, max(xidx - 4, 0):xidx + 5] = label
+        return segm, np.arange(1, len(positions) + 1)
+
+    @pytest.mark.parametrize('mask_method', ['none', 'mask', 'correct'])
+    @pytest.mark.parametrize('segm_dtype', [np.int16, np.int32, np.intp])
+    @pytest.mark.parametrize('dtype', [np.float32, np.float64])
+    def test_identical_results(self, dtype, segm_dtype, mask_method):
+        """
+        Test that the statistics and the aperture photometry do not
+        depend on the input dtypes.
+
+        The float32 values are exactly representable as float64, so the
+        results must be identical to those for the same values input as
+        float64.
+        """
+        data, error, mask, positions = TestNThreads.make_inputs()
+        data = data.astype(np.float32)
+        error = error.astype(np.float32)
+        segm, labels = self.make_segmentation(data.shape, positions)
+        aper = CircularAperture(positions, r=7.0)
+        sigma_clip = SigmaClip(sigma=3.0, maxiters=10)
+
+        def make_stats(data, error, segm):
+            kwargs = {'error': error, 'mask': mask,
+                      'sigma_clip': sigma_clip}
+            if mask_method != 'none':
+                kwargs.update(segmentation_image=segm, labels=labels,
+                              mask_method=mask_method)
+            return ApertureStats(data, aper, **kwargs)
+
+        stats_ref = make_stats(data.astype(float), error.astype(float),
+                               segm.astype(np.intp))
+        stats = make_stats(data.astype(dtype), error.astype(dtype),
+                           segm.astype(segm_dtype))
+        TestNThreads.assert_stats_equal(stats_ref, stats)
+
+        phot_ref = AperturePhotometry(data.astype(float), aper,
+                                      error=error.astype(float), mask=mask)
+        phot = AperturePhotometry(data.astype(dtype), aper,
+                                  error=error.astype(dtype), mask=mask)
+        assert_equal(phot.flux, phot_ref.flux)
+        assert_equal(phot.flux_err, phot_ref.flux_err)
+
+    def test_mixed_dtypes(self):
+        """
+        Test float32 data with a float64 error array and
+        non-contiguous float32 data.
+        """
+        data, error, _, positions = TestNThreads.make_inputs()
+        data32 = data.astype(np.float32)
+        aper = CircularAperture(positions, r=7.0)
+        stats_ref = ApertureStats(data32.astype(float), aper, error=error)
+        data_fortran = np.asfortranarray(data32)
+        assert not data_fortran.flags.c_contiguous
+        # Big-endian float32 data (e.g., from a FITS file) with a
+        # float64 error array
+        for data_in in (data32, data_fortran, data32.astype('>f4')):
+            stats = ApertureStats(data_in, aper, error=error)
+            for prop in ('sum', 'sum_err', 'median', 'std', 'centroid'):
+                assert_equal(getattr(stats, prop), getattr(stats_ref, prop))
+
+        # Big-endian float32 and float16 inputs are read as float32
+        error16 = error.astype(np.float16)
+        stats_ref = ApertureStats(data32.astype(float), aper,
+                                  error=error16.astype(float))
+        stats = ApertureStats(data32.astype('>f4'), aper, error=error16)
+        for prop in ('sum', 'sum_err', 'median', 'std', 'centroid'):
+            assert_equal(getattr(stats, prop), getattr(stats_ref, prop))
+
+    @staticmethod
+    def traced_peak(func):
+        """
+        Return the peak traced memory, in bytes, while calling ``func``.
+        """
+        tracemalloc.start()
+        try:
+            start = tracemalloc.get_traced_memory()[0]
+            func()
+            return tracemalloc.get_traced_memory()[1] - start
+        finally:
+            tracemalloc.stop()
+
+    def test_float32_inputs_not_copied(self):
+        """
+        Test that C-contiguous float32 inputs are used without making
+        full-image float64 copies.
+        """
+        rng = np.random.default_rng(0)
+        data = rng.normal(10.0, 1.0, (1024, 1024)).astype(np.float32)
+        error = np.ones(data.shape, dtype=np.float32)
+        aper = CircularAperture(rng.uniform(20, 1000, (20, 2)), r=5.0)
+
+        def run_stats(error):
+            stats = ApertureStats(data, aper, error=error)
+            return stats.median, stats.sum, stats.sum_err
+
+        def run_photometry(error):
+            return AperturePhotometry(data, aper, error=error).flux
+
+        # A float64 copy of one image needs 8 bytes per pixel, while the
+        # uint8 mask plane needs 1 byte per pixel
+        for func in (run_stats, run_photometry):
+            assert self.traced_peak(lambda f=func: f(error)) < 4 * data.size
+            # The images are copied when their dtypes differ
+            peak = self.traced_peak(lambda f=func: f(error.astype(float)))
+            assert peak >= 8 * data.size
+
+
 def test_overridden_bbox_fallback():
     """
     Test that the bounding-box bounds honor an aperture subclass that
