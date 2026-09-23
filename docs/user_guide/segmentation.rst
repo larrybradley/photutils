@@ -904,11 +904,11 @@ for all sources at once in compiled code. That code reads the input
 ``data``, ``error``, ``background``, and ``convolved_data`` arrays and
 the segmentation image directly, without making copies, when:
 
-* the image arrays are C-contiguous and are all ``float32`` or all
-  ``float64``, and
+* the image arrays are C-contiguous, have native byte order, and are
+  all ``float32`` or all ``float64``, and
 
 * the segmentation array is C-contiguous ``int32`` or `numpy.intp`
-  (e.g., as returned by
+  with native byte order (e.g., as returned by
   :func:`~photutils.segmentation.detect_sources`).
 
 All calculations are performed in ``float64`` regardless of the input
@@ -925,7 +925,29 @@ that need 8 bytes per pixel each. The copies are created the first
 time they are needed and are cached for the lifetime of the catalog, so
 that they are shared by all of the source properties. The simplest way
 to avoid them is to input all of the image arrays with the same dtype.
-Otherwise, if memory is a concern, call the
+
+Note that arrays read from a FITS file with `astropy.io.fits` have
+big-endian byte order (e.g., a ``>f4`` dtype for ``float32`` data),
+which the compiled code does not read directly. Big-endian ``float32``
+image arrays are converted to native ``float32`` working copies that
+need 4 bytes per pixel each, and a big-endian ``int32`` segmentation
+array is converted to a native ``int32`` copy. Arithmetic on the
+arrays (e.g., subtracting a background) returns native byte-order
+arrays, but :func:`~astropy.convolution.convolve` preserves the input
+byte order. Also, some operations return ``float64`` arrays for
+``float32`` input (e.g., :func:`~astropy.convolution.convolve_fft`),
+which then causes all of the image arrays to be converted to
+``float64`` copies. To avoid all of these copies, convert the image
+arrays to native ``float32`` once before using them:
+
+.. doctest-skip::
+
+    >>> from astropy.io import fits
+    >>> data = fits.getdata('image.fits').astype(np.float32)
+    >>> error = fits.getdata('error.fits').astype(np.float32)
+    >>> convolved_data = convolve(data, kernel)  # native float32
+
+If memory is a concern and the copies cannot be avoided, call the
 :meth:`~photutils.segmentation.SourceCatalog.release_cache` method after
 calculating the properties that you need::
 

@@ -638,18 +638,19 @@ class SourceCatalog:
     Most properties are computed for all sources at once in compiled
     code that reads the ``data``, ``error``, ``convolved_data``, and
     ``background`` arrays, the segmentation array, and a uint8 mask
-    plane. C-contiguous image arrays that are all float32 or all
-    float64 are read directly, as is a C-contiguous int32 or intp
-    segmentation array, so no copies of them are made. Image arrays
-    with different dtypes from each other (e.g., float32 ``data`` with
-    a float64 ``error`` array) are converted to float64 working copies,
-    and a segmentation array with another integer dtype is converted
-    to intp. Any working copies are built on first use and kept for the
-    lifetime of the catalog (they are shared with sliced catalogs).
-    All calculations are performed in float64 regardless of the input
-    dtype, so float32 inputs give the same results as the same values
-    input as float64. If memory is a concern, input all of the image
-    arrays with the same dtype. Otherwise, call
+    plane. C-contiguous, native byte-order image arrays that are all
+    float32 or all float64 are read directly, as is a C-contiguous,
+    native byte-order int32 or intp segmentation array, so no copies of
+    them are made. Image arrays with different dtypes from each other
+    (e.g., float32 ``data`` with a float64 ``error`` array) are
+    converted to float64 working copies, and a segmentation array with
+    another integer dtype is converted to intp. Any working copies are
+    built on first use and kept for the lifetime of the catalog (they
+    are shared with sliced catalogs). All calculations are performed in
+    float64 regardless of the input dtype, so float32 inputs give the
+    same results as the same values input as float64. If memory is a
+    concern, input all of the image arrays with the same dtype.
+    Otherwise, call
     `~photutils.segmentation.SourceCatalog.release_cache` after
     calculating the desired properties to free the working copies.
 
@@ -1369,16 +1370,16 @@ class SourceCatalog:
         """
         Release the cached full-image working arrays.
 
-        The compiled routines that calculate the source properties
-        read the input ``data``, ``error``, ``background``, and
+        The compiled routines that calculate the source properties read
+        the input ``data``, ``error``, ``background``, and
         ``convolved_data`` arrays and the segmentation image directly
-        when they are C-contiguous, the image arrays are all
-        ``float32`` or all ``float64``, and the segmentation array is
-        ``int32`` or `numpy.intp`. Otherwise, working copies are
-        created the first time they are needed and are then cached
-        for the lifetime of the catalog, so that they are shared by
-        all of the source properties. A 1 byte per pixel mask array is
-        always cached.
+        when they are C-contiguous with native byte order, the image
+        arrays are all ``float32`` or all ``float64``, and the
+        segmentation array is ``int32`` or `numpy.intp`. Otherwise,
+        working copies are created the first time they are needed and
+        are then cached for the lifetime of the catalog, so that they
+        are shared by all of the source properties. A 1 byte per pixel
+        mask array is always cached.
 
         Call this method after calculating the desired properties to
         free that memory. Source properties that were already calculated
