@@ -100,6 +100,13 @@ class IterativePSFPhotometry:
         ``fitter`` if it supports the ``maxiter`` parameter and ignored
         otherwise.
 
+    fitter_kwargs : dict or `None`, optional
+        Additional keyword arguments passed to the ``fitter`` each time
+        it is called, for example the convergence tolerance
+        (``{'acc': 1e-5}`` for the astropy least-squares fitters). The
+        ``maxiter``, ``weights``, and ``inplace`` keywords are set
+        internally and cannot be included.
+
     xy_bounds : `None`, float, or 2-tuple of float, optional
         The maximum distance in pixels that a fitted source can be from
         the initial (x, y) position. If a single float, then the same
@@ -261,8 +268,8 @@ class IterativePSFPhotometry:
                                  'local_bkg_estimator', '3.0',
                                  until='4.0')
     def __init__(self, psf_model, fit_shape, finder, *, grouper=None,
-                 fitter=None, fitter_maxiters=100, xy_bounds=None,
-                 maxiters=3, mode='new', aperture_radius=None,
+                 fitter=None, fitter_maxiters=100, fitter_kwargs=None,
+                 xy_bounds=None, maxiters=3, mode='new', aperture_radius=None,
                  local_bkg_estimator=None, group_warning_threshold=25,
                  sub_shape=None, n_threads=1, progress_bar=False):
 
@@ -278,6 +285,7 @@ class IterativePSFPhotometry:
         self._psfphot = PSFPhotometry(psf_model, fit_shape, finder=finder,
                                       grouper=grouper, fitter=fitter,
                                       fitter_maxiters=fitter_maxiters,
+                                      fitter_kwargs=fitter_kwargs,
                                       xy_bounds=xy_bounds,
                                       aperture_radius=aperture_radius,
                                       local_bkg_estimator=local_bkg_estimator,
@@ -312,7 +320,8 @@ class IterativePSFPhotometry:
 
     def __repr__(self):
         params = ('psf_model', 'fit_shape', 'finder', 'grouper', 'fitter',
-                  'fitter_maxiters', 'xy_bounds', 'maxiters', 'mode',
+                  'fitter_maxiters', 'fitter_kwargs', 'xy_bounds', 'maxiters',
+                  'mode',
                   'local_bkg_estimator', 'aperture_radius',
                   'group_warning_threshold', 'sub_shape', 'n_threads',
                   'progress_bar')
@@ -323,6 +332,7 @@ class IterativePSFPhotometry:
             'grouper': self._psfphot.grouper,
             'fitter': self._psfphot.fitter,
             'fitter_maxiters': self._psfphot.fitter_maxiters,
+            'fitter_kwargs': self._psfphot.fitter_kwargs,
             'xy_bounds': self._psfphot.xy_bounds,
             'local_bkg_estimator': self._psfphot.local_bkg_estimator,
             'aperture_radius': self._psfphot.aperture_radius,

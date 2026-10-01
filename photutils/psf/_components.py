@@ -868,6 +868,9 @@ class PSFFitter:
     fitter_maxiters : int, optional
         Maximum number of fitting iterations. Default is 100.
 
+    fitter_kwargs : dict or None, optional
+        Additional keyword arguments passed to the fitter on each call.
+
     xy_bounds : tuple of float or None, optional
         Bounds for x and y position parameters as (x_bound, y_bound).
         If provided, fitting positions will be constrained to within
@@ -875,11 +878,12 @@ class PSFFitter:
     """
 
     def __init__(self, psf_model, param_mapper, *, fitter=None,
-                 fitter_maxiters=100, xy_bounds=None):
+                 fitter_maxiters=100, fitter_kwargs=None, xy_bounds=None):
         self.psf_model = psf_model
         self.param_mapper = param_mapper
         self.fitter = fitter if fitter is not None else TRFLSQFitter()
         self.fitter_maxiters = fitter_maxiters
+        self.fitter_kwargs = {} if fitter_kwargs is None else fitter_kwargs
         self.xy_bounds = xy_bounds
 
         # Cache of flat model classes keyed on the number of sources.
@@ -998,6 +1002,7 @@ class PSFFitter:
 
         if self.fitter_maxiters is not None:
             kwargs.update({'maxiter': self.fitter_maxiters})
+        kwargs.update(self.fitter_kwargs)
 
         weights = None
         if error is not None:

@@ -2950,6 +2950,90 @@ def test_valid_fitter_maxiters():
     assert psfphot.fitter_maxiters == 50
 
 
+@pytest.mark.parametrize('fitter_kwargs', [[('acc', 1e-5)], 'acc', 1e-5])
+def test_invalid_fitter_kwargs_type(fitter_kwargs):
+    model = CircularGaussianPRF(fwhm=2.7)
+    match = 'fitter_kwargs must be a dict or None'
+    with pytest.raises(TypeError, match=match):
+        PSFPhotometry(model, (5, 5), fitter_kwargs=fitter_kwargs)
+
+
+@pytest.mark.parametrize('key', ['maxiter', 'weights', 'inplace'])
+def test_invalid_fitter_kwargs_reserved(key):
+    model = CircularGaussianPRF(fwhm=2.7)
+    match = f"fitter_kwargs cannot include \\['{key}'\\], which are set"
+    with pytest.raises(ValueError, match=match):
+        PSFPhotometry(model, (5, 5), fitter_kwargs={key: 1, 'acc': 1e-5})
+
+
+def test_fitter_kwargs(test_data):
+    """
+    Test that fitter_kwargs are passed to the fitter on every call and
+    that a copy of the input dict is stored.
+    """
+    data, error, _ = test_data
+    calls = []
+
+    class RecordingFitter(TRFLSQFitter):
+        def __call__(self, model, x, y, z=None, weights=None, maxiter=100,
+                     **kwargs):
+            calls.append({'maxiter': maxiter, **kwargs})
+            return super().__call__(model, x, y, z, weights=weights,
+                                    maxiter=maxiter, **kwargs)
+
+    psf_model = CircularGaussianPRF(flux=1, fwhm=2.7)
+    fit_shape = (5, 5)
+    finder = DAOStarFinder(6.0, 2.0)
+    fitter_kwargs = {'acc': 1e-3}
+    psfphot = PSFPhotometry(psf_model, fit_shape, finder=finder,
+                            fitter=RecordingFitter(), fitter_maxiters=50,
+                            fitter_kwargs=fitter_kwargs, aperture_radius=4)
+    assert psfphot.fitter_kwargs == fitter_kwargs
+    assert psfphot.fitter_kwargs is not fitter_kwargs
+    phot = psfphot(data, error=error)
+    assert len(calls) == len(phot)
+    for kwargs in calls:
+        assert kwargs['acc'] == 1e-3
+        assert kwargs['maxiter'] == 50
+        assert kwargs['inplace'] is True
+    assert 'fitter_kwargs' in repr(psfphot)
+
+    # A loose tolerance must still give nearly the same results
+    psfphot_default = PSFPhotometry(psf_model, fit_shape, finder=finder,
+                                    aperture_radius=4)
+    phot_default = psfphot_default(data, error=error)
+    assert psfphot_default.fitter_kwargs == {}
+    assert_allclose(phot['flux_fit'], phot_default['flux_fit'], rtol=1e-3)
+    assert_allclose(phot['x_fit'], phot_default['x_fit'], atol=1e-3)
+    assert_allclose(phot['y_fit'], phot_default['y_fit'], atol=1e-3)
+
+
+@pytest.mark.usefixtures('gil_disabled')
+def test_fitter_kwargs_n_threads(test_data):
+    """
+    Test that fitter_kwargs are passed to the fitter copies used by the
+    threads.
+    """
+    data, error, _ = test_data
+    calls = []
+
+    class RecordingFitter(TRFLSQFitter):
+        def __call__(self, model, x, y, z=None, weights=None, maxiter=100,
+                     **kwargs):
+            calls.append(kwargs)
+            return super().__call__(model, x, y, z, weights=weights,
+                                    maxiter=maxiter, **kwargs)
+
+    psfphot = PSFPhotometry(CircularGaussianPRF(flux=1, fwhm=2.7), (5, 5),
+                            finder=DAOStarFinder(6.0, 2.0),
+                            fitter=RecordingFitter(),
+                            fitter_kwargs={'acc': 1e-3}, aperture_radius=4,
+                            n_threads=3)
+    phot = psfphot(data, error=error)
+    assert len(calls) == len(phot)
+    assert all(kwargs['acc'] == 1e-3 for kwargs in calls)
+
+
 def test_nddata_with_explicit_mask_or_error():
     """
     Regression test that explicit mask/error keywords are rejected

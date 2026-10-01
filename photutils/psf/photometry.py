@@ -315,6 +315,7 @@ class _FitEngine:
         psf_fitter = PSFFitter(
             psf_model, param_mapper, fitter=deepcopy(self.psf_fitter.fitter),
             fitter_maxiters=self.psf_fitter.fitter_maxiters,
+            fitter_kwargs=self.psf_fitter.fitter_kwargs,
             xy_bounds=self.psf_fitter.xy_bounds)
         return _FitEngine(psf_model=psf_model, param_mapper=param_mapper,
                           data_processor=data_processor,
@@ -613,6 +614,13 @@ class PSFPhotometry:
         ``fitter`` if it supports the ``maxiter`` parameter and ignored
         otherwise.
 
+    fitter_kwargs : dict or `None`, optional
+        Additional keyword arguments passed to the ``fitter`` each time
+        it is called, for example the convergence tolerance
+        (``{'acc': 1e-5}`` for the astropy least-squares fitters). The
+        ``maxiter``, ``weights``, and ``inplace`` keywords are set
+        internally and cannot be included.
+
     xy_bounds : `None`, float, or 2-tuple of float, optional
         The maximum distance in pixels that a fitted source can be from
         the initial (x, y) position. If a single float, then the same
@@ -756,9 +764,10 @@ class PSFPhotometry:
                                  'local_bkg_estimator', '3.0',
                                  until='4.0')
     def __init__(self, psf_model, fit_shape, *, finder=None, grouper=None,
-                 fitter=None, fitter_maxiters=100, xy_bounds=None,
-                 aperture_radius=None, local_bkg_estimator=None,
-                 group_warning_threshold=25, n_threads=1,
+                 fitter=None, fitter_maxiters=100, fitter_kwargs=None,
+                 xy_bounds=None, aperture_radius=None,
+                 local_bkg_estimator=None, group_warning_threshold=25,
+                 n_threads=1,
                  progress_bar=False):
 
         self.psf_model = _validate_psf_model(psf_model)
@@ -772,6 +781,7 @@ class PSFPhotometry:
             fitter = TRFLSQFitter()
         self.fitter = self._validate_callable(fitter, 'fitter')
         self.fitter_maxiters = self._validate_maxiters(fitter_maxiters)
+        self.fitter_kwargs = self._validate_fitter_kwargs(fitter_kwargs)
         self.xy_bounds = self._validate_bounds(xy_bounds)
         self.aperture_radius = self._validate_radius(aperture_radius)
         self.local_bkg_estimator = self._validate_localbkg(
@@ -794,7 +804,8 @@ class PSFPhotometry:
 
         self._psf_fitter = PSFFitter(
             self.psf_model, self._param_mapper, fitter=self.fitter,
-            fitter_maxiters=self.fitter_maxiters, xy_bounds=self.xy_bounds,
+            fitter_maxiters=self.fitter_maxiters,
+            fitter_kwargs=self.fitter_kwargs, xy_bounds=self.xy_bounds,
         )
 
         self._results_assembler = PSFResultsAssembler(
@@ -803,9 +814,10 @@ class PSFPhotometry:
 
         # Used by the __repr__ method and the output table metadata
         self._attrs = ('psf_model', 'fit_shape', 'finder', 'grouper', 'fitter',
-                       'fitter_maxiters', 'xy_bounds', 'aperture_radius',
-                       'local_bkg_estimator', 'group_warning_threshold',
-                       'n_threads', 'progress_bar')
+                       'fitter_maxiters', 'fitter_kwargs', 'xy_bounds',
+                       'aperture_radius', 'local_bkg_estimator',
+                       'group_warning_threshold', 'n_threads',
+                       'progress_bar')
 
         self._reset_results()
 
@@ -1146,6 +1158,43 @@ class PSFPhotometry:
             warnings.warn(msg, AstropyUserWarning)
             maxiters = None
         return maxiters
+
+    @staticmethod
+    def _validate_fitter_kwargs(fitter_kwargs):
+        """
+        Validate the input ``fitter_kwargs`` value.
+
+        Parameters
+        ----------
+        fitter_kwargs : dict or None
+            The keyword arguments to pass to the fitter.
+
+        Returns
+        -------
+        fitter_kwargs : dict
+            A copy of the validated keyword arguments (empty if `None`
+            was input).
+
+        Raises
+        ------
+        TypeError
+            If ``fitter_kwargs`` is not a dict.
+
+        ValueError
+            If ``fitter_kwargs`` contains a keyword that is set
+            internally.
+        """
+        if fitter_kwargs is None:
+            return {}
+        if not isinstance(fitter_kwargs, dict):
+            msg = 'fitter_kwargs must be a dict or None'
+            raise TypeError(msg)
+        reserved = {'maxiter', 'weights', 'inplace'}
+        if invalid := reserved & set(fitter_kwargs):
+            msg = (f'fitter_kwargs cannot include {sorted(invalid)}, '
+                   'which are set internally')
+            raise ValueError(msg)
+        return dict(fitter_kwargs)
 
     def _sync_data_unit(self):
         """

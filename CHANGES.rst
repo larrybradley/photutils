@@ -258,6 +258,11 @@ New Features
     free-threaded Python build. When the GIL is enabled, a warning is
     issued and the sources are fitted in a single thread. [#2457]
 
+  - Added a ``fitter_kwargs`` keyword to ``PSFPhotometry`` and
+    ``IterativePSFPhotometry`` to pass additional keyword arguments,
+    such as the convergence tolerance, to the fitter on each call.
+    [#XXXX]
+
   - Added a ``GriddedPSFModel.grid_shape`` property returning the
     ``(ny, nx)`` shape of the ePSF grid, matching the ``STDPSFGrid``
     property of the same name. It replaces the ``grid_shape`` metadata

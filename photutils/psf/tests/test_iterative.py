@@ -632,6 +632,28 @@ def test_iterative_finder_column_names(x_col, y_col):
     assert_allclose(phot_tbl['flux_fit'][0], 7.0, rtol=1e-6)
 
 
+def test_fitter_kwargs(test_data):
+    """
+    Test that fitter_kwargs is passed through to the PSFPhotometry
+    instance and appears in the repr.
+    """
+    data, error, _ = test_data
+    psf_model = CircularGaussianPRF(flux=1, fwhm=2.7)
+    finder = DAOStarFinder(6.0, 2.0)
+    psfphot = IterativePSFPhotometry(psf_model, (5, 5), finder,
+                                     aperture_radius=4, maxiters=2,
+                                     fitter_kwargs={'acc': 1e-4})
+    assert psfphot._psfphot.fitter_kwargs == {'acc': 1e-4}
+    assert 'fitter_kwargs' in repr(psfphot)
+    phot = psfphot(data, error=error)
+    assert len(phot) > 0
+
+    match = 'fitter_kwargs must be a dict or None'
+    with pytest.raises(TypeError, match=match):
+        IterativePSFPhotometry(psf_model, (5, 5), finder, aperture_radius=4,
+                               fitter_kwargs='acc')
+
+
 def test_repr():
     psf_model = CircularGaussianPRF(flux=1.0, fwhm=3.1)
     fit_shape = (9, 9)
