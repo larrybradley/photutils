@@ -847,7 +847,7 @@ class ImagePRF(Fittable2DModel):
                 raise ValueError('All elements of origin must be finite')
         self._origin = origin
 
-    @lazyproperty
+    @cached_property
     def interpolator(self):
         """
         The interpolating spline function.
