@@ -5,13 +5,14 @@ autocorrelation statistic.
 """
 
 import math
-from functools import partial
+from concurrent.futures import ThreadPoolExecutor
+from itertools import pairwise
 
 import numpy as np
 from astropy.stats import sigma_clipped_stats
 from astropy.units import Quantity
-from scipy.ndimage import (binary_dilation, binary_erosion, binary_fill_holes,
-                           uniform_filter)
+
+from photutils.background._morans_i import fill_holes, morans_i_rows, opening
 
 __all__ = ['make_morans_i_mask', 'morans_i_map']
 
@@ -20,11 +21,6 @@ _MIN_PATCH_FRACTION = 0.25
 
 # The approximate number of pixels sampled to estimate image statistics
 _N_SAMPLES = 1_000_000
-
-# Patches whose variance is below this fraction of their mean squared
-# value are treated as constant. This rejects rounding residuals in
-# regions of constant data.
-_VARIANCE_FLOOR = 1.0e-10
 
 
 def _subsample(array):
@@ -46,39 +42,17 @@ def _box_size(patch_size, n_box_passes):
     return max(3, 2 * round((width - 1) / 2) + 1)
 
 
-def _box_sum(array, size, *, n_passes=1):
-    """
-    Return the sum of a 2D array in a square box centered on each
-    pixel, with zeros outside of the array.
-
-    The box sum is applied ``n_passes`` times.
-    """
-    for _ in range(n_passes):
-        array = uniform_filter(array, size=size, mode='constant') * size**2
-    return array
-
-
-def _neighbor_sum(array):
-    """
-    Return the sum of the eight nearest neighbors of each pixel, with
-    zeros outside of the array.
-
-    The center pixel is left out of the sum instead of being subtracted
-    from it, so the sum of non-negative values is exactly zero only if
-    all of the neighbors are zero.
-    """
-    ny, nx = array.shape
-    padded = np.pad(array, 1)
-    result = np.zeros(array.shape)
-    for dy in range(3):
-        for dx in range(3):
-            if (dy, dx) != (1, 1):
-                result += padded[dy:dy + ny, dx:dx + nx]
-    return result
+def _validate_n_threads(n_threads):
+    if (isinstance(n_threads, bool)
+            or not isinstance(n_threads, (int, np.integer))
+            or n_threads < 1):
+        msg = 'n_threads must be a positive integer'
+        raise ValueError(msg)
+    return int(n_threads)
 
 
 def morans_i_map(data, *, patch_size=21, n_box_passes=1, mask=None,
-                 weights=None):
+                 weights=None, n_threads=1):
     """
     Calculate a map of the Moran's I spatial autocorrelation statistic.
 
@@ -128,6 +102,12 @@ def morans_i_map(data, *, patch_size=21, n_box_passes=1, mask=None,
         does not change if the weights are multiplied by a positive
         constant. If `None`, all of the pixels have the same weight.
 
+    n_threads : int, optional
+        The number of threads to use. The image rows are divided into
+        ``n_threads`` bands that are processed concurrently. The
+        results agree with the single-threaded results to within
+        floating-point rounding.
+
     Returns
     -------
     result : 2D float32 `~numpy.ndarray`
@@ -173,6 +153,10 @@ def morans_i_map(data, *, patch_size=21, n_box_passes=1, mask=None,
     around the source. A tapered kernel gives a footprint with softer
     edges whose size increases with the brightness of the source.
 
+    The image is processed in a single pass using running sums, so
+    the run time is independent of ``patch_size`` and the working
+    memory is small compared to the image.
+
     Noise that is correlated between adjacent pixels (e.g., in
     resampled or drizzled images) has a positive Moran's I even without
     sources. The statistic should then be compared to its typical value
@@ -200,6 +184,7 @@ def morans_i_map(data, *, patch_size=21, n_box_passes=1, mask=None,
         raise ValueError(msg)
     if data.dtype not in (np.float32, np.float64):
         data = data.astype(float)
+    data = np.ascontiguousarray(data)
 
     if (isinstance(patch_size, bool)
             or not isinstance(patch_size, (int, np.integer))
@@ -213,60 +198,54 @@ def morans_i_map(data, *, patch_size=21, n_box_passes=1, mask=None,
         msg = 'n_box_passes must be a positive integer'
         raise ValueError(msg)
 
-    valid = np.isfinite(data)
     if mask is not None:
-        mask = np.asarray(mask, dtype=bool)
+        mask = np.ascontiguousarray(mask, dtype=bool)
         if mask.shape != data.shape:
             msg = 'mask must have the same shape as data'
             raise ValueError(msg)
-        valid &= ~mask
+        mask = mask.view(np.uint8)
 
-    if weights is None:
-        wts = valid.astype(float)
-    else:
-        weights = np.asarray(weights, dtype=float)
+    if weights is not None:
+        # The kernel reads the weights with the data type of the data
+        weights = np.ascontiguousarray(weights, dtype=data.dtype)
         if weights.shape != data.shape:
             msg = 'weights must have the same shape as data'
             raise ValueError(msg)
-        with np.errstate(invalid='ignore'):
-            valid &= np.isfinite(weights) & (weights > 0)
-        wts = np.where(valid, weights, 0.0)
+
+    n_threads = _validate_n_threads(n_threads)
 
     # Subtract an approximate background level to limit the rounding
-    # error of the box sums. The statistic does not depend on it.
-    sample = _subsample(data)[_subsample(valid)]
+    # error of the running sums. The statistic does not depend on it.
+    sample = _subsample(data)
+    keep = np.isfinite(sample)
+    if mask is not None:
+        keep &= _subsample(mask) == 0
+    if weights is not None:
+        keep &= _subsample(weights) > 0
+    sample = sample[keep]
     pedestal = float(np.median(sample)) if sample.size > 0 else 0.0
-    values = np.zeros(data.shape)
-    values[valid] = data[valid] - pedestal
-
-    # The weighted mean of the valid pixels among the eight nearest
-    # neighbors
-    neighbor_wts = _neighbor_sum(wts)
-    usable = valid & (neighbor_wts > 0)
-    neighbors = np.zeros(data.shape)
-    neighbors[usable] = (_neighbor_sum(wts * values)[usable]
-                         / neighbor_wts[usable])
-    wts[~usable] = 0.0
-
-    box_size = _box_size(patch_size, n_box_passes)
-    patch_sum = partial(_box_sum, size=box_size, n_passes=n_box_passes)
-
-    count = np.rint(patch_sum(usable.astype(float)))
-    sum_wts = patch_sum(wts)
-    with np.errstate(invalid='ignore', divide='ignore'):
-        mean = patch_sum(wts * values) / sum_wts
-        mean_sq = patch_sum(wts * values**2) / sum_wts
-        mean_neighbors = patch_sum(wts * neighbors) / sum_wts
-        mean_product = patch_sum(wts * values * neighbors) / sum_wts
-        var = mean_sq - mean**2
-        result = (mean_product - mean * mean_neighbors) / var
 
     # The sum of the patch kernel is the number of pixels in a full
     # patch
+    box_size = _box_size(patch_size, n_box_passes)
     min_count = _MIN_PATCH_FRACTION * box_size**(2 * n_box_passes)
-    good = usable & (count >= min_count) & (var > _VARIANCE_FLOOR * mean_sq)
-    result[~good] = np.nan
-    return result.astype(np.float32)
+    result = np.empty(data.shape, dtype=np.float32)
+    ny = data.shape[0]
+    n_chunks = max(1, min(n_threads, ny))
+    if n_chunks == 1:
+        morans_i_rows(data, mask, weights, pedestal, box_size,
+                      n_box_passes, min_count, result, 0, ny)
+        return result
+
+    # Each thread writes a separate band of rows of the result
+    edges = np.linspace(0, ny, n_chunks + 1).astype(int)
+    with ThreadPoolExecutor(max_workers=n_chunks) as executor:
+        list(executor.map(
+            lambda rows: morans_i_rows(data, mask, weights, pedestal,
+                                       box_size, n_box_passes, min_count,
+                                       result, *rows),
+            pairwise(edges)))
+    return result
 
 
 def _calc_threshold(stat, n_sigma, percent):
@@ -308,7 +287,7 @@ def _calc_threshold(stat, n_sigma, percent):
 
 def make_morans_i_mask(data, *, patch_size=21, n_box_passes=1, n_sigma=3.0,
                        percent=None, mask=None, weights=None,
-                       opening_iterations=None):
+                       opening_iterations=None, n_threads=1):
     """
     Make a source mask using the Moran's I spatial autocorrelation
     statistic.
@@ -383,6 +362,9 @@ def make_morans_i_mask(data, *, patch_size=21, n_box_passes=1, n_sigma=3.0,
         sources in regions that are too small to survive a large
         opening. Set to 0 to skip this step.
 
+    n_threads : int, optional
+        The number of threads used to calculate the statistic.
+
     Returns
     -------
     source_mask : 2D bool `~numpy.ndarray`
@@ -415,21 +397,17 @@ def make_morans_i_mask(data, *, patch_size=21, n_box_passes=1, n_sigma=3.0,
 
     stat = morans_i_map(data, patch_size=patch_size,
                         n_box_passes=n_box_passes, mask=mask,
-                        weights=weights)
+                        weights=weights, n_threads=n_threads)
     threshold = _calc_threshold(stat, n_sigma, percent)
     if threshold is None:
         return np.zeros(stat.shape, dtype=bool)
     if opening_iterations is None:
         opening_iterations = patch_size // 2 - 2 if n_box_passes == 1 else 2
 
-    source_mask = binary_fill_holes(stat > threshold)
+    source_mask = stat > threshold
+    del stat
+    work = source_mask.view(np.uint8)
+    fill_holes(work)
     if opening_iterations > 0:
-        # Pixels outside of the image are taken as flagged for the
-        # erosion, so that the regions of sources at the image edges
-        # are not eroded from the edges
-        source_mask = binary_erosion(source_mask,
-                                     iterations=opening_iterations,
-                                     border_value=1)
-        source_mask = binary_dilation(source_mask,
-                                      iterations=opening_iterations)
+        opening(work, opening_iterations)
     return source_mask

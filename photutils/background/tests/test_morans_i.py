@@ -258,6 +258,16 @@ class TestMoransIMap:
         result = morans_i_map(noise.astype(np.float32))
         assert_allclose(result, expected, atol=1e-5)
 
+        # the weights are used with the precision of the data
+        rng = np.random.default_rng(9)
+        weights = rng.uniform(0.5, 2.0, noise.shape)
+        expected = morans_i_map(noise, weights=weights)
+        for dtypes in ((np.float32, np.float32), (np.float32, np.float64),
+                       (np.float64, np.float32)):
+            result = morans_i_map(noise.astype(dtypes[0]),
+                                  weights=weights.astype(dtypes[1]))
+            assert_allclose(result, expected, atol=1e-4)
+
     def test_non_contiguous_and_int(self, noise):
         expected = morans_i_map(np.ascontiguousarray(noise[::2, ::2]))
         assert_equal(morans_i_map(noise[::2, ::2]), expected)
@@ -269,6 +279,19 @@ class TestMoransIMap:
         result = morans_i_map(noise << u.Jy)
         assert not isinstance(result, u.Quantity)
         assert_equal(result, morans_i_map(noise))
+
+    def test_n_threads(self, noise):
+        data = noise.copy()
+        data[50, 60] = np.nan
+        rng = np.random.default_rng(8)
+        weights = rng.uniform(0.5, 2.0, data.shape)
+        for kwargs in ({}, {'weights': weights, 'n_box_passes': 3,
+                            'patch_size': 9}):
+            expected = morans_i_map(data, **kwargs)
+            for n_threads in (2, 3, 500):
+                result = morans_i_map(data, n_threads=n_threads, **kwargs)
+                assert_equal(np.isnan(result), np.isnan(expected))
+                assert_allclose(result, expected, atol=1e-6)
 
     def test_constant_data(self):
         """
@@ -310,6 +333,11 @@ class TestMoransIMap:
         for n_box_passes in (0, 1.5, True):
             with pytest.raises(ValueError, match=match):
                 morans_i_map(noise, n_box_passes=n_box_passes)
+
+        match = 'n_threads must be a positive integer'
+        for n_threads in (0, 1.5, True):
+            with pytest.raises(ValueError, match=match):
+                morans_i_map(noise, n_threads=n_threads)
 
     def test_inputs_unchanged(self, noise):
         data = noise.copy()
@@ -491,6 +519,11 @@ class TestMakeMoransIMask:
         mask = make_morans_i_mask(np.full((50, 50), np.nan))
         assert mask.dtype == bool
         assert not np.any(mask)
+
+    def test_n_threads(self):
+        data = make_100gaussians_image()
+        assert_equal(make_morans_i_mask(data, n_threads=4),
+                     make_morans_i_mask(data))
 
     def test_inputs(self, noise):
         match = 'n_sigma must be a positive number'
