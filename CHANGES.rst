@@ -213,6 +213,14 @@ New Features
 
 - ``photutils.background``
 
+  - Added a ``make_morans_i_mask`` function to make a source mask from
+    the Moran's I spatial autocorrelation statistic, and a
+    ``morans_i_map`` function to calculate the map of the statistic. The
+    mask does not require the background level or the background noise
+    to be known, so it can be used as the ``mask`` input to
+    ``Background2D``. The pixels can be weighted, e.g., by an
+    inverse-variance map. [#2482]
+
   - Updated ``LocalBackground`` so that ``Quantity`` input data is
     supported, consistent with the background estimator classes and
     ``Background2D``. The result is a ``Quantity`` with the same unit as
