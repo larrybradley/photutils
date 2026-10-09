@@ -1235,9 +1235,12 @@ background is known and then input to
 
 The threshold is set relative to the typical value of the statistic in
 the image, so it adapts to images with correlated noise such as
-resampled mosaics. The map of the statistic itself is available from
-the new `~photutils.background.morans_i_map` function. This feature is
-based on a method and implementation contributed by Henry Ferguson.
+resampled mosaics. The statistic is computed in compiled code in a
+single pass over the image with a run time that is independent of the
+patch size, and it can use multiple threads with the ``n_threads``
+keyword. The map of the statistic itself is available from the new
+`~photutils.background.morans_i_map` function. This feature is based
+on a method and implementation contributed by Henry Ferguson.
 
 See :ref:`morans_i_mask` for more details.
 
