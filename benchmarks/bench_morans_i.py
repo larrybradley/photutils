@@ -4,7 +4,7 @@
 Benchmarks for the Moran's I source masking functions.
 
 The timing benchmark covers ``morans_i_map`` and ``make_morans_i_mask``
-across image sizes.
+across image sizes and ``n_threads`` values.
 
 The memory benchmark records the resident memory of a child process
 while it makes a source mask, and plots the memory against the wall
@@ -35,7 +35,8 @@ import types
 from pathlib import Path
 
 import numpy as np
-from bench_helpers import (add_memory_argument, parse_int_list,
+from bench_helpers import (add_memory_argument, format_sweep_cells,
+                           parse_int_list, parse_thread_counts,
                            print_environment, set_memory_mode, time_best)
 
 from photutils.background import make_morans_i_mask, morans_i_map
@@ -78,7 +79,7 @@ def make_source_image(size, *, seed=0):
     return data
 
 
-def bench_timing(sizes, *, repeats=3, seed=0):
+def bench_timing(sizes, n_threads_list, *, repeats=3, seed=0):
     """
     Benchmark the map and mask functions.
 
@@ -87,6 +88,9 @@ def bench_timing(sizes, *, repeats=3, seed=0):
     sizes : list of int
         The image sizes. Each image is ``(size, size)``.
 
+    n_threads_list : list of int
+        The ``n_threads`` values to benchmark.
+
     repeats : int, optional
         The number of repeats for each timing (best time is kept).
 
@@ -94,15 +98,21 @@ def bench_timing(sizes, *, repeats=3, seed=0):
         The random number generator seed.
     """
     print("\n== Moran's I map and source mask ==")
-    print(f'{"function":>20} {"image":>12} {"time":>12}')
+    header = f'{"function":>20} {"image":>12}'
+    for n_threads in n_threads_list:
+        header += f'{f"n_threads={n_threads}":>18}'
+    print(header)
 
     for size in sizes:
         data = make_source_image(size, seed=seed)
         for func in (morans_i_map, make_morans_i_mask):
-            best = time_best(lambda: func(data),  # noqa: B023
-                             repeats=repeats)
-            print(f'{func.__name__:>20} {f"{size}x{size}":>12} '
-                  f'{best:>11.4f}s')
+            times = [time_best(lambda: func(data, n_threads=n_threads),  # noqa: B023
+                               repeats=repeats)
+                     for n_threads in n_threads_list]
+            row = f'{func.__name__:>20} {f"{size}x{size}":>12}'
+            row += ''.join(f'{cell:>18}'
+                           for cell in format_sweep_cells(times))
+            print(row)
 
 
 def load_module(path, name):
@@ -135,7 +145,7 @@ def resolve_implementation(spec, percent):
     Parameters
     ----------
     spec : str
-        One of ``'photutils'``, ``'git:<revision>'``, or
+        One of ``'photutils:<n_threads>'``, ``'git:<revision>'``, or
         ``'upstream:<path>'``.
 
     percent : float
@@ -148,7 +158,9 @@ def resolve_implementation(spec, percent):
     """
     kind, _, value = spec.partition(':')
     if kind == 'photutils':
-        return lambda data: make_morans_i_mask(data, percent=percent)
+        n_threads = int(value)
+        return lambda data: make_morans_i_mask(data, percent=percent,
+                                               n_threads=n_threads)
 
     if kind == 'git':
         repo = Path(__file__).resolve().parent.parent
@@ -419,6 +431,9 @@ def main():
     parser.add_argument('--sizes', default='1024,2048,4096',
                         help='comma-separated image sizes for the timing '
                              'benchmark (default: %(default)s)')
+    parser.add_argument('--n-threads', default='1,2,4,8',
+                        help='comma-separated n_threads values '
+                             '(default: %(default)s)')
     parser.add_argument('--repeats', type=int, default=3,
                         help='number of repeats per timing; the best '
                              'time is reported (default: %(default)s)')
@@ -457,11 +472,13 @@ def main():
     set_memory_mode(args.memory)
 
     sizes = parse_int_list(args.sizes)
+    n_threads_list = parse_thread_counts(args.n_threads)
 
     print_environment()
 
     if args.which in ('all', 'timing'):
-        bench_timing(sizes, repeats=args.repeats, seed=args.seed)
+        bench_timing(sizes, n_threads_list, repeats=args.repeats,
+                     seed=args.seed)
 
     if args.which in ('all', 'memory'):
         specs = {}
@@ -469,7 +486,9 @@ def main():
             specs['upstream'] = f'upstream:{args.upstream}'
         for revision in args.git_revision:
             specs[f'git {revision}'] = f'git:{revision}'
-        specs['photutils'] = 'photutils'
+        for n_threads in n_threads_list:
+            specs[f'photutils n_threads={n_threads}'] = (
+                f'photutils:{n_threads}')
         bench_memory(specs, size=args.memory_size, seed=args.seed,
                      percent=args.percent, repeats=args.repeats,
                      interval=args.interval, output=args.output)
