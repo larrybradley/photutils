@@ -161,7 +161,7 @@ near the centroids:
     ax2.set_ylim(19.99, 20.09)
     ax2.set_aspect('equal')
     ax2.tick_params(colors='white')
-    ax.indicate_inset_zoom(ax2, edgecolor='white', alpha=1)
+    ax.indicate_inset_zoom(ax2, edgecolor='gray', alpha=1)
 
 
 Centroiding Several Sources in an Image
