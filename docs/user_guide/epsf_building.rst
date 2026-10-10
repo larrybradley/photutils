@@ -56,82 +56,106 @@ of noise. Otherwise, the resulting ePSF may be noisy or biased. See
 :ref:`epsf-guidelines` for guidance on choosing the oversampling factor
 and the star sample.
 
-Let's start by loading a simulated HST/WFC3 image in the F160W band::
+Simulating a Star Field
+^^^^^^^^^^^^^^^^^^^^^^^
+
+For this example we simulate an image of stars from a known ePSF, so
+that the ePSF that we build can be compared with the true one at the
+end (see :ref:`epsf-example-comparison`). The input is a simulated
+ePSF of the JWST NIRCam F115W filter with an oversampling factor
+of 4 (see :ref:`epsf-example-input` for how it was made). It has a
+FWHM of about 1.5 pixels, so it is undersampled. Let's load it as an
+`~photutils.psf.ImagePSF` model::
 
     >>> from astropy.io import fits
-    >>> url = ('https://github.com/astropy/photutils-datasets/raw/main/'
-    ...        'data/hst_wfc3ir_f160w_simulated_starfield.fits')
-    >>> data = fits.getdata(url)  # doctest: +REMOTE_DATA
+    >>> from astropy.utils.data import get_pkg_data_filename
+    >>> from photutils.psf import ImagePSF
+    >>> filename = get_pkg_data_filename('data/jwst_nircam_f115w_epsf.fits',
+    ...                                  package='photutils.datasets')
+    >>> true_epsf = ImagePSF(fits.getdata(filename), oversampling=4)
 
-The simulated image does not contain any background or noise, so let's
-add those to the image::
+Next we define 500 stars at random positions in a 1000x1000 pixel image.
+The stars are at least 30 pixels from each other, so that they are
+isolated, and at least 20 pixels from the image borders. Their fluxes
+(in electrons) are uniformly distributed in magnitude over a range of
+3.75 magnitudes::
 
-    >>> from photutils.datasets import make_noise_image
-    >>> data += make_noise_image(data.shape, distribution='gaussian',
-    ...                          mean=10.0, stddev=5.0, seed=0)  # doctest: +REMOTE_DATA
+    >>> import numpy as np
+    >>> from photutils.datasets import make_model_params
+    >>> shape = (1000, 1000)
+    >>> params = make_model_params(shape, n_sources=500, min_separation=30,
+    ...                            border_size=20, seed=0)
+    >>> rng = np.random.default_rng(1)
+    >>> params['flux'] = 10**rng.uniform(3.5, 5.0, len(params))
+
+Now we make the image. Every star has the same ePSF. We add a constant
+background of 20 electrons per pixel and then noise, which is the
+Poisson noise of the stars and the background (approximated as Gaussian)
+plus a read noise of 5 electrons::
+
+    >>> from photutils.datasets import make_model_image
+    >>> data = make_model_image(shape, true_epsf, params,
+    ...                         model_shape=(25, 25))
+    >>> data += 20.0
+    >>> data += rng.normal(scale=np.sqrt(data + 5.0**2))
 
 Let's show the image:
 
 .. plot::
+    :context: reset
 
     import matplotlib.pyplot as plt
+    import numpy as np
     from astropy.io import fits
+    from astropy.stats import sigma_clipped_stats
+    from astropy.table import Table
+    from astropy.utils.data import get_pkg_data_filename
     from astropy.visualization import simple_norm
-    from photutils.datasets import make_noise_image
+    from photutils.datasets import make_model_image, make_model_params
+    from photutils.detection import DAOStarFinder
+    from photutils.psf import EPSFBuilder, ImagePSF, extract_stars
+    from photutils.utils import circular_footprint
+    from scipy.ndimage import binary_dilation
 
-    url = ('https://github.com/astropy/photutils-datasets/raw/main/'
-           'data/hst_wfc3ir_f160w_simulated_starfield.fits')
-    data = fits.getdata(url)
-    data += make_noise_image(data.shape, distribution='gaussian', mean=10.0,
-                             stddev=5.0, seed=0)
+    filename = get_pkg_data_filename('data/jwst_nircam_f115w_epsf.fits',
+                                     package='photutils.datasets')
+    true_epsf = ImagePSF(fits.getdata(filename), oversampling=4)
+
+    shape = (1000, 1000)
+    params = make_model_params(shape, n_sources=500, min_separation=30,
+                               border_size=20, seed=0)
+    rng = np.random.default_rng(1)
+    params['flux'] = 10**rng.uniform(3.5, 5.0, len(params))
+
+    data = make_model_image(shape, true_epsf, params, model_shape=(25, 25))
+    data += 20.0
+    data += rng.normal(scale=np.sqrt(data + 5.0**2))
 
     fig, ax = plt.subplots(figsize=(8, 8))
     norm = simple_norm(data, 'sqrt', percent=99.0)
     ax.imshow(data, norm=norm, origin='lower')
 
-For this example we'll use the
-:class:`~photutils.detection.DAOStarFinder` class to identify the
-brighter stars and their initial positions::
+Finding the Stars
+^^^^^^^^^^^^^^^^^
+
+We'll use the :class:`~photutils.detection.DAOStarFinder` class to
+identify the stars and their initial positions. The diffraction
+features around the bright stars are also detected as sources. The
+``min_separation`` keyword removes them by keeping only the brightest
+source within 15 pixels::
 
     >>> from photutils.detection import DAOStarFinder
-    >>> finder = DAOStarFinder(threshold=100.0, fwhm=1.5)  # doctest: +REMOTE_DATA
-    >>> sources = finder(data)  # doctest: +REMOTE_DATA
-    >>> for col in sources.colnames:  # doctest: +REMOTE_DATA
-    ...     if col not in ('id', 'n_pixels'):
-    ...         sources[col].info.format = '%.2f'  # for consistent table output
-    >>> sources.pprint(max_width=76)  # doctest: +REMOTE_DATA
-     id x_centroid y_centroid sharpness ...   peak    flux    mag   daofind_mag
-    --- ---------- ---------- --------- ... ------- -------- ------ -----------
-      1     848.53       2.15      0.87 ... 1062.18  4258.95  -9.07       -2.41
-      2     181.85       3.74      0.91 ... 1722.27  5828.71  -9.41       -2.93
-      3     323.87       3.69      0.91 ... 3016.37 10252.06 -10.03       -3.55
-      4      99.89       8.95      0.96 ... 1144.52  3496.04  -8.86       -2.47
-      5     824.12       9.36      0.90 ... 1311.20  4685.32  -9.18       -2.64
-    ...        ...        ...       ... ...     ...      ...    ...         ...
-    478     888.44     991.86      0.85 ...  194.27  1005.88  -7.51       -0.52
-    479     114.16     993.40      0.84 ... 1588.31  6810.15  -9.58       -2.84
-    480     298.36     993.87      0.84 ...  655.37  2979.57  -8.69       -1.88
-    481     207.21     998.17      0.91 ... 2811.02  8614.10  -9.84       -3.48
-    482     691.02     998.77      0.98 ... 2611.22  5768.68  -9.40       -3.39
-    Length = 482 rows
+    >>> finder = DAOStarFinder(threshold=100.0, fwhm=1.5, min_separation=15)
+    >>> sources = finder(data)
+    >>> len(sources)
+    500
 
 Let's show the detected stars overlaid on the image:
 
 .. plot::
+    :context: close-figs
 
-    import matplotlib.pyplot as plt
-    from astropy.io import fits
-    from astropy.visualization import simple_norm
-    from photutils.datasets import make_noise_image
-    from photutils.detection import DAOStarFinder
-
-    url = ('https://github.com/astropy/photutils-datasets/raw/main/'
-           'data/hst_wfc3ir_f160w_simulated_starfield.fits')
-    data = fits.getdata(url)
-    data += make_noise_image(data.shape, distribution='gaussian', mean=10.0,
-                             stddev=5.0, seed=0)
-
-    finder = DAOStarFinder(threshold=100.0, fwhm=1.5)
+    finder = DAOStarFinder(threshold=100.0, fwhm=1.5, min_separation=15)
     sources = finder(data)
 
     fig, ax = plt.subplots(figsize=(8, 8))
@@ -140,9 +164,11 @@ Let's show the detected stars overlaid on the image:
     ax.scatter(sources['x_centroid'], sources['y_centroid'],
                s=80, edgecolor='red', facecolor='none', lw=1.5)
 
-Note that the stars are sufficiently separated in the simulated image
-that we do not need to exclude any stars due to crowding. In practice
-this step will require some manual inspection and selection.
+All of the stars in the simulated image are isolated and far from the
+image borders, so we do not need to exclude any of them. In practice
+this step will require some manual inspection and selection, e.g., to
+remove stars that have close neighbors or that are too close to the
+image borders for a complete cutout.
 
 
 Extracting Star Cutouts
@@ -152,25 +178,12 @@ Next, we need to extract cutouts of the stars using the
 :func:`~photutils.psf.extract_stars` function. This function requires
 a table of star positions either in pixel or sky coordinates. For this
 example we are using pixel coordinates, which need to be in table
-columns called ``x`` and ``y``.
-
-We'll extract 25x25 pixel cutouts of our selected stars. Let's
-explicitly exclude stars that are too close to the image boundaries
-(because they cannot be extracted)::
-
-    >>> size = 25
-    >>> hsize = (size - 1) / 2
-    >>> x = sources['x_centroid']  # doctest: +REMOTE_DATA
-    >>> y = sources['y_centroid']  # doctest: +REMOTE_DATA
-    >>> mask = ((x > hsize) & (x < (data.shape[1] - 1 - hsize)) &
-    ...         (y > hsize) & (y < (data.shape[0] - 1 - hsize)))  # doctest: +REMOTE_DATA
-
-Now let's create the table of good star positions::
+columns called ``x`` and ``y``::
 
     >>> from astropy.table import Table
     >>> stars_tbl = Table()
-    >>> stars_tbl['x'] = x[mask]  # doctest: +REMOTE_DATA
-    >>> stars_tbl['y'] = y[mask]  # doctest: +REMOTE_DATA
+    >>> stars_tbl['x'] = sources['x_centroid']
+    >>> stars_tbl['y'] = sources['y_centroid']
 
 The star cutouts from which we build the ePSF must have the
 background subtracted. Here we'll use the sigma-clipped median value
@@ -180,30 +193,32 @@ across the image, one should use more sophisticated methods (e.g.,
 
 The background level must be measured from pixels that are free of star
 light. The extended wings of the stars cover a large fraction of this
-image, and sigma clipping does not remove them. The median of the whole
-image is therefore biased high by about 0.35 counts. That is a small
-fraction of the noise, but summed over a 25x25 pixel cutout it is
-about 3% of the flux of a typical star in this image, and subtracting it
-would make the ePSF too concentrated. To avoid this bias, we first mask
-the pixels within 18 pixels of each detected star::
+image, and sigma clipping does not remove them. The sigma-clipped median
+of the whole image is therefore 20.7, which is 0.7 electrons higher
+than the true background of 20. That is a small fraction of the noise,
+but summed over a 25x25 pixel cutout it is about 3% of the flux of a
+typical star in this image, and subtracting it would make the ePSF too
+concentrated. To avoid this bias, we first mask the pixels within 18
+pixels of each detected star::
 
-    >>> import numpy as np
     >>> from photutils.utils import circular_footprint
     >>> from scipy.ndimage import binary_dilation
-    >>> star_mask = np.zeros(data.shape, dtype=bool)  # doctest: +REMOTE_DATA
-    >>> yidx = np.round(sources['y_centroid']).astype(int)  # doctest: +REMOTE_DATA
-    >>> xidx = np.round(sources['x_centroid']).astype(int)  # doctest: +REMOTE_DATA
-    >>> star_mask[yidx, xidx] = True  # doctest: +REMOTE_DATA
+    >>> star_mask = np.zeros(data.shape, dtype=bool)
+    >>> yidx = np.round(sources['y_centroid']).astype(int)
+    >>> xidx = np.round(sources['x_centroid']).astype(int)
+    >>> star_mask[yidx, xidx] = True
     >>> star_mask = binary_dilation(
-    ...     star_mask, structure=circular_footprint(18))  # doctest: +REMOTE_DATA
+    ...     star_mask, structure=circular_footprint(18))
 
 Now let's subtract the background, measured from the unmasked pixels,
 from the image::
 
     >>> from astropy.stats import sigma_clipped_stats
     >>> mean_val, median_val, std_val = sigma_clipped_stats(
-    ...     data, sigma=2.0, mask=star_mask)  # doctest: +REMOTE_DATA
-    >>> data -= median_val  # doctest: +REMOTE_DATA
+    ...     data, sigma=2.0, mask=star_mask)
+    >>> print(f'{median_val:.1f}')
+    20.0
+    >>> data -= median_val
 
 We are now ready to create our star cutouts using the
 :func:`~photutils.psf.extract_stars` function. The input image can be
@@ -224,10 +239,10 @@ dithered images) and a single catalog, the same physical star will be
 sky coordinate and, by default, the same flux in each input image (see
 :ref:`epsf-linked-stars`).
 
-Let's extract the 25x25 pixel cutouts of our selected stars::
+Let's extract 25x25 pixel cutouts of our selected stars::
 
     >>> from photutils.psf import extract_stars
-    >>> stars = extract_stars(data, stars_tbl, size=25)  # doctest: +REMOTE_DATA
+    >>> stars = extract_stars(data, stars_tbl, size=25)
 
 The function returns an `~photutils.psf.EPSFStars` object containing the
 cutouts of our selected stars that will be used to build the ePSF. Let's
@@ -247,36 +262,11 @@ show the first 25 of them:
     ...     ax[i].imshow(stars[i], norm=norm, origin='lower')
 
 .. plot::
+    :context: close-figs
 
-    import matplotlib.pyplot as plt
-    import numpy as np
-    from astropy.io import fits
-    from astropy.stats import sigma_clipped_stats
-    from astropy.table import Table
-    from astropy.visualization import simple_norm
-    from photutils.datasets import make_noise_image
-    from photutils.detection import DAOStarFinder
-    from photutils.psf import extract_stars
-    from photutils.utils import circular_footprint
-    from scipy.ndimage import binary_dilation
-
-    url = ('https://github.com/astropy/photutils-datasets/raw/main/'
-           'data/hst_wfc3ir_f160w_simulated_starfield.fits')
-    data = fits.getdata(url)
-    data += make_noise_image(data.shape, distribution='gaussian', mean=10.0,
-                             stddev=5.0, seed=0)
-    finder = DAOStarFinder(threshold=100.0, fwhm=1.5)
-    sources = finder(data)
-
-    size = 25
-    hsize = (size - 1) / 2
-    x = sources['x_centroid']
-    y = sources['y_centroid']
-    mask = ((x > hsize) & (x < (data.shape[1] - 1 - hsize))
-            & (y > hsize) & (y < (data.shape[0] - 1 - hsize)))
     stars_tbl = Table()
-    stars_tbl['x'] = x[mask]
-    stars_tbl['y'] = y[mask]
+    stars_tbl['x'] = sources['x_centroid']
+    stars_tbl['y'] = sources['y_centroid']
 
     star_mask = np.zeros(data.shape, dtype=bool)
     yidx = np.round(sources['y_centroid']).astype(int)
@@ -321,9 +311,8 @@ our desired parameters and then input the cutouts of our selected stars
 to the instance::
 
     >>> from photutils.psf import EPSFBuilder
-    >>> epsf_builder = EPSFBuilder(oversampling=4,
-    ...                            progress_bar=False)  # doctest: +REMOTE_DATA
-    >>> result = epsf_builder(stars)  # doctest: +REMOTE_DATA
+    >>> epsf_builder = EPSFBuilder(oversampling=4, progress_bar=False)
+    >>> result = epsf_builder(stars)
 
 The :class:`~photutils.psf.EPSFBuilder` returns an
 `~photutils.psf.EPSFBuildResults` object containing the constructed ePSF,
@@ -331,20 +320,20 @@ the fitted stars, and detailed information about the build process. This
 result object supports tuple unpacking, so both of the following work::
 
     >>> # Access result attributes
-    >>> epsf = result.epsf  # doctest: +REMOTE_DATA
-    >>> fitted_stars = result.fitted_stars  # doctest: +REMOTE_DATA
+    >>> epsf = result.epsf
+    >>> fitted_stars = result.fitted_stars
 
     >>> # Tuple unpacking also works
-    >>> epsf, fitted_stars = result  # doctest: +REMOTE_DATA
+    >>> epsf, fitted_stars = result
 
 The `~photutils.psf.EPSFBuildResults` object provides useful diagnostic
 information about the build process::
 
-    >>> result.converged  # doctest: +REMOTE_DATA
+    >>> result.converged
     True
-    >>> result.iterations  # doctest: +REMOTE_DATA
-    10
-    >>> result.n_excluded_stars  # doctest: +REMOTE_DATA
+    >>> result.iterations  # doctest: +SKIP
+    9
+    >>> result.n_excluded_stars
     0
 
 The results also report the fraction of stars whose centers converged
@@ -388,51 +377,11 @@ Finally, let's show the constructed ePSF:
     >>> fig.colorbar(axim)
 
 .. plot::
-
-    import matplotlib.pyplot as plt
-    import numpy as np
-    from astropy.io import fits
-    from astropy.stats import sigma_clipped_stats
-    from astropy.table import Table
-    from astropy.visualization import simple_norm
-    from photutils.datasets import make_noise_image
-    from photutils.detection import DAOStarFinder
-    from photutils.psf import EPSFBuilder, extract_stars
-    from photutils.utils import circular_footprint
-    from scipy.ndimage import binary_dilation
-
-    url = ('https://github.com/astropy/photutils-datasets/raw/main/'
-           'data/hst_wfc3ir_f160w_simulated_starfield.fits')
-    data = fits.getdata(url)
-    data += make_noise_image(data.shape, distribution='gaussian', mean=10.0,
-                             stddev=5.0, seed=0)
-
-    finder = DAOStarFinder(threshold=100.0, fwhm=1.5)
-    sources = finder(data)
-
-    size = 25
-    hsize = (size - 1) / 2
-    x = sources['x_centroid']
-    y = sources['y_centroid']
-    mask = ((x > hsize) & (x < (data.shape[1] - 1 - hsize))
-            & (y > hsize) & (y < (data.shape[0] - 1 - hsize)))
-    stars_tbl = Table()
-    stars_tbl['x'] = x[mask]
-    stars_tbl['y'] = y[mask]
-
-    star_mask = np.zeros(data.shape, dtype=bool)
-    yidx = np.round(sources['y_centroid']).astype(int)
-    xidx = np.round(sources['x_centroid']).astype(int)
-    star_mask[yidx, xidx] = True
-    star_mask = binary_dilation(star_mask, structure=circular_footprint(18))
-    mean_val, median_val, std_val = sigma_clipped_stats(data, sigma=2.0,
-                                                        mask=star_mask)
-    data -= median_val
-
-    stars = extract_stars(data, stars_tbl, size=25)
+    :context: close-figs
 
     epsf_builder = EPSFBuilder(oversampling=4, progress_bar=False)
-    epsf, fitted_stars = epsf_builder(stars)
+    result = epsf_builder(stars)
+    epsf, fitted_stars = result
 
     fig, ax = plt.subplots(figsize=(8, 8))
     norm = simple_norm(epsf.data, 'log', percent=99.0)
@@ -443,6 +392,226 @@ The `~photutils.psf.ImagePSF` object can be
 used as a PSF model for :ref:`PSF Photometry
 <psf-photometry>` (i.e., `~photutils.psf.PSFPhotometry` or
 `~photutils.psf.IterativePSFPhotometry`).
+
+
+.. _epsf-example-comparison:
+
+Comparing with the Input ePSF
+-----------------------------
+
+Because the image was simulated, the results can be compared with the
+true values. This cannot be done with real data, but it shows what
+accuracy to expect in the best case. Here the stars are isolated, they
+all have the same PSF, the background is constant, and the image was
+made with the same interpolation of the ePSF that is used to fit it.
+
+We first match each fitted star to the nearest simulated star and
+compare the positions and the fluxes::
+
+    >>> xy_fit = fitted_stars.center_flat
+    >>> flux_fit = np.array([star.flux for star in fitted_stars.all_stars])
+    >>> x_true = np.array(params['x_0'])
+    >>> y_true = np.array(params['y_0'])
+    >>> dist = np.hypot(xy_fit[:, :1] - x_true, xy_fit[:, 1:] - y_true)
+    >>> idx = np.argmin(dist, axis=1)
+    >>> dx = xy_fit[:, 0] - x_true[idx]
+    >>> dy = xy_fit[:, 1] - y_true[idx]
+    >>> flux_ratio = flux_fit / np.array(params['flux'])[idx]
+    >>> print(f'{np.median(dx):.3f} {np.median(dy):.3f}')  # doctest: +SKIP
+    0.017 0.003
+    >>> print(f'{np.std(dx):.3f} {np.std(dy):.3f}')  # doctest: +SKIP
+    0.009 0.009
+    >>> bool(max(np.std(dx), np.std(dy)) < 0.02)
+    True
+    >>> print(f'{np.median(flux_ratio):.3f} {np.std(flux_ratio):.3f}')  # doctest: +SKIP
+    1.000 0.013
+    >>> bool(abs(np.median(flux_ratio) - 1.0) < 0.005)
+    True
+
+The fitted fluxes are unbiased, with a scatter of 1.3% that is set
+by the noise of the stars. The scatter of the fitted positions is
+0.009 pixels along each axis. The x positions, however, are all
+offset by 0.017 pixels from the input positions. This is not an
+error. The center of an ePSF is a convention, and the two ePSFs
+use different ones. The input ePSF is centered where ``stpsf``
+placed the star. :class:`~photutils.psf.EPSFBuilder` centers
+the ePSF on the point about which its core is most symmetric
+(`~photutils.centroids.centroid_symmetry`), and the core of this
+PSF is not symmetric about the position where ``stpsf`` placed the
+star. No definition of the center that uses only the image of the
+PSF removes this offset. The offset is the same for every star,
+so it has no effect on relative positions, and positions that are
+measured with the built ePSF are consistent with each other (see
+:ref:`epsf-anderson-differences`).
+
+The offset matters in three cases:
+
+* When positions are compared with positions that were measured with
+  another ePSF or another centering method, e.g., in another filter.
+  The offset is different for each ePSF.
+
+* When sky coordinates are calculated from the fitted positions with
+  the WCS of the image. That WCS was calibrated with star positions that
+  were measured with some definition of the center, e.g., the centroids
+  of a star finder or the fit of a PSF model. The sky coordinates are
+  offset by the difference between that definition and the center of the
+  ePSF. Aligning the fitted positions themselves to a reference catalog
+  removes a constant offset.
+
+* When the asymmetry of the PSF varies across the detector. The offset
+  then varies with position, which looks like a distortion of the image.
+  A single ePSF built for the whole image does not show it.
+
+The size of the offset depends on the definition of the center.
+The symmetry center, which is the definition of Anderson 2016,
+depends only on the core of the ePSF. Before version 3.1,
+:class:`~photutils.psf.EPSFBuilder` centered the ePSF on its center of
+mass in a 5x5 pixel box, which is pulled toward the asymmetric structure
+around the core::
+
+    >>> from photutils.centroids import centroid_com
+    >>> epsf_builder = EPSFBuilder(oversampling=4,
+    ...                            recentering_func=centroid_com,
+    ...                            progress_bar=False)
+
+With this builder the x offset is 0.071 pixels and the y offset is
+-0.001 pixels. The scatter of the positions and of the fitted fluxes is
+essentially unchanged.
+
+With real data the true positions are not known, but the difference
+between the two definitions can be measured from the ePSF itself. The
+``center_asymmetry`` attribute of the results is the ``(x, y)`` offset
+of the center of mass of the built ePSF from its symmetry center, in
+detector pixels. It does not depend on which of the two definitions was
+used to build the ePSF::
+
+    >>> print(np.round(result.center_asymmetry, 3))  # doctest: +SKIP
+    [ 0.055 -0.004]
+
+The x value of 0.055 pixels agrees with the difference between the
+two offsets from the input positions given above, 0.071 pixels for the
+center of mass and 0.017 pixels for the symmetry center. It is not the
+offset from the input positions, which cannot be measured with real
+data. It is zero for a symmetric ePSF. A value that is not small compared with the
+astrometric accuracy that is needed means that the measured positions
+depend on the definition of the ePSF center by that amount.
+
+To compare the two ePSFs, we evaluate the input ePSF on the grid of the
+built ePSF, shifted by that offset, and normalize it in the same way::
+
+    >>> n = epsf.data.shape[0]
+    >>> offsets = (np.arange(n) - n // 2) / 4
+    >>> xx, yy = np.meshgrid(offsets, offsets)
+    >>> truth = true_epsf.evaluate(xx, yy, 1.0, -np.median(dx),
+    ...                            -np.median(dy))
+    >>> truth *= 16 / truth.sum()
+    >>> residual = (epsf.data - truth) / truth.max()
+    >>> print(f'{epsf.data.max() / truth.max():.3f}')  # doctest: +SKIP
+    0.994
+    >>> print(f'{np.abs(residual).max():.3f}')  # doctest: +SKIP
+    0.006
+    >>> bool(np.abs(residual).max() < 0.01)
+    True
+
+The peak of the built ePSF is 0.6% lower than the peak of the input
+ePSF, and the largest difference between the two is 0.6% of the peak.
+For the ePSF built with `~photutils.centroids.centroid_com`, the largest
+difference is also 0.6% of the peak. Let's show the input ePSF, the built
+ePSF, and their difference as a fraction of the peak:
+
+.. doctest-skip::
+
+    >>> fig, ax = plt.subplots(ncols=3, figsize=(15, 4.5))
+    >>> norm = simple_norm(truth, 'log', percent=99.0)
+    >>> ax[0].imshow(truth, norm=norm, origin='lower')
+    >>> ax[0].set_title('Input ePSF')
+    >>> ax[1].imshow(epsf.data, norm=norm, origin='lower')
+    >>> ax[1].set_title('Built ePSF')
+    >>> axim = ax[2].imshow(residual, vmin=-0.005, vmax=0.005, cmap='RdBu_r',
+    ...                     origin='lower')
+    >>> ax[2].set_title('(Built - Input) / peak')
+    >>> cax = ax[2].inset_axes([1.04, 0.0, 0.05, 1.0])
+    >>> fig.colorbar(axim, cax=cax)
+
+.. plot::
+    :context: close-figs
+
+    xy_fit = fitted_stars.center_flat
+    x_true = np.array(params['x_0'])
+    y_true = np.array(params['y_0'])
+    dist = np.hypot(xy_fit[:, :1] - x_true, xy_fit[:, 1:] - y_true)
+    idx = np.argmin(dist, axis=1)
+    dx = xy_fit[:, 0] - x_true[idx]
+    dy = xy_fit[:, 1] - y_true[idx]
+
+    n = epsf.data.shape[0]
+    offsets = (np.arange(n) - n // 2) / 4
+    xx, yy = np.meshgrid(offsets, offsets)
+    truth = true_epsf.evaluate(xx, yy, 1.0, -np.median(dx), -np.median(dy))
+    truth *= 16 / truth.sum()
+    residual = (epsf.data - truth) / truth.max()
+
+    fig, ax = plt.subplots(ncols=3, figsize=(15, 4.5))
+    norm = simple_norm(truth, 'log', percent=99.0)
+    ax[0].imshow(truth, norm=norm, origin='lower')
+    ax[0].set_title('Input ePSF')
+    ax[1].imshow(epsf.data, norm=norm, origin='lower')
+    ax[1].set_title('Built ePSF')
+    axim = ax[2].imshow(residual, vmin=-0.005, vmax=0.005, cmap='RdBu_r',
+                        origin='lower')
+    ax[2].set_title('(Built - Input) / peak')
+    cax = ax[2].inset_axes([1.04, 0.0, 0.05, 1.0])
+    fig.colorbar(axim, cax=cax)
+
+With real data the true ePSF is not known. The checks that remain are
+the residuals of the stars after the fitted ePSF is subtracted, the
+distribution of the subpixel phases of the fitted centers, which should
+be uniform, and the absence of any trend of the fitted fluxes and
+positions with subpixel phase (see :ref:`epsf-guidelines`).
+
+.. _epsf-example-input:
+
+The Input ePSF
+^^^^^^^^^^^^^^
+
+The input ePSF of this example was made with version 2.2.0 of the `stpsf
+<https://stpsf.readthedocs.io/>`_ package (with version 2.2.0 of its
+data files) for the center of the NIRCam NRCA1 detector::
+
+    import stpsf
+    from photutils.psf import make_epsf_from_psf
+
+    nrc = stpsf.NIRCam()
+    nrc.filter = 'F115W'
+    nrc.detector = 'NRCA1'
+    hdulist = nrc.calc_psf(fov_pixels=27, oversample=4)
+    psf_data = hdulist['OVERDIST'].data
+
+    input_epsf = make_epsf_from_psf(psf_data, oversampling=4,
+                                    midpoints=True)
+    input_epsf = input_epsf[3:-3, 3:-3]
+    input_epsf *= 16.0 / input_epsf.sum()
+
+The ``OVERDIST`` extension is the PSF sampled at the points of
+a grid that is 4 times finer than the detector pixels, with the
+geometric distortion and the detector effects (charge diffusion and
+interpixel capacitance) applied. That is not yet an ePSF. An ePSF
+value is the flux in a whole detector pixel, so the second step
+integrates the sampled PSF over the area of a detector pixel with
+`~photutils.psf.make_epsf_from_psf`. The ``stpsf`` image has 108x108
+points with the PSF centered between its four central points. The
+``midpoints=True`` option makes the ePSF at the points midway between
+them, which gives a 107x107 ePSF with a grid point at the PSF center.
+
+The third step keeps the central 101x101 points, which cover 25x25
+detector pixels. The PSF was computed over 27x27 pixels so that every
+pixel of the kept region lies inside the ``stpsf`` image. The values
+that `~photutils.psf.make_epsf_from_psf` returns within half a pixel of
+the edges of its input image are integrals over only part of a pixel,
+and they are outside of the kept region. The ePSF is then normalized to
+a sum of 16 (the square of the oversampling factor), so that the flux
+of the model is the flux within the 25x25 pixel region. The result was
+saved as a 32-bit floating-point FITS image.
 
 
 Customizing the ePSF Builder
@@ -483,7 +652,7 @@ array, or set it to `None` for no smoothing::
 
     >>> epsf_builder = EPSFBuilder(oversampling=4,
     ...                            smoothing_kernel='quadratic',
-    ...                            progress_bar=False)  # doctest: +REMOTE_DATA
+    ...                            progress_bar=False)
 
 The fixed kernels are applied on the oversampled grid, so their physical
 width is ``5 / oversampling`` detector pixels. The 5x5 quartic kernel
@@ -499,12 +668,12 @@ ePSF is faint and varies slowly, so its noise can be averaged over a
 larger area than in the core. After the last iteration, each value of
 the ePSF beyond 3.5 FWHM from the center is blended into a least-squares
 quadratic fit to the values in a box 1.25 FWHM wide around it, and
-beyond 5 FWHM into the fit in a box 1.75 FWHM wide. The ePSF within
-3.5 FWHM of the center changes only by the renormalization of the
-smoothed ePSF (less than 0.03 percent in tests). The fluxes of the
-returned stars were fit before that renormalization. This lowers the
-noise of the wings, which matters when they are used, e.g., to subtract
-bright stars, to make model images, or to measure encircled energies.
+beyond 5 FWHM into the fit in a box 1.75 FWHM wide. The ePSF within 3.5
+FWHM of the center changes only by the renormalization of the smoothed
+ePSF (less than 0.03 percent in tests). The fluxes of the returned stars
+were fit before that renormalization. This lowers the noise of the
+wings, which matters when they are used, e.g., to subtract bright stars,
+to make model images, or to measure encircled energies.
 
 The smoothing also removes real structure in the wings that is finer
 than about two FWHM, such as diffraction rings and spikes. Applied to
@@ -539,7 +708,7 @@ iterations, or ``show_smoothed=False`` to never plot it.
 Set ``wing_smoothing=False`` to keep the wings as built::
 
     >>> epsf_builder = EPSFBuilder(oversampling=4, wing_smoothing=False,
-    ...                            progress_bar=False)  # doctest: +REMOTE_DATA
+    ...                            progress_bar=False)
 
 .. _epsf-alias-passband:
 
@@ -614,7 +783,7 @@ cutoff frequency is well above one cycle per pixel::
 
     >>> epsf_builder = EPSFBuilder(oversampling=4, alias_passband=0.85,
     ...                            maxiters=20,
-    ...                            progress_bar=False)  # doctest: +REMOTE_DATA
+    ...                            progress_bar=False)
 
 Try 0.9 only if that ePSF is still too broad, i.e., if the stars have
 positive residuals at their centers after the fitted ePSF is subtracted.
@@ -712,7 +881,7 @@ they do not, set ``constrain_fluxes=False``::
 
     >>> epsf_builder = EPSFBuilder(oversampling=4,
     ...                            constrain_fluxes=False,
-    ...                            progress_bar=False)  # doctest: +REMOTE_DATA
+    ...                            progress_bar=False)
 
 To link stars across images, provide a single catalog with sky
 coordinates and multiple `~astropy.nddata.NDData` objects, each with a
@@ -746,16 +915,16 @@ pixels::
 
     >>> epsf_builder = EPSFBuilder(oversampling=4,
     ...                            fit_shape=7,
-    ...                            progress_bar=False)  # doctest: +REMOTE_DATA
+    ...                            progress_bar=False)
 
 You can also customize the fitter itself by passing a
 `~astropy.modeling.fitting.Fitter` instance::
 
     >>> from astropy.modeling.fitting import LMLSQFitter
-    >>> fitter = LMLSQFitter()  # doctest: +REMOTE_DATA
+    >>> fitter = LMLSQFitter()
     >>> epsf_builder = EPSFBuilder(oversampling=4,
     ...                            fitter=fitter, fit_shape=7,
-    ...                            progress_bar=False)  # doctest: +REMOTE_DATA
+    ...                            progress_bar=False)
 
 Sigma Clipping
 ^^^^^^^^^^^^^^
@@ -766,10 +935,10 @@ clipping with ``sigma=3.0`` and ``maxiters=10``. You can provide your
 own `~astropy.stats.SigmaClip` instance to customize this behavior::
 
     >>> from astropy.stats import SigmaClip
-    >>> sigclip = SigmaClip(sigma=2.5, maxiters=5)  # doctest: +REMOTE_DATA
+    >>> sigclip = SigmaClip(sigma=2.5, maxiters=5)
     >>> epsf_builder = EPSFBuilder(oversampling=4,
     ...                            sigma_clip=sigclip,
-    ...                            progress_bar=False)  # doctest: +REMOTE_DATA
+    ...                            progress_bar=False)
 
 Setting ``sigma_clip=None`` disables sigma clipping entirely.
 
@@ -789,9 +958,9 @@ any of the `~astropy.nddata.NDUncertainty` subclasses (e.g.,
 `~astropy.nddata.StdDevUncertainty`)::
 
     >>> import numpy as np
-    >>> from astropy.nddata import NDData, StdDevUncertainty
-    >>> uncertainty = StdDevUncertainty(np.sqrt(np.abs(data)))  # doctest: +REMOTE_DATA, +SKIP
-    >>> nddata = NDData(data=data, uncertainty=uncertainty)  # doctest: +REMOTE_DATA, +SKIP
+    >>> from astropy.nddata import StdDevUncertainty
+    >>> uncertainty = StdDevUncertainty(np.sqrt(np.abs(data)))  # doctest: +SKIP
+    >>> nddata = NDData(data=data, uncertainty=uncertainty)  # doctest: +SKIP
 
 
 
@@ -1092,10 +1261,11 @@ the default before version 3.1, is more sensitive to asymmetric
 structure around the core. In tests with simulated JWST and Roman
 PSFs it was offset from the position of the source in the optical
 model by up to 0.1 pixel, compared with 0.05 pixel or less for the
-symmetry center. The ``center_asymmetry`` attribute of the results
-gives the difference between the two centers for any built ePSF. The
-recentering function and box can be changed with ``recentering_func``
-and ``recentering_boxsize``.
+symmetry center. For the asymmetric ePSF of the example above, the
+two centers differ by 0.05 pixels (see :ref:`epsf-example-comparison`).
+The ``center_asymmetry`` attribute of the results gives this
+difference for any built ePSF. The recentering function and box can
+be changed with ``recentering_func`` and ``recentering_boxsize``.
 
 **Normalization and background.** These two conventions set the flux
 scale and must be kept in mind when ePSFs from the two sources are
