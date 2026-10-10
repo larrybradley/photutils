@@ -26,10 +26,12 @@ def centroid_1dg(data, error=None, mask=None):
     marginal ``x`` and ``y`` distributions of the array.
 
     Non-finite values (e.g., NaN or inf) in the ``data`` or ``error``
-    arrays are automatically masked. The final mask is a logical OR
-    combination of the input ``mask``, the automatically generated mask
-    for non-finite values, and the mask of the input ``data`` if it is a
-    `~numpy.ma.MaskedArray`.
+    arrays are automatically masked. An
+    `~astropy.utils.exceptions.AstropyUserWarning` is emitted if any
+    non-finite ``data`` value is not already masked. The final mask is
+    a logical OR combination of the input ``mask``, the automatically
+    generated mask for non-finite values, and the mask of the input
+    ``data`` if it is a `~numpy.ma.MaskedArray`.
 
     Masked pixels are excluded by substituting zero into the
     marginal sums, and the fit weights are zeroed only for
@@ -40,15 +42,21 @@ def centroid_1dg(data, error=None, mask=None):
     masked pixels from the fit, when isolated masked or non-finite
     pixels fall near the source peak.
 
+    A `ValueError` is raised if either marginal distribution sums to
+    zero or is constant (e.g., if all of the data are masked). The
+    fitter emits an `~astropy.utils.exceptions.AstropyUserWarning` if a
+    fit did not converge.
+
     Parameters
     ----------
     data : 2D array_like
-        The 2D image data. ``data`` can be a `~numpy.ma.MaskedArray`.
-        The image should be a background-subtracted cutout image
-        containing a single source.
+        The 2D image data. ``data`` can be a `~numpy.ma.MaskedArray`
+        or a `~astropy.units.Quantity`. The image should be a
+        background-subtracted cutout image containing a single source.
 
-    error : 2D `~numpy.ndarray`, optional
-        The 2D array of the 1-sigma errors of the input ``data``.
+    error : 2D array_like, optional
+        The 2D array of the 1-sigma errors of the input ``data``. If
+        ``data`` has units, ``error`` must have the same units.
 
     mask : 2D bool `~numpy.ndarray`, optional
         A boolean mask, with the same shape as ``data``, where a `True`
@@ -59,7 +67,7 @@ def centroid_1dg(data, error=None, mask=None):
     Returns
     -------
     centroid : `~numpy.ndarray`
-        The ``x, y`` coordinates of the centroid.
+        The ``(x, y)`` coordinates of the centroid.
 
     Examples
     --------
@@ -136,21 +144,31 @@ def centroid_2dg(data, error=None, mask=None):
     array.
 
     Non-finite values (e.g., NaN or inf) in the ``data`` or ``error``
-    arrays are automatically masked. The final mask is a logical OR
-    combination of the input ``mask``, the automatically generated mask
-    for non-finite values, and the mask of the input ``data`` if it is a
-    `~numpy.ma.MaskedArray`. The centroid is calculated using only the
-    unmasked data values.
+    arrays are automatically masked. An
+    `~astropy.utils.exceptions.AstropyUserWarning` is emitted if any
+    non-finite ``data`` value is not already masked. The final mask is
+    a logical OR combination of the input ``mask``, the automatically
+    generated mask for non-finite values, and the mask of the input
+    ``data`` if it is a `~numpy.ma.MaskedArray`. The centroid is
+    calculated using only the unmasked data values.
+
+    A `ValueError` is raised if there are fewer than 6 unmasked values
+    or if the data are constant. An
+    `~astropy.utils.exceptions.AstropyUserWarning` is emitted if the
+    fit did not converge.
 
     Parameters
     ----------
     data : 2D array_like
-        The 2D image data. ``data`` can be a `~numpy.ma.MaskedArray`.
-        The image should be a background-subtracted cutout image
-        containing a single source.
+        The 2D image data. ``data`` can be a `~numpy.ma.MaskedArray`
+        or a `~astropy.units.Quantity`. The image should be a
+        background-subtracted cutout image containing a single source.
 
-    error : 2D `~numpy.ndarray`, optional
-        The 2D array of the 1-sigma errors of the input ``data``.
+    error : 2D array_like, optional
+        The 2D array of the 1-sigma errors of the input ``data``. If
+        ``data`` has units, ``error`` must have the same units.
+        The values should be positive. A zero or negative value gives
+        that pixel a very large weight in the fit.
 
     mask : 2D bool `~numpy.ndarray`, optional
         A boolean mask, with the same shape as ``data``, where a `True`
@@ -161,7 +179,7 @@ def centroid_2dg(data, error=None, mask=None):
     Returns
     -------
     centroid : `~numpy.ndarray`
-        The ``x, y`` coordinates of the centroid.
+        The ``(x, y)`` coordinates of the centroid.
 
     Examples
     --------
