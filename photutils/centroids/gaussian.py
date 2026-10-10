@@ -3,12 +3,9 @@
 Tools for centroiding sources using Gaussians.
 """
 
-import warnings
-
 import numpy as np
 from astropy.modeling.fitting import TRFLSQFitter
 from astropy.modeling.models import Gaussian1D, Gaussian2D
-from astropy.utils.exceptions import AstropyUserWarning
 
 from photutils.centroids._utils import (_gaussian1d_moments,
                                         _gaussian2d_moments,
@@ -153,9 +150,9 @@ def centroid_2dg(data, error=None, mask=None):
     calculated using only the unmasked data values.
 
     A `ValueError` is raised if there are fewer than 6 unmasked values
-    or if the data are constant. An
-    `~astropy.utils.exceptions.AstropyUserWarning` is emitted if the
-    fit did not converge.
+    or if the data are constant. The fitter emits an
+    `~astropy.utils.exceptions.AstropyUserWarning` if the fit did not
+    converge.
 
     Parameters
     ----------
@@ -248,16 +245,7 @@ def centroid_2dg(data, error=None, mask=None):
 
     y, x = np.indices(data.shape)
 
+    # The fitter emits an AstropyUserWarning if the fit did not converge
     gfit = fitter(g_init, x, y, data, weights=weights)
-
-    # TRFLSQFitter stores the scipy least_squares result object in
-    # fit_info. Success is False when the optimizer terminated without
-    # satisfying a convergence criterion (e.g., the maximum number of
-    # function evaluations was exceeded). Inspecting fit_info instead
-    # of capturing warnings avoids mutating the process-global warnings
-    # state, which is not thread-safe.
-    if not fitter.fit_info.success:
-        msg = 'The fit may not have converged. Please check your results.'
-        warnings.warn(msg, AstropyUserWarning)
 
     return np.array([gfit.x_mean.value, gfit.y_mean.value])
