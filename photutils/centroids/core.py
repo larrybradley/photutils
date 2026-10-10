@@ -155,10 +155,15 @@ def centroid_symmetry(data, *, mask=None, radius=None):
         within ``radius`` of the center. The data are interpolated
         between the pixels, so a masked value is first replaced by a
         weighted mean of the unmasked values around it, which is only an
-        estimate. In tests with a noiseless Gaussian source and a single
-        masked pixel adjacent to its peak pixel, the result changed by
-        up to 0.002 pixels for a standard deviation of 2 pixels, 0.03
-        pixels for 1.2 pixels, and 0.2 pixels for 0.9 pixels.
+        estimate. In tests with a noiseless Gaussian source in a 21x21
+        array, the default ``radius``, and a single masked pixel
+        adjacent to its peak pixel, the result changed by up to 0.002
+        pixels for a standard deviation of 2 pixels, 0.03 pixels for
+        1.2 pixels, and 0.1 pixels for 0.9 pixels. The change is larger
+        for a smaller ``radius``. It was up to 0.01 pixels for a radius
+        of 3 pixels and a standard deviation of 2 pixels, and up to 0.2
+        pixels for a radius of 1.5 pixels at any of these standard
+        deviations.
 
         The search starts at the maximum value of the data. A bright
         outlier such as a hot pixel or a cosmic ray near the source
