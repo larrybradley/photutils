@@ -32,7 +32,7 @@ def centroid_1dg(data, error=None, mask=None):
 
     Masked pixels are excluded by substituting zero into the
     marginal sums, and the fit weights are zeroed only for
-    fully-masked rows or columns. A partially-masked row or column
+    fully masked rows or columns. A partially masked row or column
     near the source peak therefore distorts the corresponding
     marginal distribution and can bias the centroid. Consider using
     `~photutils.centroids.centroid_2dg`, which excludes individual
