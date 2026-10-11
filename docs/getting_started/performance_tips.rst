@@ -29,16 +29,16 @@ is currently limited to input arrays with ``float64`` data types and
     to NumPy for other dtypes.
 
 Bottleneck acceleration is used internally by the following Photutils
-packages:
+subpackages:
 
 * `~photutils.background`: background and background RMS estimation
-  (e.g., `~photutils.background.Background2D`)
+  (e.g., `~photutils.background.MedianBackground`)
 * `~photutils.detection`: source detection peak finding
-* `~photutils.profiles`: radial-profile and curve-of-growth
-  calculations
+* `~photutils.profiles`: profile normalization
 * `~photutils.psf`: ePSF building
   (e.g., `~photutils.psf.EPSFBuilder`)
-* `~photutils.segmentation`: source detection and deblending
+* `~photutils.segmentation`: detection threshold estimation
+  (e.g., `~photutils.segmentation.detect_threshold`)
 
 To install Bottleneck::
 
@@ -60,7 +60,7 @@ You can convert a big-endian FITS array to native byte order *in place*,
 without allocating additional memory, using::
 
     >>> data.byteswap(inplace=True)  # doctest: +SKIP
-    >>> data.dtype = data.dtype.newbyteorder('=')  # doctest: +SKIP
+    >>> data = data.view(data.dtype.newbyteorder('='))  # doctest: +SKIP
 
 Alternatively, you can create a native-endian copy with::
 
@@ -68,3 +68,28 @@ Alternatively, you can create a native-endian copy with::
 
 The first approach is preferred for large arrays because it avoids
 allocating a temporary copy of the entire array.
+
+
+.. _multithreading-performance:
+
+Multithreading
+==============
+
+Several classes and functions accept an ``n_threads`` keyword to
+perform their calculations using multiple threads:
+
+* `~photutils.aperture.AperturePhotometry` and
+  `~photutils.aperture.ApertureStats`
+* `~photutils.background.Background2D` and
+  `~photutils.background.LocalBackground`
+* `~photutils.segmentation.SourceCatalog`,
+  `~photutils.segmentation.SourceFinder`, and
+  :func:`~photutils.segmentation.deblend_sources`
+* `~photutils.psf.PSFPhotometry` and
+  `~photutils.psf.IterativePSFPhotometry`
+
+The default is ``n_threads=1``. The compiled code used by the aperture,
+background, and segmentation tools releases the Python global
+interpreter lock (GIL), so their threads run in parallel on any Python
+build. The PSF photometry threads run in parallel only on a
+free-threaded Python build.

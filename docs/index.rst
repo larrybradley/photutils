@@ -26,7 +26,7 @@ Photutils
 | **Date**: |today|
 | **Useful links**: :doc:`getting_started/install` | :doc:`release_notes/index`
 
-**Photutils** is a Python library that provides commonly-used tools
+**Photutils** is a Python library that provides commonly used tools
 and key functionality for detecting and performing photometry of
 astronomical sources. Tools are provided for background estimation,
 star finding, source detection and extraction, aperture photometry,

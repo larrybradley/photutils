@@ -21,11 +21,12 @@ Photutils also optionally depends on other packages for some features:
   variety of plotting features (e.g., plotting apertures).
 
 * `Regions <https://astropy-regions.readthedocs.io/>`_ 0.10 or
-  later: Required to perform aperture photometry using region objects.
+  later: Required to perform aperture photometry using region objects
+  and to convert source segments into region objects.
 
 * `GWCS <https://gwcs.readthedocs.io/en/stable/>`_ 0.22 or later:
   Required in `~photutils.datasets.make_gwcs` to create a simple celestial
-  gwcs object.
+  GWCS object.
 
 * `asdf <https://asdf.readthedocs.io/>`_ 3.3 or later: Required to
   serialize apertures and PSF models to the `Advanced Scientific Data
@@ -52,7 +53,7 @@ Photutils also optionally depends on other packages for some features:
   later: Required to convert source segments into polygon objects.
 
 
-Installing the latest released version
+Installing the Latest Released Version
 ======================================
 
 Using pip
@@ -81,7 +82,7 @@ Using conda
 Photutils can also be installed using the ``conda`` package manager.
 There are several methods for installing ``conda`` and many different
 ways to set up your Python environment, but that is beyond the
-scope of this documentation. We recommend installing `miniforge
+scope of this documentation. We recommend installing `Miniforge
 <https://github.com/conda-forge/miniforge>`__.
 
 Once you have installed ``conda``, you can install Photutils using the
@@ -99,7 +100,7 @@ Prerequisites
 -------------
 
 You will need a compiler suite and the development headers for Python
-and Numpy in order to build Photutils from the source distribution. You
+and NumPy in order to build Photutils from the source distribution. You
 do not need to install any other specific build dependencies (such as
 Cython) since these will be automatically installed into a temporary
 build environment by `pip`_.
@@ -107,18 +108,18 @@ build environment by `pip`_.
 On Linux, using the package manager for your distribution will usually be
 the easiest route.
 
-On macOS you will need the `XCode`_ command-line tools, which can be
+On macOS you will need the `Xcode`_ command-line tools, which can be
 installed using::
 
     xcode-select --install
 
-Note that you do not need to install the full `XCode`_ distribution.
+Note that you do not need to install the full `Xcode`_ distribution.
 
 
-Installing the development version
+Installing the Development Version
 ----------------------------------
 
-Photutils is being developed on `GitHub`_.  The latest development
+Photutils is being developed on `GitHub`_. The latest development
 version of the Photutils source code can be retrieved using git::
 
     git clone https://github.com/astropy/photutils.git
@@ -135,7 +136,7 @@ development wheel (with all optional dependencies)::
     python -m pip install --upgrade --extra-index-url https://pypi.anaconda.org/astropy/simple "photutils[all]" --pre
 
 
-Testing an installed Photutils
+Testing an Installed Photutils
 ==============================
 
 To test your installed version of Photutils, you can run the test suite

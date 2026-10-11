@@ -9,8 +9,8 @@ This document outlines the steps for releasing Photutils to `PyPI
 admin-level access to the Photutils GitHub repository, as it relies on
 the ability to push directly to the ``main`` branch.
 
-These instructions assume the name of the git remote for the main
-repository is called ``upstream``.
+These instructions assume the git remote for the main repository is
+named ``upstream``.
 
 #. Check out the branch that you are going to release. This will usually
    be the ``main`` branch, unless you are making a release from a bugfix
@@ -35,20 +35,20 @@ repository is called ``upstream``.
         tox -e build_docs
         tox -e linkcheck
 
-#. Update the current "What's New" page (``docs/whats_new/<X.Y.Z>.rst``)
-   to make sure that all the changes are listed. Update the
-   ``docs/release_notes/index.rst`` file by changing the section header
-   from "Development Version" to "Current Version". Then commit the
+#. Update the current "What's New" page (``docs/whats_new/<X.Y>.rst``)
+   to make sure that all the changes are listed. Then commit the
    changes::
 
-        git add docs/whats_new/<X.Y.Z>.rst docs/release_notes/index.rst
+        git add docs/whats_new/<X.Y>.rst
         git commit -m"Finalizing what's new for version <X.Y.Z>"
 
 #. Update the ``CHANGES.rst`` file to make sure that all the changes are
    listed and update the release date from ``unreleased`` to the current
-   date in ``yyyy-mm-dd`` format. Then commit the changes::
+   date in ``yyyy-mm-dd`` format. Also update the ``version`` and
+   ``date-released`` fields in the ``CITATION.cff`` file. Then commit
+   the changes::
 
-        git add CHANGES.rst
+        git add CHANGES.rst CITATION.cff
         git commit -m'Finalizing changelog for version <X.Y.Z>'
 
 #. Create an annotated git tag (optionally signing with the ``-s``
@@ -66,7 +66,7 @@ repository is called ``upstream``.
 
         git push upstream <X.Y.Z>
 
-   The new tag will trigger the automated `Publish workflow
+   The new tag will trigger the automated `Wheel building workflow
    <https://github.com/astropy/photutils/actions/workflows/publish.yml>`_
    to build the source distribution and wheels and upload them to `PyPI
    <https://pypi.org/project/photutils/>`_.
@@ -88,29 +88,29 @@ repository is called ``upstream``.
 
 #. Open a new `GitHub Milestone
    <https://github.com/astropy/photutils/milestones>`_ for the next
-   release. If there are any open issues or pull requests for the new
+   release. If there are any open issues or pull requests for the newly
    released version, then move them to the next milestone. After there
    are no remaining open issues or pull requests for the released
-   version then close its GitHub Milestone.
+   version, close its GitHub Milestone.
 
 #. Go to `Read the Docs
    <https://app.readthedocs.org/projects/photutils/versions/>`_ and
-   check that the "stable" docs correspond to the new released version.
-   Hide any older released versions (i.e., check "Hidden").
+   check that the "stable" docs correspond to the newly released
+   version. Hide any older released versions (i.e., check "Hidden").
 
-#. Add a new "What's New" page (``docs/whats_new/<X.Y.Z>.rst``)
-   for the next release. Update the ``docs/release_notes/index.rst``
-   file by changing the section header from "Current Version" to
-   "Development Version" and adding the new "What's New" page for the
-   next release. Then commit the changes::
+#. Add a new "What's New" page (``docs/whats_new/<X.Y>.rst``) for
+   the next release. Update the ``docs/release_notes/index.rst`` file
+   by moving the page of the released version to the top of the "Past
+   Releases" list and adding the new "What's New" page under
+   "Development Version". Then commit the changes::
 
-        git add docs/whats_new/<X.Y.Z>.rst docs/release_notes/index.rst
+        git add docs/whats_new/<X.Y>.rst docs/release_notes/index.rst
         git commit -m"Add what's new for version <X.Y.Z>"
 
-#. Update ``CHANGES.rst``, adding new sections for the next ``x.y.z``
+#. Update ``CHANGES.rst``, adding new sections for the next ``X.Y.Z``
    version, e.g.,::
 
-       x.y.z (unreleased)
+       X.Y.Z (unreleased)
        ------------------
 
        General
@@ -128,7 +128,7 @@ repository is called ``upstream``.
    Then commit the changes and push to the upstream repo::
 
         git add CHANGES.rst
-        git commit -m'Add version <x.y.z> to the changelog'
+        git commit -m'Add version <X.Y.Z> to the changelog'
         git push upstream main
 
 #. After the release, the conda-forge bot (``regro-cf-autotick-bot``)

@@ -1,7 +1,8 @@
 .. _citation:
 
+****************
 Citing Photutils
-----------------
+****************
 
 If you use Photutils for a project that leads to a publication,
 whether directly or as a dependency of another package, please include
