@@ -9,13 +9,13 @@ from functools import cached_property
 
 import numpy as np
 from astropy.modeling import Fittable2DModel, Parameter
-from astropy.utils.exceptions import AstropyDeprecationWarning
 from scipy.interpolate import RectBivariateSpline
 
 from photutils.psf._bispline import bispline_sum, bispline_sum_deriv
 from photutils.psf._bispline_inputs import ONE_PLANE, UNIT_WEIGHT, ZERO_WEIGHT
 from photutils.psf.utils import _copy_model_sharing_data, _out_of_grid_mask
 from photutils.utils._parameters import as_pair
+from photutils.utils.exceptions import PhotutilsDeprecationWarning
 
 __all__ = ['ImagePSF']
 
@@ -219,7 +219,7 @@ class ImagePSF(Fittable2DModel):
             msg = ('Overriding the ImagePSF.interpolator attribute in a '
                    'subclass is deprecated since version 3.1 and will be '
                    'removed in version 4.0.')
-            warnings.warn(msg, AstropyDeprecationWarning, stacklevel=2)
+            warnings.warn(msg, PhotutilsDeprecationWarning, stacklevel=2)
 
         super().__init__(flux, x_0, y_0, **kwargs)
 
@@ -228,7 +228,7 @@ class ImagePSF(Fittable2DModel):
             msg = ('Assigning a custom interpolator to the '
                    'ImagePSF.interpolator attribute is deprecated since '
                    'version 3.1 and will be removed in version 4.0.')
-            warnings.warn(msg, AstropyDeprecationWarning, stacklevel=2)
+            warnings.warn(msg, PhotutilsDeprecationWarning, stacklevel=2)
             # The model calls an assigned interpolator instead of
             # evaluating the spline of the image data with the kernel.
             self.__dict__['_interpolator_assigned'] = True

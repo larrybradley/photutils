@@ -12,12 +12,12 @@ import numpy as np
 import pytest
 from astropy.modeling.fitting import TRFLSQFitter
 from astropy.table import QTable
-from astropy.utils.exceptions import AstropyDeprecationWarning
 from numpy.testing import assert_allclose, assert_equal
 from scipy.interpolate import RectBivariateSpline
 
 from photutils.datasets import make_model_image
 from photutils.psf import CircularGaussianPSF, ImagePSF
+from photutils.utils.exceptions import PhotutilsDeprecationWarning
 
 
 @pytest.fixture(name='gaussian_psf')
@@ -477,7 +477,7 @@ class TestImagePSF:
 
         model = ImagePSF(data, origin=(12.0, 12.0))
         match = 'Overriding the ImagePSF.interpolator attribute'
-        with pytest.warns(AstropyDeprecationWarning, match=match):
+        with pytest.warns(PhotutilsDeprecationWarning, match=match):
             custom = CustomImagePSF(data, origin=(12.0, 12.0))
 
         x = np.linspace(-9.0, 9.0, 50)
@@ -524,7 +524,7 @@ class TestImagePSF:
         spline = RectBivariateSpline(idx, idx, 3.0 * data.T, kx=degree,
                                      ky=degree, s=0)
         match = 'Assigning a custom interpolator'
-        with pytest.warns(AstropyDeprecationWarning, match=match):
+        with pytest.warns(PhotutilsDeprecationWarning, match=match):
             model.interpolator = spline
         xi = x - 0.5 + 12.0
         yi = y + 0.25 + 12.0
