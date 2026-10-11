@@ -39,7 +39,7 @@ the major axis direction evaluated at a semimajor axis length of
 
 
 2. Why use "ellipticity" instead of the canonical ellipse eccentricity?
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The main reason is that ellipticity, defined as
 
@@ -47,8 +47,8 @@ The main reason is that ellipticity, defined as
 
     \epsilon =  1  -  \frac{b}{a}
 
-better relates with the visual "flattening" of an ellipse.  By looking
-at a flattened circle it is easy to guess its ellipticity, as say 0.1.
+better relates with the visual "flattening" of an ellipse. By looking
+at a flattened circle it is easy to guess its ellipticity as, say, 0.1.
 The same ellipse has an eccentricity of 0.44, which is not obvious
 from visual inspection. The quantities relate as
 
@@ -64,8 +64,8 @@ The radial intensity gradient is the most critical quantity computed
 by the fitting algorithm. As can be seen from the above formulae,
 small :math:`I'` values lead to large values for the correction terms.
 Thus, :math:`I'` errors may lead to large fluctuations in these terms,
-when :math:`I'` itself is small.  This usually happens at the fainter,
-outer regions of galaxy images.  `Busko (1996, ASPC 101, 139)
+when :math:`I'` itself is small. This usually happens at the fainter,
+outer regions of galaxy images. `Busko (1996, ASPC 101, 139)
 <https://ui.adsabs.harvard.edu/abs/1996ASPC..101..139B/abstract>`_
 found by numerical experiments that the precision to which a given
 ellipse can be fitted is related to the relative error in the local
@@ -75,27 +75,27 @@ Because of the gradient's critical role, the algorithm has a number of
 features to allow its estimation even under difficult conditions. The
 default gradient computation, the one used by the algorithm when it
 first starts to fit a new isophote, is based on the extraction of two
-intensity samples:  #1 at the current ellipse position, and #2 at a
+intensity samples: #1 at the current ellipse position, and #2 at a
 similar ellipse with a 10% larger semimajor axis.
 
 If the gradient so estimated is not meaningful, the algorithm extracts
 another #2 sample, this time using a 20% larger radius. In this
 context, a meaningful gradient means "shallower", but still close to
-within a factor 3 from the previous isophote's gradient estimate.
+within a factor of 3 of the previous isophote's gradient estimate.
 
 If still no meaningful gradient can be measured, the algorithm uses
 the value measured at the last fitted isophote, but decreased (in
-absolute value) by a factor 0.8. This factor is roughly what is
+absolute value) by a factor of 0.8. This factor is roughly what is
 expected from semimajor-axis geometrical-sampling steps of 10 - 20%
-and a deVaucouleurs law or an exponential disk in its inner region (r
-<~ 5 req). When using the last isophote's gradient as estimator for
+and a de Vaucouleurs law or an exponential disk in its inner region (r
+<~ 5 req). When using the last isophote's gradient as an estimator for
 the current one, the current gradient error cannot be computed and is
 set to `None`.
 
 As a last resort, if no previous gradient estimate is available, the
-algorithm just guesses the current value by setting it to be (minus)
-10% of the mean intensity at sample #1. This case usually happens only
-at the first isophote fitted by the algorithm.
+algorithm uses the current gradient plus its error as the reference
+value. This case usually happens only at the first isophote fitted by
+the algorithm.
 
 The use of approximate gradient estimators may seem in contradiction
 with the fact that isophote fitting errors depend on gradient error,
@@ -106,14 +106,14 @@ used only to compute increments, not the ellipse parameters
 themselves. Approximate estimators are useful along the first steps in
 the iteration sequence, in particular when local image contamination
 (stars, defects, etc.) might make it difficult to find the correct
-path towards the solution. However, if the gradient is still not well
+path toward the solution. However, if the gradient is still not well
 determined at convergence, the subsequent error computations, and the
 algorithm's behavior from that point on, will take the fact into
 account properly. For instance, the 3rd and 4th harmonic amplitude
 errors depend on the gradient relative error, and if this is not
-computable at the current isophote, the algorithm uses a reasonable
-estimate (80% of the value at the last successful isophote) in order
-to generate sensible estimates for those harmonic errors.
+computable at the current isophote, the algorithm uses a fixed
+relative gradient error of 0.8 in order to generate sensible estimates
+for those harmonic errors.
 
 
 4. How are the errors estimated?
@@ -147,7 +147,7 @@ the algorithm described in `Jedrzejewski (1987, MNRAS 226, 747)
 uses an elaborate, high-precision scheme to take into account partial
 pixels that lie along elliptical sector boundaries. In the current
 implementation of the `~photutils.isophote.Ellipse` algorithm, this
-method was not implemented.  Instead, pixels at sector boundaries are
+method was not implemented. Instead, pixels at sector boundaries are
 either fully included or discarded, depending on the precise position
 of their centers in relation to the elliptical geometric locus
 corresponding to the current ellipse. This design decision is based on
@@ -156,7 +156,7 @@ median computation, and (ii) speed.
 
 Even when the chosen integration mode is not bilinear, the sampling
 algorithm resorts to it in case the number of sampled pixels inside
-any given sector is less than 5. It was found that bilinear mode gives
+any given sector is 6 or fewer. It was found that bilinear mode gives
 smoother samples in those cases.
 
 Tests performed with artificial images showed that cosmic rays and
@@ -171,7 +171,7 @@ The integrated fluxes and areas computed by
 `~photutils.isophote.Ellipse` were checked against results produced by
 the IRAF ``noao.digiphot.apphot`` tasks ``phot`` and ``polyphot``,
 using artificial images. Quantities computed by
-`~photutils.isophote.Ellipse` match the reference ones within < 0.1%
+`~photutils.isophote.Ellipse` match the reference ones to within 0.1%
 in all tested cases.
 
 
@@ -182,9 +182,10 @@ The `~photutils.isophote.EllipseGeometry` class has a
 :meth:`~photutils.isophote.EllipseGeometry.find_center` method that
 runs an "object locator" around the input object coordinates.
 
-This routine performs a scan over a 10x10 pixel window centered on the
+This routine performs a scan over an 11x11 pixel window centered on the
 input object coordinates. At each scan position, it extracts two
-concentric, roughly circular samples with radii 4 and 8 pixels. It
+concentric, roughly circular samples, an inner disk with a radius of
+about 3.5 pixels and an outer ring with a radius of about 8 pixels. It
 then computes a signal-to-noise-like criterion using the intensity
 averages and standard deviations at each annulus:
 

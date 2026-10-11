@@ -27,7 +27,7 @@ fit PSF models from the image.
 residual image after the fit sources are subtracted. The iterative
 process can be useful for crowded fields where sources are blended. A
 ``mode`` keyword is provided to control the behavior of the iterative
-process, where either all sources or only the newly-detected sources are
+process, where either all sources or only the newly detected sources are
 fit in subsequent iterations. The process repeats until no additional
 sources are detected or a maximum number of iterations has been
 reached. When used with the `~photutils.detection.DAOStarFinder`,
@@ -46,7 +46,7 @@ subpackage, e.g., `~photutils.detection.DAOStarFinder`,
 
 After finding sources, one can optionally apply a clustering algorithm
 to group overlapping sources using the ``grouper`` keyword. Usually,
-groups are formed by a distance criterion, which is the case of the
+groups are formed by a distance criterion, which is the case for the
 grouping algorithm proposed by Stetson. Sources that are grouped are
 fit simultaneously. The reason behind the construction of groups and
 not fitting all sources simultaneously is illustrated as follows:
@@ -353,15 +353,16 @@ The values of the oversampled PSF model sum to the square of the
 oversampling factor, apart from the flux outside of the grid, which is
 the normalization that `~photutils.psf.ImagePSF` requires. Discretizing
 the model on the detector pixel grid with
-:func:`~astropy.convolution.discretize_model` also gives a
+:func:`~astropy.convolution.discretize_model` (with
+``mode='oversample'`` or ``mode='integrate'``) also gives a
 pixel-integrated image, but only for one subpixel position of the
 source. A model made from that image is not accurate at other
 positions unless the PSF is well sampled.
 
-Note that the non-circular Gaussian and Moffat models above have
-additional parameters beyond the standard PSF model parameters of
-position and flux (``x_0``, ``y_0``, and ``flux``), which are fixed by
-default as described above.
+Note that all of the analytic models above have additional shape
+parameters beyond the standard PSF model parameters of position and
+flux (``x_0``, ``y_0``, and ``flux``), which are fixed by default as
+described above.
 
 .. _psf-custom-models:
 
@@ -570,7 +571,7 @@ Let's plot the image:
     fig.colorbar(axim)
 
 
-Fitting multiple sources
+Fitting Multiple Sources
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
 Now let's use `~photutils.psf.PSFPhotometry` to perform PSF photometry
@@ -723,7 +724,7 @@ Astropy table)::
      10    71.8303    90.5624    0.6038 ... 73.5747 639.9299 -7.0153     -2.4516
 
 
-Fitting a single source
+Fitting a Single Source
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 In some cases, one may want to fit only a single source (or a few
@@ -865,9 +866,10 @@ thus this mechanism cannot be used to bound the x and y positions
 of individual sources. However, the x and y positions can be
 bounded for individual sources during the fitting by using the
 ``xy_bounds`` keyword in `~photutils.psf.PSFPhotometry` and
-`~photutils.psf.IterativePSFPhotometry`. This keyword accepts a tuple of
-floats representing the maximum distance in pixels that a fitted source
-can be from its initial (x, y) position.
+`~photutils.psf.IterativePSFPhotometry`. This keyword accepts a float
+or a 2-tuple of floats in ``(x, y)`` order representing the maximum
+distance in pixels that a fitted source can be from its initial (x, y)
+position.
 
 For example, you may want to constrain the flux of a source to be
 between certain values or ensure that it is a non-negative value. This

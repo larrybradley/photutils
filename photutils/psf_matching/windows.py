@@ -166,12 +166,12 @@ class HanningWindow(SplitCosineBellWindow):
     exact center point.
 
     This is a classic general-purpose window function widely used in
-    signal processing. It provides good sidelobe suppression in Fourier
-    space, reducing ringing artifacts at the cost of tapering the entire
-    image. For PSF matching, use this window when edge effects and
-    ringing artifacts are a primary concern and you can accept tapering
-    most of the data. If you want to preserve more of the central
-    region, consider using `TukeyWindow` instead.
+    signal processing. It provides good suppression of ringing artifacts
+    in the matching kernel at the cost of tapering the entire image.
+    For PSF matching, use this window when edge effects and ringing
+    artifacts are a primary concern and you can accept tapering most
+    of the data. If you want to preserve more of the central region,
+    consider using `TukeyWindow` instead.
 
     Notes
     -----
@@ -353,7 +353,7 @@ class TopHatWindow(SplitCosineBellWindow):
 
     This window preserves the most data (everything inside the cutoff
     radius is untouched), but the sharp edge creates strong ringing
-    artifacts in Fourier space. Use this only when you need to strictly
+    artifacts in the matching kernel. Use this only when you need to strictly
     preserve data within a specific region and can tolerate significant
     artifacts, or when the sharp cutoff is explicitly desired.
 

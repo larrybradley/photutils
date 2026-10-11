@@ -20,7 +20,7 @@ and extended sources, please see :ref:`Image Segmentation
 Detecting Stars
 ---------------
 
-Photutils includes two widely-used tools for detecting stars in an
+Photutils includes two widely used tools for detecting stars in an
 image, `DAOFIND`_ and IRAF's `starfind`_, plus a third tool that allows
 input of a custom user-defined kernel.
 
@@ -83,14 +83,15 @@ sigma-clipped statistics::
 
 Now we will subtract the background and use an instance of
 :class:`~photutils.detection.DAOStarFinder` to find the stars in the
-image that have FWHMs of around 2.5 pixels and have peaks approximately
-5 times the background standard deviation above the background (i.e.,
-the threshold is ``5 * std``). The stars in the image are undersampled,
-so we will slightly relax the ``sharpness_range`` to allow for a wider
-range of values.
+image, using a Gaussian kernel with a FWHM of 2.5 pixels, that have
+peaks approximately 5 times the background standard deviation above the
+background (i.e., the threshold is ``5 * std``). The stars in the image
+are undersampled, so we will slightly relax the ``sharpness_range`` to
+allow for a wider range of values.
 
-Running this class on the data yields an astropy `~astropy.table.QTable`
-containing the results of the star finder::
+First, we create the star finder. Calling it on the data returns an
+astropy `~astropy.table.QTable` containing the results of the star
+finder::
 
     >>> from photutils.detection import DAOStarFinder
     >>> threshold = 5.0 * std  # doctest: +REMOTE_DATA
@@ -229,9 +230,10 @@ centroid coordinates with subpixel precision.
 
 The ``box_size`` parameter also effectively imposes a minimum separation
 between detected peaks, since only one peak can be found within each box
-of that size. Specifically, two peaks must differ by at least ``box_size
-// 2 + 1`` pixels along each axis. For example, a ``box_size`` of 11
-imposes a minimum separation of 6 pixels.
+of that size. Specifically, two peaks must be separated by at least
+``box_size // 2 + 1`` pixels along at least one axis. For example, with
+a ``box_size`` of 11, two peaks must be at least 6 pixels apart along
+the x or y axis.
 
 As a simple example, let's find the local peaks in the image above that
 are 5 sigma above the background using a box size of 11 pixels::

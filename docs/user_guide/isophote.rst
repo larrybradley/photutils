@@ -5,12 +5,12 @@ Introduction
 ------------
 
 The `~photutils.isophote` package provides tools to fit elliptical
-isophotes to a galaxy image.  The isophotes in the image are measured
+isophotes to a galaxy image. The isophotes in the image are measured
 using an iterative method described by `Jedrzejewski (1987, MNRAS 226,
 747)
 <https://ui.adsabs.harvard.edu/abs/1987MNRAS.226..747J/abstract>`_.
 See the documentation of the :class:`~photutils.isophote.Ellipse`
-class for details about the algorithm.  Please also see the
+class for details about the algorithm. Please also see the
 :ref:`isophote-faq`.
 
 Getting Started
@@ -46,8 +46,8 @@ For this example, let's create a simple simulated galaxy image::
     ax.imshow(data, origin='lower')
 
 We must provide the elliptical isophote fitter with an initial ellipse
-to be fitted.  This ellipse geometry is defined with the
-`~photutils.isophote.EllipseGeometry` class.  Here we'll define an
+to be fitted. This ellipse geometry is defined with the
+`~photutils.isophote.EllipseGeometry` class. Here we'll define an
 initial ellipse whose position angle is offset from the data::
 
     >>> from photutils.isophote import EllipseGeometry
@@ -107,38 +107,44 @@ To perform the elliptical isophote fit, we run the
 The result is a list of isophotes as an
 `~photutils.isophote.IsophoteList` object, whose attributes are the
 fit values for each `~photutils.isophote.Isophote` sorted by the
-semimajor axis length.  Let's print the fit position angles
+semimajor axis length. Let's print the fit position angles
 (radians)::
 
     >>> print(isolist.pa)  # doctest: +SKIP
-    [ 0.          0.16838914  0.18453378  0.20310945  0.22534975  0.25007781
-      0.28377499  0.32494582  0.38589202  0.40480013  0.39527698  0.38448771
-      0.40207495  0.40207495  0.28201524  0.28201524  0.19889817  0.1364335
-      0.1364335   0.13405719  0.17848892  0.25687327  0.35750355  0.64882699
-      0.72489435  0.91472008  0.94219702  0.87393299  0.82572916  0.7886367
-      0.75523282  0.7125274   0.70481612  0.7120097   0.71250791  0.69707669
-      0.7004807   0.70709823  0.69808124  0.68621341  0.69437566  0.70548293
-      0.70427021  0.69978326  0.70410887  0.69532744  0.69440413  0.70062534
-      0.68614488  0.7177538   0.7177538   0.7029571   0.7029571   0.7029571 ]
+    [0.00000000e+00 2.80648458e-02 2.50727634e-02 2.14181951e-03
+     3.10787728e+00 3.03855164e+00 2.91189209e+00 2.55716884e+00
+     2.55716884e+00 2.38315212e-02 2.38315212e-02 1.65061125e-02
+     5.42895191e-03 9.29065433e-02 1.08616258e-01 1.70659368e-01
+     3.49426737e-01 3.80370926e-01 4.56646465e-01 7.06300852e-01
+     1.15223391e+00 9.98739308e-01 9.93279385e-01 6.13496256e-01
+     6.13496256e-01 6.52734483e-01 7.40866510e-01 7.64426024e-01
+     6.98377544e-01 6.77763424e-01 6.81948730e-01 6.28697041e-01
+     6.63983464e-01 6.91218304e-01 6.96058515e-01 6.93662495e-01
+     6.86066879e-01 6.78830046e-01 6.90474872e-01 7.06300852e-01
+     6.87365631e-01 6.78462108e-01 6.91947812e-01 6.88590347e-01
+     6.89747001e-01 7.04595574e-01 6.98160861e-01 7.01980601e-01
+     6.86722136e-01 6.86722136e-01 6.86722136e-01 7.14498131e-01
+     7.14498131e-01 7.14498131e-01]
 
 We can also show the isophote values as a table, which is again sorted
 by the semimajor axis length (``sma``)::
 
     >>> print(isolist.to_table())  # doctest: +SKIP
-         sma            intens        intens_err   ... flag n_iter stop_code
-                                                   ...
-    -------------- --------------- --------------- ... ---- ----- ---------
-               0.0   102.237692914             0.0 ...    0     0         0
-    0.534697261283   101.212218041 0.0280377938856 ...    0    10         0
-    0.588166987411   101.095404456  0.027821598428 ...    0    10         0
-    0.646983686152   100.971770355 0.0272405762608 ...    0    10         0
-    0.711682054767   100.842254551 0.0262991125932 ...    0    10         0
-               ...             ...             ... ...  ...   ...       ...
-      51.874849202   3.44800874483 0.0881592058138 ...    0    50         2
-     57.0623341222   1.64031530995 0.0913122295433 ...    0    50         2
-     62.7685675344  0.692631010404 0.0786846787635 ...    0    32         0
-     69.0454242879  0.294659388337 0.0681758007533 ...    0     8         5
-     75.9499667166 0.0534892334515 0.0692483210903 ...    0     2         5
+           sma                intens       ... n_iter stop_code
+                                           ...
+    ------------------ ------------------- ... ------ ---------
+                   0.0  103.36486934428946 ...      0         0
+    0.5346972612827552  101.85757682152568 ...     10         0
+    0.5881669874110307   101.6870361556852 ...     10         0
+    0.6469836861521338   101.5050654325796 ...     10         0
+    0.7116820547673471  101.37516112942762 ...     10         0
+                   ...                 ... ...    ...       ...
+     47.15895382000003   6.092927277963179 ...     10         0
+    51.874849202000036   3.408798159078182 ...     10         0
+     57.06233412220004  1.5402962026632605 ...     50         2
+     62.76856753442005  0.7694404504162479 ...     50         2
+     69.04542428786206 0.17437889366851772 ...      2         5
+     75.94996671664828 0.16924150035440783 ...      3         5
     Length = 54 rows
 
 Let's plot the ellipticity, position angle, and the center x and y
@@ -229,7 +235,7 @@ the elliptical model image, and the residual image:
     smas = np.linspace(10, 50, 5)
     for sma in smas:
         iso = isolist.get_closest(sma)
-        x, y, = iso.sampled_coordinates()
+        x, y = iso.sampled_coordinates()
         ax1.plot(x, y, color='white')
 
     ax2.imshow(model_image, origin='lower')

@@ -162,16 +162,16 @@ Photutils provides the :class:`~photutils.background.Background2D`
 class to estimate the 2D background and background noise in an
 astronomical image. :class:`~photutils.background.Background2D`
 requires the size of the box (``box_size``) in which to estimate the
-background.  Selecting the box size requires some care by the user.
+background. Selecting the box size requires some care by the user.
 The box size should generally be larger than the typical size of
 sources in the image, but small enough to encapsulate any background
-variations.  For best results, the box size should also be chosen so
+variations. For best results, the box size should also be chosen so
 that the data are covered by an integer number of boxes in both
-dimensions.  If that is not the case, the image will be padded along
+dimensions. If that is not the case, the image will be padded along
 the top and/or right edges.
 
 The background level in each of the meshes is calculated using
-the function or callable object (e.g., class instance) input via
+the function or callable object (e.g., class instance) input via the
 ``bkg_estimator`` keyword. Photutils provides several background
 classes that can be used:
 
@@ -199,7 +199,7 @@ For even more flexibility, users may input a custom function or callable
 object to the ``bkg_estimator`` and/or ``bkg_rms_estimator`` keywords.
 
 By default, the ``bkg_estimator`` and ``bkg_rms_estimator`` are
-applied to sigma clipped data. Sigma clipping is defined by inputting
+applied to sigma-clipped data. Sigma clipping is defined by inputting
 a :class:`astropy.stats.SigmaClip` object to the ``sigma_clip``
 keyword. The default is to perform sigma clipping with ``sigma=3``
 and ``maxiters=10``. Sigma clipping can be turned off by setting
@@ -213,7 +213,7 @@ and ``maxiters=10``. Sigma clipping can be turned off by setting
 
 After the background level has been determined in each of the boxes, the
 low-resolution background image can be median filtered, with a window
-of size of ``filter_size``, to suppress local under or over estimations
+size of ``filter_size``, to suppress local underestimates or overestimates
 (e.g., due to bright galaxies in a particular box). Likewise, the median
 filter can be applied only to those boxes where the background level is
 above a specified threshold (``filter_threshold``).
@@ -239,6 +239,7 @@ background gradient to the image defined above::
     >>> y, x = np.mgrid[:ny, :nx]
     >>> gradient = x * y / 5000.0
     >>> data2 = data + gradient
+    >>> norm = simple_norm(data2, 'sqrt', percent=99.5)  # doctest: +SKIP
     >>> fig, ax = plt.subplots()  # doctest: +SKIP
     >>> ax.imshow(data2, norm=norm, origin='lower')  # doctest: +SKIP
 
@@ -260,7 +261,7 @@ background gradient to the image defined above::
     ax.set_title('Data with added background gradient')
 
 We start by creating a `~photutils.background.Background2D` object
-using a box size of 15x15 and a 3x3 median filter.  We will estimate
+using a box size of 15x15 and a 3x3 median filter. We will estimate
 the background level in each mesh as the sigma-clipped median using an
 instance of :class:`~photutils.background.MedianBackground`::
 
@@ -318,6 +319,7 @@ and the background-subtracted image:
 .. doctest-skip::
 
     >>> data2_sub = data2 - bkg.background
+    >>> norm = simple_norm(data2_sub, 'sqrt', percent=99.9)
     >>> fig, ax = plt.subplots()
     >>> ax.imshow(data2_sub, norm=norm, origin='lower')
 
@@ -394,10 +396,9 @@ Let's create a rotated image that has blank areas and plot it:
 
 Now we create a coverage mask and input it into
 `~photutils.background.Background2D` to exclude the regions where we
-have no data. For this example, we set the ``fill_value`` to 0.0. For
-real data, one can usually create a coverage mask from a weight or noise
-image. In this example we also use a smaller box size to help capture
-the strong gradient in the background. We also increase the value of the
+have no data. For this example, we set the ``fill_value`` to 0.0.
+For real data, one can usually create a coverage mask from a weight
+or noise image. In this example we also increase the value of the
 ``exclude_percentile`` keyword to include more boxes around the edge of
 the rotated image:
 
@@ -448,7 +449,7 @@ Finally, let's subtract the background from the image and plot it:
 
     >>> data_sub = data3 - bkg3.background
     >>> norm = simple_norm(data_sub, 'sqrt', percent=99.5)
-    >>> fig, ax = plt.subplots()  # doctest: +SKIP
+    >>> fig, ax = plt.subplots()
     >>> ax.imshow(data_sub, norm=norm, origin='lower')
 
 .. plot::
@@ -538,9 +539,10 @@ Meshes without a center marker were excluded.
 
 .. doctest-skip::
 
+    >>> norm = simple_norm(data3, 'sqrt', percent=99.5)
     >>> fig, ax = plt.subplots()
     >>> ax.imshow(data3, norm=norm, origin='lower')
-    >>> bkg3.plot_meshes(outlines=True, marker='.', color='cyan', alpha=0.3)
+    >>> bkg3.plot_meshes(outlines=True, marker='.', color='white', alpha=0.5)
     >>> ax.set_xlim(0, 250)
     >>> ax.set_ylim(0, 250)
 

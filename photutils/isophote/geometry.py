@@ -198,7 +198,7 @@ class EllipseGeometry:
 
         Notes
         -----
-        The centerer function scans a 10x10 window centered on the (x,
+        The centerer function scans an 11x11 window centered on the (x,
         y) coordinates in the `~photutils.isophote.EllipseGeometry`
         instance passed to the constructor of the
         `~photutils.isophote.Ellipse` class. If any of the
@@ -214,7 +214,7 @@ class EllipseGeometry:
         of the algorithm can be decreased by decreasing the value of
         the object centerer threshold parameter. The centerer works by
         looking where a quantity akin to a signal-to-noise ratio is
-        maximized within the 10x10 window. The centerer can thus be shut
+        maximized within the 11x11 window. The centerer can thus be shut
         off entirely by setting the threshold to a large value (i.e.,
         >> 1, meaning no location inside the search window will achieve
         that signal-to-noise ratio).

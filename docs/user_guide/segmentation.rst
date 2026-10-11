@@ -58,7 +58,7 @@ pixels::
     >>> convolved_data = convolve(data, kernel)
 
 Now we are ready to detect the sources in the background-subtracted
-convolved image. Let's find sources that have 10 connected pixels that
+convolved image. Let's find sources that have at least 10 connected pixels that
 are each greater than the corresponding pixel-wise ``threshold`` level
 defined above (i.e., 1.5 sigma per pixel above the background noise).
 
@@ -538,7 +538,7 @@ properties are shown below::
         1     235.38       1.44         None ...    490.35           nan  10256
         2     493.78       5.84         None ...    489.37           nan  10256
         3     207.29      10.26         None ...    694.24           nan      0
-        4     364.87      11.13         None ...    681.20           nan  8192
+        4     364.87      11.13         None ...    681.20           nan   8192
         5     257.85      12.18         None ...    748.18           nan      0
         6     289.79      22.39         None ...    941.39           nan   2048
         7     379.21      27.86         None ...    635.38           nan      0
@@ -638,7 +638,7 @@ label numbers in the segmentation image::
        80      14.93      60.06         None ...    878.52           nan 131104
 
 By default, the :meth:`~photutils.segmentation.SourceCatalog.to_table`
-includes only a small subset of source properties. The output table
+method includes only a small subset of source properties. The output table
 properties can be customized in the `~astropy.table.QTable` using the
 ``columns`` keyword::
 
@@ -701,9 +701,10 @@ properties for each source will also be calculated::
 Photometric Errors
 ^^^^^^^^^^^^^^^^^^
 
-:class:`~photutils.segmentation.SourceCatalog` requires inputting a
-*total* error array, i.e., the background-only error plus Poisson noise
-due to individual sources. The :func:`~photutils.utils.calc_total_error`
+The ``error`` array input to
+:class:`~photutils.segmentation.SourceCatalog` must be a *total* error
+array, i.e., the background-only error plus Poisson noise due to
+individual sources. The :func:`~photutils.utils.calc_total_error`
 function can be used to calculate the total error array from a
 background-only error array and an effective gain.
 
@@ -826,7 +827,7 @@ parameters. Note that photometry is *always* performed on the unfiltered
 
 
 Dual-Image Mode (Detection Catalog)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 In many astronomical workflows, source detection and deblending
 are performed on one image (e.g., a deep detection image or
@@ -867,12 +868,16 @@ table columns). The flags combine deblending provenance recorded by
 was produced by deblending, or whether its deblending mode fell back
 to another mode) with measurement-time conditions: the source touches
 an image boundary, masked or non-finite pixels within the segment,
-undefined or degenerate shape properties, windowed or quadratic
-centroid failures, and Kron-aperture issues (``kron_``-prefixed
-flags). Accessing ``flags`` computes the flagged quantities (moments,
-windowed and quadratic centroids, and Kron photometry) if they have
-not already been computed. The results are cached and shared with
-the corresponding source properties. Flags that describe the same
+undefined or degenerate shape properties, too few local background
+pixels, and Kron-aperture issues (``kron_``-prefixed flags). Accessing
+``flags`` computes the flagged quantities (moments, covariance, local
+background, and Kron photometry) if they have not already been
+computed. The results are cached and shared with the corresponding
+source properties. The windowed and quadratic centroid fallbacks are
+reported by the
+`~photutils.segmentation.SourceCatalog.centroid_win_fallback` and
+`~photutils.segmentation.SourceCatalog.centroid_quad_fallback`
+properties instead of by flags. Flags that describe the same
 condition as an `~photutils.aperture.ApertureStats` flag, with the
 source segment as the region, use the same flag name. However, the
 bit values are package-specific, so always decode flag values with
@@ -927,10 +932,10 @@ the segmentation image directly, without making copies, when:
 All calculations are performed in ``float64`` regardless of the input
 dtype, so ``float32`` inputs give the same results as the same values
 input as ``float64`` (to within floating-point rounding), while using
-half the memory. For a 4088 x 4088
-``float32`` image with ``error`` and ``convolved_data`` arrays and about
-4600 sources, the catalog then holds about 50 MB of working memory (a 1
-byte per pixel mask and the per-source results).
+half the memory. For a 4088 x 4088 ``float32`` image with ``error``
+and ``convolved_data`` arrays and about 4600 sources, the catalog then
+holds about 50 MB of working memory (a 1 byte per pixel mask and the
+per-source results).
 
 If the image arrays have different dtypes from each other (e.g.,
 ``float32`` data with a ``float64`` error array), or another dtype such

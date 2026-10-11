@@ -29,8 +29,8 @@ def __getattr__(name):
 
         from .epsf_builder import EPSFBuildResults
 
-        msg = ('EPSFBuildResult is deprecated and will be removed in a '
-               'future version. Use EPSFBuildResults instead.')
+        msg = ('EPSFBuildResult is deprecated and will be removed in '
+               'version 4.0. Use EPSFBuildResults instead.')
         warnings.warn(msg, PhotutilsDeprecationWarning, stacklevel=2)
         return EPSFBuildResults
 

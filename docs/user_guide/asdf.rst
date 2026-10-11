@@ -6,8 +6,8 @@ ASDF Serialization
 Introduction
 ------------
 
-Photutils apertures and PSF models can be written to and read from
-files in the `Advanced Scientific Data Format (ASDF)
+Photutils apertures and PSF models can be written to and read
+from files in the `Advanced Scientific Data Format (ASDF)
 <https://asdf.readthedocs.io/>`_. ASDF stores the object as structured
 metadata in a human-readable YAML header, with any array data appended
 as binary blocks. Unlike :mod:`pickle`, an ASDF file is described by a
@@ -23,11 +23,10 @@ asdf is sufficient.
 Requirements
 ------------
 
-Serialization requires the optional ``asdf`` package. Objects that
-store an `~astropy.units.Quantity` or an
-`~astropy.coordinates.SkyCoord` additionally require the optional
-``asdf-astropy`` package, which provides the converters for those
-Astropy types:
+Serialization requires the optional ``asdf`` package. Objects that store
+an `~astropy.units.Quantity` or an `~astropy.coordinates.SkyCoord`
+additionally require the optional ``asdf-astropy`` package, which
+provides the converters for those Astropy types:
 
 * All PSF models require ``asdf-astropy``.
 
@@ -85,7 +84,7 @@ mixed with other ASDF-serializable data:
 Supported Objects
 -----------------
 
-The pixel and sky variant of each aperture share a tag, because they
+The pixel and sky variants of each aperture share a tag, because they
 differ only in whether their parameters are pixel values or angular
 quantities.
 
@@ -146,9 +145,10 @@ is preserved along with its parameters, including which parameters are
 fixed and any parameter bounds.
 
 For `~photutils.psf.GriddedPSFModel` and `~photutils.psf.STDPSFGrid`,
-the ePSF images, the grid positions, the grid shape, and the
-oversampling factors are stored as separate properties, and any
-remaining metadata is stored under a ``meta`` key.
+the ePSF images, the grid positions, and the oversampling factors are
+stored as separate properties (`~photutils.psf.STDPSFGrid` also stores
+the grid shape), and any remaining metadata is stored under a ``meta``
+key.
 
 
 Schemas and Versioning
@@ -166,12 +166,12 @@ and the manifest ship inside Photutils and are registered with ``asdf``
 automatically, so ``asdf`` can validate a file without any network
 access.
 
-Tags and schemas are versioned independently of Photutils. A change to
-what a tag stores requires a new tag version, and the converters for
-existing versions are retained, so that files written by an older
-version of Photutils remain readable. An ASDF file records the
-extension that wrote it, so ``asdf`` warns when a file is opened
-without that extension available.
+Tags and schemas are versioned independently of Photutils. A change
+to what a tag stores requires a new tag version, and the converters
+for existing versions are retained, so that files written by an older
+version of Photutils remain readable. An ASDF file records the extension
+that wrote it, so ``asdf`` warns when a file is opened without that
+extension available.
 
 Every tagged object is validated against its schema on both write and
 read.

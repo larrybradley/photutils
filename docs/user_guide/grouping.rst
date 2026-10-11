@@ -159,7 +159,7 @@ array of integers::
 
 In this case, ``groups`` is a `~photutils.psf.SourceGroups` object
 that contains the grouping results and provides convenient methods for
-analysis. This object stores the source coordinates, group IDs, and
+analysis. This object stores the source coordinates and group IDs, and
 provides properties and methods to analyze the grouping.
 
 The grouping algorithm separated the 100 stars into 65 distinct groups::
@@ -265,7 +265,7 @@ keyword:
     >>> fig, ax = plt.subplots(figsize=(8, 8))
     >>> ax.imshow(data, origin='lower')
     >>> groups.plot(radius=fwhm, ax=ax, lw=2, seed=123,
-                    label_groups=True, label_offset=(6, 6))
+    ...             label_groups=True, label_offset=(6, 6))
 
 .. plot::
 

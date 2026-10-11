@@ -25,12 +25,10 @@ to create an image of the sources, add noise using
 coordinate system (WCS) using :func:`~photutils.datasets.make_wcs`. An
 example of this process is shown below.
 
-Functions that start with ``load_*`` load datasets, either from within
-the Photutils package or remotely from a GitHub repository. Very
-small data files are bundled with Photutils and are guaranteed to be
-available. Larger datasets are available from the `astropy-data`_
-repository. On first load, these larger datasets will be downloaded and
-placed into the Astropy cache on the user's machine.
+Functions that start with ``load_*`` download example datasets from a
+remote repository. On first load, these datasets are downloaded and
+placed into the Astropy cache on the user's machine. These functions
+are deprecated and will be removed in version 4.0.
 
 
 Simulating Images
@@ -53,7 +51,7 @@ parameters with random positions, fluxes, and shapes using
     ...                            flux=(100, 500), x_fwhm=(1, 3),
     ...                            y_fwhm=(1, 3), theta=(0, 90), seed=123)
 
-Next, we'll create a simulated image of the sources using the table of
+Next, we'll create a simulated image of the sources from the table of
 model parameters using :func:`~photutils.datasets.make_model_image`::
 
     >>> from photutils.datasets import make_model_image
@@ -124,6 +122,3 @@ API Reference
 -------------
 
 :doc:`../reference/datasets_api`
-
-
-.. _astropy-data: https://github.com/astropy/astropy-data/
