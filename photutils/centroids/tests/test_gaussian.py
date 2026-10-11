@@ -227,19 +227,15 @@ def test_gaussian1d_moments():
 
 def test_gaussian2d_warning():
     """
-    Test that the 2D Gaussian centroid function raises a warning if the
-    fit may not have converged.
-
-    The fitter's own warning is no longer suppressed, so it propagates
-    to the caller along with the photutils convergence warning.
+    Test that the 2D Gaussian centroid function emits only the warning
+    of the fitter if the fit did not converge.
     """
     data = make_gaussian_source((51, 51), 1.0, 24.17, 25.87, 1.7, 4.7, 0.0)
 
-    match = 'The fit may not have converged'
-    fitter_match = 'The fit may be unsuccessful'
-    with (pytest.warns(AstropyUserWarning, match=match),
-          pytest.warns(AstropyUserWarning, match=fitter_match)):
+    match = 'The fit may be unsuccessful'
+    with pytest.warns(AstropyUserWarning, match=match) as record:
         centroid_2dg(data + 100000)
+    assert len(record) == 1
 
 
 def test_no_input_mutation():

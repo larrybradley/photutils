@@ -34,9 +34,11 @@ def centroid_com(data, mask=None):
     <https://en.wikipedia.org/wiki/Image_moment>`_.
 
     Non-finite values (e.g., NaN or inf) in the ``data`` array are
-    automatically masked. The final mask is a logical OR combination
-    of the input ``mask``, the automatically generated mask for
-    non-finite values, and the mask of the input ``data`` if it is a
+    automatically masked. An
+    `~astropy.utils.exceptions.AstropyUserWarning` is emitted if any
+    of them is not already masked. The final mask is a logical OR
+    combination of the input ``mask``, the automatically generated mask
+    for non-finite values, and the mask of the input ``data`` if it is a
     `~numpy.ma.MaskedArray`. The centroid is calculated using only the
     unmasked data values.
 
@@ -44,13 +46,13 @@ def centroid_com(data, mask=None):
     ----------
     data : array_like
         The input n-dimensional array. ``data`` can be a
-        `~numpy.ma.MaskedArray`. The image should be a
-        background-subtracted cutout image containing a single
-        source. The source should be significantly stronger than the
-        background noise. If the data contains nearly equal positive and
-        negative values (i.e., the sum is close to zero), the centroid
-        calculation will be numerically unstable and may produce
-        undefined results that fall outside the array bounds.
+        `~numpy.ma.MaskedArray` or a `~astropy.units.Quantity`. The
+        image should be a background-subtracted cutout image containing
+        a single source. The source should be significantly stronger
+        than the background noise. If the data contains nearly equal
+        positive and negative values (i.e., the sum is close to zero),
+        the centroid calculation will be numerically unstable and may
+        produce undefined results that fall outside the array bounds.
 
     mask : bool `~numpy.ndarray`, optional
         A boolean mask, with the same shape as ``data``, where a `True`
@@ -137,11 +139,13 @@ def centroid_symmetry(data, *, mask=None, radius=None):
     core of the source and is insensitive to asymmetric structure beyond
     ``radius``.
 
-    Non-finite values (e.g., NaN or inf) in the ``data`` array are
-    automatically masked. The final mask is a logical OR combination
-    of the input ``mask``, the automatically generated mask for
-    non-finite values, and the mask of the input ``data`` if it is a
-    `~numpy.ma.MaskedArray`. The pairs of opposite offsets with a
+    Non-finite values (e.g., NaN or inf) in the
+    ``data`` array are automatically masked. An
+    `~astropy.utils.exceptions.AstropyUserWarning` is emitted if any
+    of them is not already masked. The final mask is a logical OR
+    combination of the input ``mask``, the automatically generated mask
+    for non-finite values, and the mask of the input ``data`` if it is
+    a `~numpy.ma.MaskedArray`. The pairs of opposite offsets with a
     position near a masked value are given a lower weight or are not
     used.
 
@@ -151,10 +155,15 @@ def centroid_symmetry(data, *, mask=None, radius=None):
         within ``radius`` of the center. The data are interpolated
         between the pixels, so a masked value is first replaced by a
         weighted mean of the unmasked values around it, which is only an
-        estimate. In tests with a noiseless Gaussian source and a single
-        masked pixel adjacent to its peak pixel, the result changed by
-        up to 0.002 pixels for a standard deviation of 2 pixels, 0.03
-        pixels for 1.2 pixels, and 0.2 pixels for 0.9 pixels.
+        estimate. In tests with a noiseless Gaussian source in a 21x21
+        array, the default ``radius``, and a single masked pixel
+        adjacent to its peak pixel, the result changed by up to 0.002
+        pixels for a standard deviation of 2 pixels, 0.03 pixels for
+        1.2 pixels, and 0.1 pixels for 0.9 pixels. The change is larger
+        for a smaller ``radius``. It was up to 0.01 pixels for a radius
+        of 3 pixels and a standard deviation of 2 pixels, and up to 0.2
+        pixels for a radius of 1.5 pixels at any of these standard
+        deviations.
 
         The search starts at the maximum value of the data. A bright
         outlier such as a hot pixel or a cosmic ray near the source
@@ -164,10 +173,11 @@ def centroid_symmetry(data, *, mask=None, radius=None):
     Parameters
     ----------
     data : 2D array_like
-        The 2D image data. ``data`` can be a `~numpy.ma.MaskedArray`.
-        The image should be a background-subtracted cutout image
-        containing a single positive source near its center. It must
-        have at least 4 pixels along each axis.
+        The 2D image data. ``data`` can be a `~numpy.ma.MaskedArray`
+        or a `~astropy.units.Quantity`. The image should be a
+        background-subtracted cutout image containing a single positive
+        source near its center. It must have at least 4 pixels along
+        each axis.
 
     mask : 2D bool `~numpy.ndarray`, optional
         A boolean mask, with the same shape as ``data``, where a `True`
@@ -571,10 +581,12 @@ def centroid_quadratic(data, mask=None, fit_boxsize=5, xpeak=None,
     Calculate the centroid of a 2D array by fitting a 2D quadratic
     polynomial.
 
-    Non-finite values (e.g., NaN or inf) in the ``data`` array are
-    automatically masked. The final mask is a logical OR combination
-    of the input ``mask``, the automatically generated mask for
-    non-finite values, and the mask of the input ``data`` if it is a
+    Non-finite values (e.g., NaN or inf) in the
+    ``data`` array are automatically masked. An
+    `~astropy.utils.exceptions.AstropyUserWarning` is emitted if any
+    of them is not already masked. The final mask is a logical OR
+    combination of the input ``mask``, the automatically generated mask
+    for non-finite values, and the mask of the input ``data`` if it is a
     `~numpy.ma.MaskedArray`. The centroid is calculated using only the
     unmasked data values.
 
@@ -590,18 +602,17 @@ def centroid_quadratic(data, mask=None, fit_boxsize=5, xpeak=None,
     the fitting box by searching for the position of the maximum pixel
     within a box of size ``search_boxsize``.
 
-    `Vakili & Hogg (2016) <https://arxiv.org/abs/1610.05873>`_
-    demonstrate that 2D quadratic centroiding comes very
-    close to saturating the `Cramér-Rao lower bound
+    Vakili & Hogg (2016) [1]_ demonstrate that 2D quadratic centroiding
+    comes very close to saturating the `Cramér-Rao lower bound
     <https://en.wikipedia.org/wiki/Cram%C3%A9r%E2%80%93Rao_bound>`_ in a
     wide range of conditions.
 
     Parameters
     ----------
     data : 2D array_like
-        The 2D image data. ``data`` can be a `~numpy.ma.MaskedArray`.
-        The image should be a background-subtracted cutout image
-        containing a single source.
+        The 2D image data. ``data`` can be a `~numpy.ma.MaskedArray`
+        or a `~astropy.units.Quantity`. The image should be a
+        background-subtracted cutout image containing a single source.
 
     mask : 2D bool `~numpy.ndarray`, optional
         A boolean mask, with the same shape as ``data``, where a `True`
@@ -615,17 +626,20 @@ def centroid_quadratic(data, mask=None, fit_boxsize=5, xpeak=None,
         region. If ``fit_boxsize`` has two elements, they must be in
         ``(ny, nx)`` order. If ``fit_boxsize`` is a scalar then a square
         box of size ``fit_boxsize`` will be used. ``fit_boxsize`` must
-        have odd values for both axes.
+        have odd values for both axes and the box must contain at least
+        6 pixels. A size larger than ``data`` along an axis is reduced
+        to the largest odd size that fits, with a warning.
 
     xpeak, ypeak : float or `None`, optional
-        The initial guess of the position of the centroid. If either
-        ``xpeak`` or ``ypeak`` is `None` then the position of the
-        maximum value in the input ``data`` will be used as the initial
-        guess.
+        The initial guess of the position of the centroid. If both are
+        `None`, the position of the maximum value in the input ``data``
+        is used as the initial guess. A `ValueError` is raised if only
+        one of them is `None` or if the position is outside of
+        ``data``.
 
         .. deprecated:: 3.0
            The ``xpeak`` and ``ypeak`` keywords are deprecated
-           and will be removed in a future version. Use
+           and will be removed in version 4.0. Use
            `~photutils.centroids.centroid_sources` to centroid sources
            at specific positions.
 
@@ -636,28 +650,29 @@ def centroid_quadratic(data, mask=None, fit_boxsize=5, xpeak=None,
         nx)`` order. If ``search_boxsize`` is a scalar then a square
         box of size ``search_boxsize`` will be used. ``search_boxsize``
         must have odd values for both axes. This parameter is ignored
-        if either ``xpeak`` or ``ypeak`` is `None`. In that case, the
-        entire array is searched for the maximum value.
+        if ``xpeak`` and ``ypeak`` are `None`. In that case, the entire
+        array is searched for the maximum value.
 
         .. deprecated:: 3.0
            The ``search_boxsize`` keyword is deprecated
-           and will be removed in a future version. Use
+           and will be removed in version 4.0. Use
            `~photutils.centroids.centroid_sources` to centroid sources
            at specific positions.
 
     Returns
     -------
     centroid : `~numpy.ndarray`
-        The ``x, y`` coordinates of the centroid.
+        The ``(x, y)`` coordinates of the centroid.
 
     Notes
     -----
-    Use ``fit_boxsize = (3, 3)`` to match the work of `Vakili &
-    Hogg (2016) <https://arxiv.org/abs/1610.05873>`_ for their 2D
-    second-order polynomial centroiding method.
+    Use ``fit_boxsize = (3, 3)`` to match the work of Vakili & Hogg
+    (2016) [1]_ for their 2D second-order polynomial centroiding method.
 
-    Because this centroid is based on fitting data, it can fail for many
-    reasons, returning (np.nan, np.nan):
+    Because this centroid is based on fitting data, it can fail for
+    several reasons. In each of these cases, an
+    `~astropy.utils.exceptions.AstropyUserWarning` is emitted and
+    ``(np.nan, np.nan)`` is returned:
 
     * quadratic fit failed
     * quadratic fit does not have a maximum
@@ -668,8 +683,8 @@ def centroid_quadratic(data, mask=None, fit_boxsize=5, xpeak=None,
     non-finite.
 
     Also note that a fit is not performed if the maximum data value is
-    at the edge of the data. In this case, the position of the maximum
-    pixel will be returned.
+    at the edge of the data. In this case, a warning is emitted and the
+    position of the maximum pixel is returned.
 
     References
     ----------
@@ -865,7 +880,10 @@ class CentroidQuadratic:
         region. If ``fit_boxsize`` has two elements, they must be in
         ``(ny, nx)`` order. If ``fit_boxsize`` is a scalar then a square
         box of size ``fit_boxsize`` will be used. ``fit_boxsize`` must
-        have odd values for both axes.
+        have odd values for both axes and the box must contain at least
+        6 pixels. A size larger than ``data`` along an axis is reduced
+        to the largest odd size that fits, with a warning. The value is
+        validated when the instance is called.
 
     Examples
     --------
@@ -906,18 +924,20 @@ class CentroidQuadratic:
         Calculate the centroid.
 
         Non-finite values (e.g., NaN or inf) in the ``data`` array
-        are automatically masked. The automatically masked values are
-        combined (using bitwise OR) with the input ``mask``. If ``data``
-        is a `~numpy.ma.MaskedArray`, its mask will also be combined
-        (using bitwise OR) with the input ``mask``.
+        are automatically masked. An
+        `~astropy.utils.exceptions.AstropyUserWarning` is emitted if
+        any of them is not already masked. The automatically masked
+        values are combined (using bitwise OR) with the input ``mask``.
+        If ``data`` is a `~numpy.ma.MaskedArray`, its mask will also be
+        combined (using bitwise OR) with the input ``mask``.
 
         Parameters
         ----------
         data : 2D array_like
             The 2D image data. ``data`` can be a
-            `~numpy.ma.MaskedArray`. The image should be a
-            background-subtracted cutout image containing a single
-            source.
+            `~numpy.ma.MaskedArray` or a `~astropy.units.Quantity`.
+            The image should be a background-subtracted cutout image
+            containing a single source.
 
         mask : 2D bool `~numpy.ndarray`, optional
             A boolean mask, with the same shape as ``data``, where a
@@ -929,7 +949,7 @@ class CentroidQuadratic:
         Returns
         -------
         centroid : `~numpy.ndarray`
-            The ``x, y`` coordinates of the centroid.
+            The ``(x, y)`` coordinates of the centroid.
 
         Notes
         -----
@@ -958,8 +978,8 @@ def centroid_sources(data, xpos, ypos, box_size=11, footprint=None,
     Masks and non-finite values are handled by the input
     ``centroid_func``. When using a centroid function provided by
     Photutils, non-finite values (e.g., NaN or inf) in the ``data``
-    array are automatically masked. The ``centroid_1dg`` and
-    ``centroid_2dg`` functions also automatically mask any pixels with
+    array are automatically masked. The `centroid_1dg` and
+    `centroid_2dg` functions also automatically mask any pixels with
     non-finite ``error`` array values. The final mask is a logical OR
     combination of the input ``mask``, the automatically generated
     mask(s) for non-finite values, and the mask of the input ``data`` if
@@ -973,9 +993,9 @@ def centroid_sources(data, xpos, ypos, box_size=11, footprint=None,
         The image should be background-subtracted.
 
     xpos, ypos : float or array_like of float
-        The initial ``x`` and ``y`` pixel position(s) of the center
-        position. A cutout image centered on this position will be used
-        to calculate the centroid.
+        The initial ``x`` and ``y`` pixel position(s) of the sources. A
+        cutout image centered on each position will be used to calculate
+        the centroid.
 
     box_size : int or array_like of int, optional
         The size of the cutout image along each axis. If ``box_size`` is
@@ -987,14 +1007,13 @@ def centroid_sources(data, xpos, ypos, box_size=11, footprint=None,
 
     footprint : bool `~numpy.ndarray`, optional
         A 2D boolean array where `True` values describe the local
-        footprint region to cutout. ``footprint`` can be used to create
+        footprint region to cut out. ``footprint`` can be used to create
         a non-rectangular cutout image, in which case the input ``xpos``
-        and ``ypos`` represent the center of the minimal bounding box
-        for the input ``footprint``. ``box_size=(n, m)`` is equivalent
-        to ``footprint=np.ones((n, m))``. Either ``box_size`` or
-        ``footprint`` must be defined. If they are both defined, then
-        ``footprint`` overrides ``box_size``. The same ``footprint`` is
-        used for all sources.
+        and ``ypos`` represent the center of the ``footprint`` array.
+        ``box_size=(n, m)`` is equivalent to ``footprint=np.ones((n,
+        m))``. Either ``box_size`` or ``footprint`` must be defined.
+        If they are both defined, then ``footprint`` overrides
+        ``box_size``. The same ``footprint`` is used for all sources.
 
     mask : 2D bool `~numpy.ndarray`, optional
         A 2D boolean array with the same shape as ``data``, where a
@@ -1015,16 +1034,23 @@ def centroid_sources(data, xpos, ypos, box_size=11, footprint=None,
     **kwargs : dict, optional
         Any additional keyword arguments accepted by the
         ``centroid_func``. A `TypeError` is raised for keyword arguments
-        not accepted by the ``centroid_func``.
+        not accepted by the ``centroid_func``. An ``error`` keyword
+        must be an array with the same shape as ``data``. The cutout
+        of it for each source is passed to the ``centroid_func``.
+        ``error=None`` is ignored.
 
     Returns
     -------
     xcentroid, ycentroid : `~numpy.ndarray`
-        The ``x`` and ``y`` pixel position(s) of the centroids. NaNs
-        will be returned where the centroid failed. This is usually due
-        to a ``box_size`` that is too small when using a fitting-based
+        The 1D arrays of the ``x`` and ``y`` pixel positions
+        of the centroids. If the ``centroid_func`` raises
+        a `ValueError` or `TypeError` for a source, an
+        `~astropy.utils.exceptions.AstropyUserWarning` is emitted
+        and NaN is returned for that source. This is usually due to
+        a ``box_size`` that is too small when using a fitting-based
         centroid function (e.g., `centroid_1dg`, `centroid_2dg`, or
-        `centroid_quadratic`).
+        `centroid_quadratic`). A `ValueError` is raised if the cutout of
+        a source is completely masked.
 
     Examples
     --------
