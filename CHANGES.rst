@@ -626,6 +626,9 @@ Bug Fixes
     coordinates that could cause failures and spurious NaN results.
     [#2368]
 
+  - Fixed the centroid functions using the masked values of an input
+    ``MaskedArray`` that has a hard mask. [#2491]
+
 - ``photutils.datasets``
 
   - Fixed ``make_wcs`` so that the WCS ``pixel_shape`` attribute is

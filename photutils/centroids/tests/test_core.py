@@ -180,6 +180,26 @@ def test_centroid_com_masked_array():
     assert yc3 == yc4
 
 
+@pytest.mark.parametrize('centroid_func', [centroid_com, centroid_symmetry,
+                                           centroid_quadratic, centroid_1dg,
+                                           centroid_2dg])
+def test_centroid_hard_masked_array(centroid_func):
+    """
+    Test that a MaskedArray with a hard mask gives the same result as
+    one with a soft mask.
+    """
+    data = make_gaussian_source((21, 21), 10.0, 10.3, 9.8, 2.0, 2.0, 0)
+    data[4, 5] = 1000.0
+    mask = np.zeros(data.shape, dtype=bool)
+    mask[4, 5] = True
+
+    expected = centroid_func(data, mask=mask)
+    soft = centroid_func(np.ma.MaskedArray(data, mask=mask))
+    hard = centroid_func(np.ma.MaskedArray(data, mask=mask, hard_mask=True))
+    assert_allclose(soft, expected)
+    assert_allclose(hard, expected)
+
+
 def test_centroid_com_mutation():
     """
     Test that centroid_com does not mutate the input data or mask.
