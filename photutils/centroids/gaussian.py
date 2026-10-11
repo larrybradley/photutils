@@ -221,10 +221,13 @@ def centroid_2dg(data, error=None, mask=None):
                '2D Gaussian.')
         raise ValueError(msg)
 
-    # Subtract the minimum of the data to make the data values positive.
-    # Moments from negative data values can yield undefined Gaussian
-    # parameters, e.g., x_stddev and y_stddev.
-    shifted = data - np.min(data)
+    # Subtract the minimum of the unmasked data to make the data values
+    # non-negative. Moments from negative data values can yield
+    # undefined Gaussian parameters, e.g., x_stddev and y_stddev. The
+    # masked pixels are kept at zero so that they do not contribute to
+    # the moments.
+    shifted = data - np.min(data[~mask])
+    shifted[mask] = 0.0
 
     if error is not None:
         weights = 1.0 / error.clip(min=1.0e-30)
