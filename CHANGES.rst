@@ -634,6 +634,11 @@ Bug Fixes
     non-finite pixel was fit and a meaningless position was returned.
     [#2491]
 
+  - ``centroid_quadratic`` and ``CentroidQuadratic`` now emit a warning
+    whenever ``fit_boxsize`` is larger than the data and is reduced.
+    Previously, no warning was emitted if the data size along the axis
+    was odd. [#2491]
+
 - ``photutils.datasets``
 
   - Fixed ``make_wcs`` so that the WCS ``pixel_shape`` attribute is

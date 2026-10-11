@@ -835,7 +835,7 @@ def test_centroid_quadratic_npts():
     mask[2, :] = True
     match = 'at least 6 unmasked data points'
     with pytest.warns(AstropyUserWarning, match=match):
-        centroid_quadratic(data, mask=mask)
+        centroid_quadratic(data, mask=mask, fit_boxsize=3)
 
 
 def test_centroid_quadratic_invalid_inputs():
@@ -877,12 +877,19 @@ def test_centroid_quadratic_boxsize_clamp():
     Test centroid_quadratic with a fit_boxsize larger than the data.
 
     The fit box is clamped to the data shape and reduced to odd values
-    with a warning.
+    with a warning. The warning is emitted whether the data size is
+    even or odd.
     """
     data = make_gaussian_source((4, 4), 10.0, 2.0, 2.0, 1.0, 1.0, 0)
     match = "'fit_boxsize' was clamped to the upper bound and reduced to"
     with pytest.warns(AstropyUserWarning, match=match):
         xc, yc = centroid_quadratic(data, fit_boxsize=5)
+    assert_allclose((xc, yc), (2.0, 2.0), atol=0.1)
+
+    data = make_gaussian_source((5, 5), 10.0, 2.0, 2.0, 1.0, 1.0, 0)
+    match = "'fit_boxsize' was clamped to the upper bound"
+    with pytest.warns(AstropyUserWarning, match=match):
+        xc, yc = centroid_quadratic(data, fit_boxsize=7)
     assert_allclose((xc, yc), (2.0, 2.0), atol=0.1)
 
 
