@@ -629,6 +629,11 @@ Bug Fixes
   - Fixed the centroid functions using the masked values of an input
     ``MaskedArray`` that has a hard mask. [#2491]
 
+  - Fixed ``centroid_2dg`` to raise a ``ValueError`` if the unmasked
+    data are constant. Previously, constant data with a masked or
+    non-finite pixel was fit and a meaningless position was returned.
+    [#2491]
+
 - ``photutils.datasets``
 
   - Fixed ``make_wcs`` so that the WCS ``pixel_shape`` attribute is

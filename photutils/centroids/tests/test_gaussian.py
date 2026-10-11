@@ -161,6 +161,29 @@ def test_centroid_2dg_constant_data(value):
 
 
 @pytest.mark.parametrize('value', [0.0, 1.0, -3.7])
+def test_centroid_2dg_constant_data_masked(value):
+    """
+    Test that centroid_2dg raises a ValueError if the unmasked data are
+    constant.
+
+    The masked pixels are set to zero internally, so they must not make
+    constant data appear to vary.
+    """
+    data = np.full((10, 10), value)
+    data[2, 3] = 100.0
+    mask = np.zeros(data.shape, dtype=bool)
+    mask[2, 3] = True
+    match = 'Input data must have non-constant values'
+    with pytest.raises(ValueError, match=match):
+        centroid_2dg(data, mask=mask)
+
+    data[2, 3] = np.nan
+    with (pytest.warns(AstropyUserWarning, match='non-finite values'),
+          pytest.raises(ValueError, match=match)):
+        centroid_2dg(data)
+
+
+@pytest.mark.parametrize('value', [0.0, 1.0, -3.7])
 def test_centroid_1dg_constant_data(value):
     """
     Test that centroid_1dg raises a ValueError for constant (flat)
