@@ -14,19 +14,18 @@ of smaller improvements and bug fixes, which are described in the full
    :depth: 2
 
 
-Improved PSF Photometry classes
--------------------------------
+Improved PSF Photometry Classes
+===============================
 
 The `~photutils.psf.PSFPhotometry` and
-`~photutils.psf.IterativePSFPhotometry` classes were added
-to perform PSF photometry. They represent a complete rewrite
-of the previous ``~photutils.psf.BasicPSFPhotometry`` and
-``~photutils.psf.IterativelySubtractedPSFPhotometry`` classes, but have
-a similar API and functionality. The new classes are more flexible and
-significantly faster than the previous classes. The new classes also
-allow the input of error arrays, which will be used as weights in the
-fitting. When using astropy 5.3+, these errors will also be propagated
-to the model fit parameters.
+`~photutils.psf.IterativePSFPhotometry` classes were added to perform
+PSF photometry. They represent a complete rewrite of the previous
+``BasicPSFPhotometry`` and ``IterativelySubtractedPSFPhotometry``
+classes, but have a similar API and functionality. The new classes are
+more flexible and significantly faster than the previous classes. The
+new classes also allow the input of error arrays, which will be used as
+weights in the fitting. When using Astropy 5.3+, these errors will also
+be propagated to the model fit parameters.
 
 Some other features of the new classes include:
 
@@ -43,34 +42,34 @@ Some other features of the new classes include:
 * Allows access to the finder results
 * Adds a local background subtraction option
 
-The old PSF photometry classes (``~photutils.psf.BasicPSFPhotometry``,
-``~photutils.psf.IterativelySubtractedPSFPhotometry``, and
-``~photutils.psf.DAOPhotPSFPhotometry``) are still available in this
-release, but are deprecated. They will be removed in a future release.
+The old PSF photometry classes (``BasicPSFPhotometry``,
+``IterativelySubtractedPSFPhotometry``, and ``DAOPhotPSFPhotometry``)
+are still available in this release, but are deprecated. They will be
+removed in a future release.
 
 
-New ``SourceGrouper`` class
----------------------------
+New ``SourceGrouper`` Class
+===========================
 
 The `~photutils.psf.SourceGrouper` class was added to group sources
 using hierarchical agglomerative clustering with a distance criterion.
 This class is used by the new `~photutils.psf.PSFPhotometry` and
 `~photutils.psf.IterativePSFPhotometry` classes.
 
-The old source grouping classes (``~photutils.psf.DAOGroup`` and
-``~photutils.psf.DBSCANGroup``) are still available in this release, but
-are deprecated. They will be removed in a future release.
+The old source grouping classes (``DAOGroup`` and ``DBSCANGroup``)
+are still available in this release, but are deprecated. They will be
+removed in a future release.
 
 
-New ``LocalBackground`` class
------------------------------
+New ``LocalBackground`` Class
+=============================
 
 The `~photutils.background.LocalBackground` class was added to compute a
 local background using a circular annulus aperture.
 
 
-Reading and plotting Gridded PSF Models
----------------------------------------
+Reading and Plotting Gridded PSF Models
+=======================================
 
 A read method was added to the `~photutils.psf.GriddedPSFModel`
 class to read STDPSF FITS files containing grids of ePSF models. The

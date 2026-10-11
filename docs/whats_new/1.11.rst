@@ -14,8 +14,8 @@ of smaller improvements and bug fixes, which are described in the full
    :depth: 2
 
 
-``SourceFinder`` ``npixels`` tuple input
-----------------------------------------
+``SourceFinder`` ``npixels`` Tuple Input
+========================================
 
 The `~photutils.segmentation.SourceFinder` ``npixels`` keyword can now
 be a tuple corresponding to the values used for the source finder and
@@ -23,7 +23,7 @@ source deblender, respectively.
 
 
 ``GriddedPSFModel`` Memory Usage
---------------------------------
+================================
 
 The memory usage during PSF photometry when using a
 `~photutils.psf.GriddedPSFModel` PSF model has been significantly
@@ -31,8 +31,8 @@ reduced. This is especially noticeable when fitting a large number of
 stars.
 
 
-New ``IterativePSFPhotometry`` ``mode`` keyword
------------------------------------------------
+New ``IterativePSFPhotometry`` ``mode`` Keyword
+===============================================
 
 A ``mode`` keyword was added to `~photutils.psf.IterativePSFPhotometry`
 for controlling the fitting mode. The ``mode`` keyword can
@@ -48,15 +48,15 @@ the detected sources (from all previous iterations) on the original,
 unsubtracted, data. For the 'all' mode, a source grouper must be input.
 
 Initial tests indicate that the 'all' mode may give better results than
-the older 'new' method.
+the older 'new' mode.
 
 
-New ``include_localbkg`` keyword
---------------------------------
+New ``include_localbkg`` Keyword
+================================
 
 The PSF photometry ``make_model_image`` and ``make_residual_image``
-methods no longer include the local background by default, which
-causes issues if the ``psf_shape`` of sources overlap. This is
-a backwards-incompatible change. These methods now accept an
-``include_localbkg`` keyword . If the previous behavior is desired, set
+methods no longer include the local background by default. Including
+it caused issues when the ``psf_shape`` regions of sources overlapped.
+This is a backwards-incompatible change. These methods now accept an
+``include_localbkg`` keyword. If the previous behavior is desired, set
 ``include_localbkg=True``.

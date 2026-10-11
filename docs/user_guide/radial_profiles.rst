@@ -18,7 +18,7 @@ Preliminaries
 
 Let's start by making a synthetic image of a single source. Note that
 there is no background in this image. One should background-subtract the
-data before creating a radial profile or curve of growth.
+data before creating a radial profile or curve of growth::
 
     >>> import numpy as np
     >>> from astropy.modeling.models import Gaussian2D
@@ -79,7 +79,7 @@ masked pixel::
     >>> rp = RadialProfile(data, xycen, edge_radii, error=error)
 
 The output `~photutils.profiles.RadialProfile.radius` attribute values
-are defined as the arithmetic means of the input radial-bins edges
+are defined as the arithmetic means of the input radial bin edges
 (``radii``). Note that this is different from the input ``radii``, which
 are the radial bin edges rather than centers::
 
@@ -147,7 +147,7 @@ error bars:
     xycen = centroid_2dg(data)
 
     # Create the radial profile
-    edge_radii = np.arange(26)
+    edge_radii = np.arange(25)
     rp = RadialProfile(data, xycen, edge_radii, error=error)
 
     # Plot the radial profile
@@ -208,7 +208,7 @@ to set the plot label.
     xycen = centroid_2dg(data)
 
     # Create the radial profile
-    edge_radii = np.arange(26)
+    edge_radii = np.arange(25)
     rp = RadialProfile(data, xycen, edge_radii, error=error)
 
     # Plot the radial profile
@@ -245,7 +245,7 @@ instance on the data:
     xycen = centroid_2dg(data)
 
     # Create the radial profile
-    edge_radii = np.arange(26)
+    edge_radii = np.arange(25)
     rp = RadialProfile(data, xycen, edge_radii, error=error)
 
     norm = simple_norm(data, 'sqrt')
@@ -255,7 +255,7 @@ instance on the data:
     rp.apertures[10].plot(ax=ax, color='C1', lw=2)
     rp.apertures[15].plot(ax=ax, color='C3', lw=2)
 
-Fitting the profile with a 1D Gaussian or Moffat Model
+Fitting the Profile with a 1D Gaussian or Moffat Model
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The radial profile can be fitted with either a 1D Gaussian
@@ -312,7 +312,7 @@ plot both fitted models on the radial profile:
     xycen = centroid_2dg(data)
 
     # Create the radial profile
-    edge_radii = np.arange(26)
+    edge_radii = np.arange(25)
     rp = RadialProfile(data, xycen, edge_radii, error=error)
 
     # Plot the radial profile with Gaussian and Moffat fits

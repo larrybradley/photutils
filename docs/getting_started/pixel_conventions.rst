@@ -1,7 +1,8 @@
+****************************
 Pixel Coordinate Conventions
-============================
+****************************
 
-Photutils uses 0-indexed pixel coordinates, consistent with standard
+Photutils uses 0-based pixel coordinates, consistent with standard
 Python and NumPy indexing. In this convention, integer pixel coordinates
 represent the *centers* of the pixels. For example, the center of the
 first pixel is at coordinate ``0``, meaning that pixel spans the range
@@ -18,10 +19,10 @@ array axis) and ``xi`` is the column index (the second, or fast, array
 axis). It is important to note that this array indexing order (``[y,
 x]``) is the reverse of the spatial coordinate order (``(x, y)``).
 
-This 0-indexed convention differs from the `FITS WCS`_ standard, which
+This 0-based convention differs from the `FITS WCS`_ standard, which
 uses 1-based pixel coordinates. In the FITS convention, the center of
 the bottom-left pixel is ``(x, y) = (1, 1)``. Software such as `ds9`_,
-`SourceExtractor`_, and IRAF follow the FITS convention. Therefore, to
+`SourceExtractor`_, and IRAF follows the FITS convention. Therefore, to
 match coordinates from these tools with Photutils, you must subtract 1
 from their ``x`` and ``y`` coordinates.
 

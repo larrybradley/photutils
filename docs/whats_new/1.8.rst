@@ -14,7 +14,7 @@ of smaller improvements and bug fixes, which are described in the full
    :depth: 2
 
 
-API changes to ``RadialProfile`` and ``CurveOfGrowth``
+API Changes to ``RadialProfile`` and ``CurveOfGrowth``
 ======================================================
 
 The API for defining the radial bins for

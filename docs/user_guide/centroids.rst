@@ -31,7 +31,7 @@ pixels. Error arrays can be input into the two Gaussian fitting
 methods to weight the fits. Non-finite values (e.g., NaN or
 inf) in the data or error arrays are automatically masked. Note
 that because :func:`~photutils.centroids.centroid_1dg` fits the
-marginal distributions of the data, a partially-masked row or
+marginal distributions of the data, a partially masked row or
 column near the source peak can bias its result. Consider using
 :func:`~photutils.centroids.centroid_2dg`, which excludes individual
 masked pixels from the fit, when isolated masked or non-finite pixels
@@ -43,8 +43,8 @@ can be used with any of the above centroiding functions or a custom
 user-defined centroiding function.
 
 
-Centroid of single source
--------------------------
+Centroid of a Single Source
+---------------------------
 
 Let's extract a single object from a synthetic dataset and find its
 centroid with each of these methods. First, let's create the data::
@@ -164,7 +164,7 @@ near the centroids:
     ax.indicate_inset_zoom(ax2, edgecolor='white', alpha=1)
 
 
-Centroiding several sources in an image
+Centroiding Several Sources in an Image
 ---------------------------------------
 
 The :func:`~photutils.centroids.centroid_sources` function can be used

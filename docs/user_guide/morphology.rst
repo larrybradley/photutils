@@ -34,16 +34,17 @@ source). Please see :class:`~photutils.segmentation.SourceCatalog` for
 the list of the many properties that are calculated.
 
 Let's extract a single object from a synthetic dataset and calculate
-its morphological properties. For this example, we will subtract the
-background using simple sigma-clipped statistics.
+its morphological properties. For this example, we will estimate the
+background as the median of a blank region of the image.
 
-First, we create the source image and subtract its background::
+First, we create the image, subtract its background, and extract a
+cutout of the source::
 
-    >>> from astropy.stats import sigma_clipped_stats
+    >>> import numpy as np
     >>> from photutils.datasets import make_4gaussians_image
-    >>> data = make_4gaussians_image()[40:80, 75:105]
-    >>> mean, median, std = sigma_clipped_stats(data, sigma=3.0)
-    >>> data -= median  # subtract background
+    >>> data = make_4gaussians_image()
+    >>> data -= np.median(data[0:30, 0:125])  # subtract background
+    >>> data = data[40:80, 75:105]  # extract single object
 
 Then, use :func:`~photutils.morphology.data_properties` to calculate its
 properties. We define a mask to isolate the source pixels by excluding
@@ -55,7 +56,7 @@ pixels below a flux threshold::
 
 The morphological properties are stored in a scalar
 :class:`~photutils.segmentation.SourceCatalog` object, which can be
-converted to an `astropy.table.Table` object for easier access and
+converted to an `~astropy.table.QTable` object for easier access and
 display. For example, we can display the centroid, semimajor and
 semiminor axis lengths, and orientation of the source::
 
@@ -71,7 +72,7 @@ semiminor axis lengths, and orientation of the source::
     label x_centroid y_centroid semimajor_axis semiminor_axis orientation
                                      pix            pix           deg
     ----- ---------- ---------- -------------- -------------- -----------
-        1  15.020335  20.087603       5.597273       3.226091   59.689629
+        1  14.931699  19.904702       6.112748       3.475815   59.965829
 
 Now let's use the measured morphological properties to define an
 approximate isophotal ellipse for the source:
@@ -85,13 +86,11 @@ approximate isophotal ellipse for the source:
     from photutils.datasets import make_4gaussians_image
     from photutils.morphology import data_properties
 
-    slc = np.s_[40:80, 75:105]
-    data = make_4gaussians_image()[slc]  # extract single object
+    data = make_4gaussians_image()
+    data -= np.median(data[0:30, 0:125])  # subtract background
+    data = data[40:80, 75:105]  # extract single object
     mask = data < 50
     cat = data_properties(data, mask=mask)
-    columns = ['label', 'x_centroid', 'y_centroid', 'semimajor_axis',
-               'semiminor_axis', 'orientation']
-    tbl = cat.to_table(columns=columns)
     r = 2.5  # approximate isophotal extent
     xypos = (cat.x_centroid, cat.y_centroid)
     a = cat.semimajor_axis.value * r
@@ -146,7 +145,7 @@ example::
     >>> from photutils.morphology import gini
     >>> g = gini(data, mask=mask)
     >>> print(g)
-    0.21943786993407582
+    0.23039153243750068
 
 
 API Reference

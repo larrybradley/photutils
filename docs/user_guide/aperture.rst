@@ -30,7 +30,7 @@ to the :class:`~photutils.aperture.AperturePhotometry` and
     Which tool should I use?
 
     * Use :class:`~photutils.aperture.AperturePhotometry` for aperture
-      fluxes (sums), errors, areas and quality flags. The calculated
+      fluxes (sums), errors, areas, and quality flags. The calculated
       values can be accessed as class attributes or output as an Astropy
       `~astropy.table.QTable`. For aperture photometry, it is faster
       than :class:`~photutils.aperture.ApertureStats`.
@@ -294,7 +294,7 @@ here as an array of all ones::
     >>> phot = AperturePhotometry(data, aperture)
 
 The aperture fluxes, uncertainties, unmasked overlap areas, and
-quality flags are available as lazily-computed attributes (see
+quality flags are available as lazily computed attributes (see
 :attr:`~photutils.aperture.AperturePhotometry.flux`,
 :attr:`~photutils.aperture.AperturePhotometry.flux_err`,
 :attr:`~photutils.aperture.AperturePhotometry.area`, and
@@ -354,7 +354,7 @@ one of three methods:
 
 * ``'subpixel'``:
   Pixels are divided into a sub-grid of :math:`N \times N` subpixels
-  (where :math:`N` is set by the ``'subpixels'`` keyword). The pixel
+  (where :math:`N` is set by the ``subpixels`` keyword). The pixel
   weight is the fraction of subpixel centers that fall within the
   aperture.
 
@@ -444,7 +444,7 @@ pixels entirely within the aperture), and :math:`\sigma_{\mathrm{tot},
 i}` is the corresponding value from the input ``error`` array.
 
 Because the variance of each boundary pixel is weighted by its squared
-overlap fraction, the flux error depends on the sub-pixel placement of
+overlap fraction, the flux error depends on the subpixel placement of
 the aperture (note the slightly different ``'flux_err'`` values in the
 example above).
 
@@ -569,16 +569,16 @@ Aperture Photometry on a 3D Data Cube
 -------------------------------------
 
 :class:`~photutils.aperture.AperturePhotometry` operates on a single 2D
-image. To measure a source in a 3D data cube --- for example, a time
-series of images of the same field or a spectroscopic integral field
-unit (IFU) data cube --- apply the same aperture to each 2D image in the
-stack and collect the measurements into an output array or table. For a
-time series of images, these measurements form a light curve.
+image. To measure a source in a 3D data cube (e.g., a time series of
+images of the same field or a spectroscopic integral field unit (IFU)
+data cube), apply the same aperture to each 2D image in the stack and
+collect the measurements into an output array or table. For a time
+series of images, these measurements form a light curve.
 
 Here we create a small stack of five images in which a single source
 varies in brightness from frame to frame, and measure its flux and
 uncertainty in each frame using the same circular aperture. Build the
-list of result objects first (a single photometry pass per frame), then
+list of results objects first (a single photometry pass per frame), then
 read as many attributes as needed::
 
     >>> import numpy as np
@@ -606,7 +606,7 @@ object, or build a table per frame with
 
 
 Masking Pixels in Aperture Photometry
---------------------------------------
+-------------------------------------
 
 Masking Bad Pixels
 ^^^^^^^^^^^^^^^^^^
@@ -757,7 +757,7 @@ extends beyond the data edge and also contains a masked pixel has
 For example::
 
     >>> import numpy as np
-    >>> from photutils.aperture import (AperturePhotometry,
+    >>> from photutils.aperture import (AperturePhotometry, CircularAperture,
     ...                                 decode_aperture_flags)
     >>> data = np.ones((25, 25))
     >>> mask = np.zeros(data.shape, dtype=bool)
@@ -826,8 +826,10 @@ properties were accessed first.
 Because non-finite values are automatically masked in
 both :class:`~photutils.aperture.AperturePhotometry` and
 :class:`~photutils.aperture.ApertureStats`, an aperture that contains
-only non-finite values will have ``flags = 48`` (``'non_finite_data'`` +
-``'all_masked'``).
+only non-finite values will have ``flags = 272`` (``'non_finite_data'``
++ ``'all_masked'``) in :class:`~photutils.aperture.AperturePhotometry`.
+:class:`~photutils.aperture.ApertureStats` also sets
+``'undefined_shape'``, giving ``flags = 4368``.
 
 
 .. _photutils-aperture-stats:
@@ -1050,7 +1052,7 @@ annuli (red) overlaid on a cutout containing the three sources:
               handles=handles, prop={'weight': 'bold', 'size': 11})
 
 
-Simple mean within a circular annulus
+Simple Mean within a Circular Annulus
 """""""""""""""""""""""""""""""""""""
 
 We first use the :class:`~photutils.aperture.ApertureStats` class to
@@ -1099,9 +1101,8 @@ gives the background-subtracted photometry::
 
     >>> phot_bkgsub = phot_table['flux'] - total_bkg
 
-Finally, we add the local background estimate, the total background
-within the aperture, and the background-subtracted photometry to the
-output table::
+Finally, we add the total background within the aperture and the
+background-subtracted photometry to the output table::
 
     >>> phot_table['total_bkg'] = total_bkg
     >>> phot_table['flux_bkgsub'] = phot_bkgsub
@@ -1116,7 +1117,7 @@ output table::
       3     48.3    200.3 1299.6341 0.85681906 78.539816     0 382.40618   917.22792
 
 
-Sigma-clipped median within a circular annulus
+Sigma-Clipped Median within a Circular Annulus
 """"""""""""""""""""""""""""""""""""""""""""""
 
 In this example, the local background is estimated as the
@@ -1250,8 +1251,8 @@ method:
     ax.imshow(masks[0].multiply(data), origin='lower')
 
 
-To obtain a one-dimensional `~numpy.ndarray` containing
-the non-zero, mask-weighted data values, use the
+To obtain a one-dimensional `~numpy.ndarray` containing the
+mask-weighted data values of the pixels with nonzero mask weight, use the
 :meth:`~photutils.aperture.ApertureMask.get_values` method:
 
 .. doctest-skip::

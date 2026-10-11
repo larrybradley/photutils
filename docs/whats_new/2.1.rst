@@ -17,7 +17,7 @@ smaller improvements and bug fixes, which are described in the full
 
 
 Aperture Photometry Output Table
---------------------------------
+================================
 
 The ``aperture_photometry`` output table will now include a
 ``sky_center`` column if ``wcs`` is input, even if the input aperture is
@@ -29,7 +29,7 @@ with other tools in Photutils.
 
 
 Deblended Labels Mapping in Segmentation Image
-----------------------------------------------
+==============================================
 
 The ``SegmentationImage`` class now includes properties to identify and
 map any deblended labels. The ``deblended_labels`` property returns a
@@ -40,7 +40,7 @@ the parent labels to the deblended labels.
 
 
 Star Finder Limits API Change
------------------------------
+=============================
 
 Detected sources that match interval ends for sharpness, roundness, and
 maximum peak values (``sharplo``, ``sharphi``, ``roundlo``, ``roundhi``,
@@ -51,14 +51,14 @@ in the returned table of detected sources by ``StarFinder``.
 
 
 Find Peaks Border Width
------------------------
+=======================
 
 The ``find_peaks`` ``border_width`` keyword can now accept two values,
 indicating the border width along the y and x edges, respectively.
 
 
 Border Exclusion in DAOStarFinder and StarFinder
-------------------------------------------------
+================================================
 
 When ``exclude_border`` is set to ``True`` in the ``DAOStarFinder`` and
 ``StarFinder`` classes, the excluded border region can now be different
@@ -66,7 +66,7 @@ along the x and y edges if the kernel shape is rectangular.
 
 
 Gini Coefficient Mask
----------------------
+=====================
 
 An optional ``mask`` keyword was added to the ``gini`` function to allow
 for the exclusion of certain pixels from the calculation of the Gini
@@ -76,8 +76,8 @@ Also, the ``gini`` function now returns zero instead of NaN if the
 (unmasked) data values sum to zero.
 
 
-New params_map keyword in make_model_image
-------------------------------------------
+New params_map Keyword in make_model_image
+==========================================
 
 An optional ``params_map`` keyword was added to ``make_model_image`` to
 allow a custom mapping between model parameter names and column names
@@ -85,7 +85,7 @@ in the parameter table.
 
 
 Improved GriddedPSFModel Plots
-------------------------------
+==============================
 
 The ``'viridis'`` color map is now the default in the
 ``GriddedPSFModel`` ``plot_grid`` method when ``deltas=True``.

@@ -129,21 +129,22 @@ Use `~photutils.psf_matching.make_wiener_kernel` when:
 
 
 PSF Requirements and Preparation
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The input source and target PSFs must satisfy these requirements:
 
 * **Same shape and pixel scale**: Both PSFs must be 2D arrays with
-  identical shapes and pixel scales. If your PSFs have different shapes
-  or pixel scales, use the :func:`~photutils.psf_matching.resize_psf`
-  function to resample one PSF to match the other. This function uses
-  spline interpolation and preserves the total flux.
+  identical shapes and pixel scales. If your PSFs have different pixel
+  scales, use the :func:`~photutils.psf_matching.resize_psf` function
+  to resample one PSF to the pixel scale of the other. This function
+  uses spline interpolation and preserves the total flux. The two PSFs
+  may then still need to be cropped or padded to a common shape.
 
-* **Odd dimensions**: PSF arrays should have odd dimensions in both axes
+* **Odd dimensions**: PSF arrays must have odd dimensions in both axes
   to ensure a well-defined center point.
 
-* **Normalized**: PSF arrays should be normalized so that the sum of all
-  pixels equals 1.
+* **Nonzero sum**: The PSF arrays are normalized internally so that the
+  sum of all pixels equals 1, so they must have a nonzero sum.
 
 * **Centered** (recommended but not required): The peak of the PSF
   should be at the center of the array.
@@ -185,7 +186,7 @@ central point is then the PSF at the pixel scale of the image.
 
 
 Noiseless Gaussian Example
----------------------------
+--------------------------
 
 For this first simple example, let's assume our source and target PSFs
 are noiseless 2D Gaussians. The "high-resolution" PSF will be a Gaussian
@@ -260,13 +261,16 @@ we show 1D cuts across the center of the kernel images to confirm:
 
     import matplotlib.pyplot as plt
     import numpy as np
-    from photutils.psf import CircularGaussianSigmaPRF
+    from astropy.stats import gaussian_sigma_to_fwhm
+    from photutils.psf import CircularGaussianPSF, CircularGaussianSigmaPRF
     from photutils.psf_matching import make_kernel, make_wiener_kernel
 
     yy, xx = np.mgrid[0:51, 0:51]
     gm1 = CircularGaussianSigmaPRF(flux=1, x_0=25, y_0=25, sigma=3)
     gm2 = CircularGaussianSigmaPRF(flux=1, x_0=25, y_0=25, sigma=5)
-    gm3 = CircularGaussianSigmaPRF(flux=1, x_0=25, y_0=25, sigma=4)
+    # The kernel is a Gaussian sampled at the pixel centers
+    gm3 = CircularGaussianPSF(flux=1, x_0=25, y_0=25,
+                              fwhm=4 * gaussian_sigma_to_fwhm)
     psf1 = gm1(xx, yy)
     psf2 = gm2(xx, yy)
     psf3 = gm3(xx, yy)
@@ -303,7 +307,7 @@ these artifacts. Both :func:`~photutils.psf_matching.make_kernel` and
 ``window`` parameter.
 
 A window function multiplies the Fourier ratio by a smooth,
-radially-symmetric 2D filter that equals 1.0 in the central
+radially symmetric 2D filter that equals 1.0 in the central
 low-frequency region and falls to 0.0 at the edges. This filters out
 high spatial frequencies where the signal-to-noise ratio is poorest.
 The trade-off is that tapering removes some real information along
@@ -312,9 +316,9 @@ suppression against fidelity. A window is generally less critical for
 `~photutils.psf_matching.make_wiener_kernel` because the regularization
 itself suppresses high-frequency noise.
 
-``photutils.psf_matching`` provides five built-in window classes. They
-are all subclasses of `~photutils.psf_matching.SplitCosineBellWindow`,
-which is parameterized by two values:
+``photutils.psf_matching`` provides five built-in window classes.
+`~photutils.psf_matching.SplitCosineBellWindow` is the base class of the
+other four and is parameterized by two values:
 
 * ``alpha``: the fraction of the array radius over which the taper
   occurs (the cosine transition region).
@@ -325,7 +329,7 @@ The different window classes set these parameters in specific ways,
 offering different levels of convenience and control.
 
 `~photutils.psf_matching.SplitCosineBellWindow`
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The split cosine bell is the most general window, taking both ``alpha``
 and ``beta`` as independent parameters. The window equals 1.0 for
@@ -334,7 +338,7 @@ next ``alpha`` fraction, and is zero beyond. Use this when you need
 fine-grained control over both the preserved region and the taper width.
 
 `~photutils.psf_matching.TukeyWindow`
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The `Tukey window
 <https://en.wikipedia.org/wiki/Window_function#Tukey_window>`_ (``beta
@@ -348,17 +352,17 @@ This window provides a good balance and is a solid general-purpose
 choice.
 
 `~photutils.psf_matching.HanningWindow`
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The `Hann window <https://en.wikipedia.org/wiki/Hann_function>`_
 (``alpha=1.0``, ``beta=0.0``) is a raised cosine that equals 1.0 only at
 the exact center and smoothly tapers to zero at the edges. The entire
-array is tapered. This provides the strongest sidelobe suppression in
-Fourier space, at the cost of attenuating most of the data. Use this
-when edge artifacts and ringing are a primary concern.
+array is tapered. This provides the strongest suppression of ringing
+in the matching kernel, at the cost of attenuating most of the data.
+Use this when edge artifacts and ringing are a primary concern.
 
 `~photutils.psf_matching.CosineBellWindow`
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The cosine bell window (``alpha=alpha``, ``beta=0.0``) equals 1.0 at
 the center and begins tapering immediately outward using a cosine
@@ -370,14 +374,15 @@ cosine bell has no flat plateau, so the taper starts closer to the
 center.
 
 `~photutils.psf_matching.TopHatWindow`
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The top hat window (``alpha=0.0``, ``beta=beta``) equals 1.0 inside
 a circular region and drops sharply to 0.0 outside with no smooth
 transition. This preserves all data within the cutoff radius but the
-sharp edge creates strong ringing artifacts in Fourier space. For most
-PSF matching applications, `~photutils.psf_matching.TukeyWindow` is
-generally preferred over this window.
+sharp edge creates strong ringing artifacts in the matching kernel.
+For most PSF matching applications,
+`~photutils.psf_matching.TukeyWindow` is generally preferred over this
+window.
 
 Custom Window Functions
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -393,7 +398,7 @@ and 0.0 indicates complete suppression. The window should be radially
 symmetric and centered on the array.
 
 Example Window Function Plots
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Here are plots of 1D cuts across the center of each 2D window function
 defined above:
@@ -490,10 +495,11 @@ Let's display the images:
     fig.tight_layout()
 
 Note that these Spitzer/IRAC channel 1 and 4 PSFs have the same
-shape and pixel scale. If that is not the case, one can use the
-:func:`~photutils.psf_matching.resize_psf` convenience function
-to resize a PSF image. Typically, one would interpolate the
-lower-resolution PSF to the same size as the higher-resolution PSF.
+shape and pixel scale. If the pixel scales differ, one can use the
+:func:`~photutils.psf_matching.resize_psf` convenience function to
+resample a PSF image. Typically, one would interpolate the
+lower-resolution PSF to the same pixel scale as the higher-resolution
+PSF. The PSFs may then need to be cropped or padded to a common shape.
 
 For real-world PSFs like these, applying a window function is
 recommended for :func:`~photutils.psf_matching.make_kernel` to

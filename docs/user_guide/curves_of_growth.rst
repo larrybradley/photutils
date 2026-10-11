@@ -1,7 +1,7 @@
 .. _curves_of_growth:
 
 Curves of Growth (`photutils.profiles`)
-========================================
+=======================================
 
 Introduction
 ------------
@@ -18,7 +18,7 @@ Preliminaries
 
 Let's start by making a synthetic image of a single source. Note that
 there is no background in this image. One should background-subtract the
-data before creating a radial profile or curve of growth.
+data before creating a radial profile or curve of growth::
 
     >>> import numpy as np
     >>> from astropy.modeling.models import Gaussian2D
@@ -107,11 +107,10 @@ profile and propagated errors::
 Normalization
 ^^^^^^^^^^^^^
 
-Typically, the normalized curve of growth is of interest, where
-the profile is scaled so that its maximum value is 1 at the
-largest input "radii" value. This normalization is commonly
-used to calculate the encircled energy fraction at a specific
-radius. The curve-of-growth profile can be normalized using the
+Typically, the normalized curve of growth is of interest, where the
+profile is scaled so that its maximum value is 1. This normalization
+is commonly used to calculate the encircled energy fraction at a
+specific radius. The curve-of-growth profile can be normalized using the
 :meth:`~photutils.profiles.CurveOfGrowth.normalize` method. By default
 (``method='max'``), the profile is normalized such that its maximum
 value is 1. Setting ``method='sum'`` can also be used to normalize the
@@ -223,8 +222,7 @@ the value of the curve of growth at a given radius. To achieve this, one
 can input a normalized version of the ``data`` array (e.g., a normalized
 PSF) to the `~photutils.profiles.CurveOfGrowth` class. One can also
 use the :meth:`~photutils.profiles.CurveOfGrowth.normalize` method to
-normalize the curve of growth profile to be 1 at the largest input
-``radii`` value.
+normalize the curve-of-growth profile so that its maximum value is 1.
 
 If the curve of growth is normalized, the encircled energy at
 a given radius is simply the value of the curve of growth at
@@ -306,7 +304,7 @@ Creating an Ensquared Curve of Growth
 In addition to the encircled (circular) curve of growth, one can also
 compute an ensquared curve of growth using concentric square apertures.
 This is done using the `~photutils.profiles.EnsquaredCurveOfGrowth`
-class, which accepts ``half_sizes`` (the half side lengths of the square
+class, which accepts ``half_sizes`` (the half-side lengths of the square
 apertures) instead of ``radii``. The full side length of each square
 aperture is ``2 * half_sizes``.
 
@@ -317,7 +315,7 @@ above::
     >>> half_sizes = np.arange(1, 26)
     >>> ecog = EnsquaredCurveOfGrowth(data, xycen, half_sizes, error=error)
 
-The ensquared curve of growth profile represents the total flux within
+The ensquared curve-of-growth profile represents the total flux within
 the square aperture as a function of the square half-size::
 
     >>> print(ecog.half_size)
@@ -520,7 +518,7 @@ with an axis ratio of 0.5 and a rotation angle of 42 degrees::
     >>> ecog = EllipticalCurveOfGrowth(data, xycen, radii, axis_ratio=0.5,
     ...                                theta=np.deg2rad(42), error=error)
 
-The elliptical curve of growth profile represents the total flux within
+The elliptical curve-of-growth profile represents the total flux within
 the elliptical aperture as a function of semimajor-axis length::
 
     >>> print(ecog.radius)

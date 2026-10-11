@@ -14,16 +14,16 @@ of smaller improvements and bug fixes, which are described in the full
    :depth: 2
 
 
-New centroids available in SourceCatalog
+New Centroids Available in SourceCatalog
 ========================================
 
 New centroids were added to the
 :class:`~photutils.segmentation.SourceCatalog` class, including
-iteratively-calculated "windowed" centroids and centroids calculated by
+iteratively calculated "windowed" centroids and centroids calculated by
 fitting a 2D quadratic polynomial to the unmasked pixels in the source
 segment.
 
-The "windowed" centroids are equivalent the SourceExtractors
+The "windowed" centroids are equivalent to the SourceExtractor
 ``XWIN_IMAGE`` and ``YWIN_IMAGE`` parameters. The new "windowed"
 centroid properties are:
 
@@ -52,7 +52,7 @@ objects can now be sliced in x and y, generating a new
 :class:`~photutils.segmentation.SegmentationImage` object.
 
 
-New ImageDepth class
+New ImageDepth Class
 ====================
 
 A new :class:`~photutils.utils.ImageDepth` class was added to compute
@@ -66,10 +66,10 @@ The :class:`~photutils.aperture.ApertureStats` class now accepts
 `~astropy.nddata.NDData` objects as input.
 
 
-Progress Bars in SourceCatalog and PSF fitting
+Progress Bars in SourceCatalog and PSF Fitting
 ==============================================
 
-An ``progress_bar`` keyword option was added to
+A ``progress_bar`` keyword option was added to
 `~photutils.segmentation.SourceCatalog` to enable progress bars when
 calculating some properties (e.g., ``kron_radius``, ``kron_flux``,
 ``fluxfrac_radius``, ``circular_photometry``, ``centroid_win``,
@@ -83,7 +83,7 @@ The progress bars require installation of the `tqdm
 <https://tqdm.github.io/>`_ optional dependency.
 
 
-New subshape keyword in PSF fitting
+New subshape Keyword in PSF Fitting
 ===================================
 
 A new ``subshape`` keyword was added to the PSF-fitting classes to

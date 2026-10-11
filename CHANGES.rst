@@ -20,7 +20,8 @@ General
 
 - The minimum required tqdm is now 4.67. [#2266]
 
-- The ``asdf-astropy`` package is now an optional dependency. [#2211]
+- The ``asdf`` and ``asdf-astropy`` packages are now optional
+  dependencies. [#2211]
 
 - The ``pytest-astropy`` package is no longer required to run the test
   suite. The ``test`` extra now lists the individual pytest plugins.
@@ -33,19 +34,15 @@ General
   the Brent root finder is used by the compiled code that computes the
   ``SourceCatalog`` flux radii. [#2406]
 
-- Added serialization to ASDF for all PSF models. [#2335]
-
-- Added serialization to ASDF for all apertures. [#2341]
-
-- All lazily-computed class attributes now use
+- All lazily computed class attributes now use
   ``functools.cached_property`` instead of the astropy ``lazyproperty``
   decorator. [#2366]
 
 New Features
 ^^^^^^^^^^^^
 
-- Added an ASDF extension to provide converters for photutils aperture
-  and PSF classes. [#2211]
+- Added an ASDF extension with converters to serialize all photutils
+  apertures and PSF models. [#2211, #2335, #2341]
 
 - ``photutils.aperture``
 
@@ -66,7 +63,7 @@ New Features
 
   - Significantly improved the performance of aperture photometry,
     typically by factors of ~2-25 depending on the aperture shape and
-    overlap method by computing all sources in a single call into
+    overlap method, by computing all sources in a single call into
     compiled code. The computation also releases the GIL and uses no
     global state, so aperture photometry can now be parallelized across
     threads, including on free-threaded Python builds. [#2292, #2441,
@@ -91,7 +88,7 @@ New Features
 
   - Significantly improved the performance of ``ApertureStats``,
     typically by factors of ~5-15 depending on the requested
-    properties by computing all sources in a single call into compiled
+    properties, by computing all sources in a single call into compiled
     code. Sigma-clipped statistics are also computed in compiled code
     for the common ``SigmaClip`` configurations. [#2314, #2446]
 
@@ -161,9 +158,9 @@ New Features
   - The ``Background2D`` ``n_threads`` keyword also multithreads
     the interpolation of the low-resolution meshes to the full-size maps
     returned by the ``background`` and ``background_rms`` properties
-    (for the 'reflect' and 'mirror' interpolation boundary modes). The
-    multithreaded maps are identical to the single-threaded maps up to
-    floating-point rounding. [#2365]
+    (for the 'reflect' and 'mirror' interpolation boundary modes, with
+    SciPy 1.16 or later). The multithreaded maps are identical to the
+    single-threaded maps up to floating-point rounding. [#2365]
 
   - Significantly improved the performance of ``Background2D`` by
     computing the sigma clipping and the box statistics in a
@@ -196,8 +193,9 @@ New Features
 
   - Added a ``centroid_symmetry`` function that calculates the center
     of a source as its point of maximal point symmetry. It is the
-    default ``recentering_func`` of ``EPSFBuilder``, which centers an
-    ePSF on its core instead of its center of mass. [#2475, #2488]
+    default ``recentering_func`` of ``EPSFBuilder``, which centers
+    an ePSF on its core instead of its center of mass. [#2475, #2487,
+    #2488]
 
 - ``photutils.detection``
 
@@ -229,7 +227,7 @@ New Features
     one area calculation per radius. Profile construction is now ~3x
     faster. [#2371]
 
-  - The profile classes are now thread-safe. All lazily-computed
+  - The profile classes are now thread-safe. All lazily computed
     attributes cache raw (unnormalized) values that are immutable
     once computed. [#2371]
 
@@ -255,8 +253,8 @@ New Features
     spline on the model before copying it, so that the copies share
     the spline instead of each building their own. ``PSFPhotometry``
     and ``IterativePSFPhotometry`` copy the model for every source and
-    rebuilt the spline each time. PSF photometry with a 361 x 361
-    pixel PSF image is ~6x faster. [#2456]
+    previously rebuilt the spline each time. PSF photometry with a
+    361 x 361 pixel PSF image is ~6x faster. [#2456]
 
   - Added a ``STDPSFGrid.grid_shape`` property returning the ``(ny,
     nx)`` shape of the ePSF grid. [#2347]
@@ -325,10 +323,11 @@ New Features
     with a period of one detector pixel or shorter. The keyword sets
     the highest spatial frequency that the filter leaves unchanged,
     in cycles per detector pixel, which corresponds to a period of
-    ``1 / alias_passband`` detector pixels. A value of 0.85 or 0.9
-    recovers the peak of the ePSF of a strongly undersampled detector,
-    0.7 rejects more noise for better-sampled data, and `None` turns the
-    filter off. [#2465]
+    ``1 / alias_passband`` detector pixels. The default of ``'auto'``
+    uses 0.8 (0.7 for an oversampling factor of 2). A value of 0.85
+    or 0.9 recovers the peak of the ePSF of a strongly undersampled
+    detector, 0.7 rejects more noise for better-sampled data, and `None`
+    turns the filter off. [#2465]
 
   - Added a ``refinement_iters`` keyword to ``EPSFBuilder`` (default
     5). After the building iterations, the ePSF is refined for an
@@ -449,11 +448,11 @@ New Features
     ``segment_flux``, ``segment_area``, ``area``, and ``min_value``),
     and the positions of the minimum and maximum pixel values (e.g.,
     ``min_value_index`` and ``max_value_xindex``),
-    typically by factors of ~3-20 depending on the property by
+    typically by factors of ~3-20 depending on the property, by
     computing all sources in a single call into compiled code. The
     ``flags`` attribute and the default ``to_table()`` output are about
     5 times faster for large catalogs. No property displays a progress
-    bar any more (see the ``progress_bar`` deprecation under API
+    bar anymore (see the ``progress_bar`` deprecation under API
     Changes). [#2406, #2446, #2447]
 
   - Added an ``n_threads`` keyword to ``SourceCatalog`` to compute
@@ -496,7 +495,7 @@ New Features
     ``float32`` or ``float64`` dtype. [#2446]
 
   - Added ``centroid_win_fallback`` and ``centroid_quad_fallback``
-    boolean properties to ``SourceCatalog`` that are ``True`` where the
+    boolean properties to ``SourceCatalog`` that are `True` where the
     windowed or quadratic centroid was substituted by the isophotal
     centroid or peak pixel, or the value is NaN. [#2450]
 
@@ -588,7 +587,7 @@ Bug Fixes
     invariant. [#2362]
 
   - Fixed a thread-safety issue in ``ApertureStats`` by using a copy of
-    the user's SigmaClip instance. [#2364]
+    the user's ``SigmaClip`` instance. [#2364]
 
   - Fixed the aperture photometry flux error propagation so that each
     pixel variance is weighted by the squared aperture overlap
@@ -672,7 +671,7 @@ Bug Fixes
 
 - ``photutils.isophote``
 
-  - Changed ``bool`` to ``bint`` in ``ellipse_model.pyx`` to fix a
+  - Changed ``bool`` to ``bint`` in ``_ellipse_model.pyx`` to fix a
     compilation issue with Cython 3.1.x. [#2260]
 
   - Fixed spurious NumPy "Mean of empty slice" and related warnings
@@ -764,7 +763,7 @@ Bug Fixes
     from a ``Table`` instead of a ``QTable``) is now converted to the
     data unit instead of raising an error claiming the column has no
     units. The error message for a truly unitless column now suggests
-    using a Quantity column. [#2384]
+    using a ``Quantity`` column. [#2384]
 
   - Fixed a bug where ``EPSFBuilder`` rejected all ``LinkedEPSFStar``
     inputs as invalid stars, a regression introduced in version 3.0.
@@ -864,7 +863,7 @@ Bug Fixes
   - Fixed ``stdpsf_reader`` and ``STDPSFGrid`` to accept an
     already-open ``astropy.io.fits.HDUList`` or file object. Such
     inputs were previously accepted by the low-level reader but then
-    raised a ``TypeError`` when parsing the metadata. [#2388]
+    raised a ``TypeError`` when parsing the metadata. [#2347, #2388]
 
   - Fixed ``webbpsf_reader`` to correctly read files containing a
     single 2D PSF. The data was previously reshaped with the new axis
@@ -953,10 +952,10 @@ Bug Fixes
     pixels remained or all valid pixels were collinear.
     Nearest-neighbor interpolation is now used as a fallback. [#2395]
 
-  - Fixed a bug where the ``near_bound`` flag (bit 32) was only set
-    for bounds applied via the ``xy_bounds`` keyword. The flag is now
-    set when any fitted parameter is very close to its bounds,
-    including bounds set directly on the PSF model. [#2395]
+  - Fixed a bug where the ``parameter_near_bound`` flag (bit 32) was
+    only set for bounds applied via the ``xy_bounds`` keyword. The
+    flag is now set when any fitted parameter is very close to its
+    bounds, including bounds set directly on the PSF model. [#2395]
 
   - ``AiryDiskPSF`` now evaluates to zero at infinite radial
     distance, matching the other PSF models. Previously, it returned
@@ -980,7 +979,7 @@ Bug Fixes
 
   - Fixed the ``filter`` metadata parsed from the filename when reading
     a gzipped STDPSF file (e.g., ``.fits.gz``). The file extension was
-    not removed, so the filter name included the extension. [#2346]
+    not removed, so the filter name included the extension. [#2347]
 
   - Fixed ``webbpsf_reader`` to swap the ``DET_YX{i}`` FITS header
     values when defining ``grid_xypos``. The reference ePSFs were
@@ -991,10 +990,6 @@ Bug Fixes
     its full range. Previously the colormap was indexed by the group
     number, which gave nearly identical colors for every group (and
     raised an ``IndexError`` for more than 256 groups). [#2347]
-
-  - Fixed reading a STDPSF file from an already-open
-    ``astropy.io.fits.HDUList``. Such input was accepted but then
-    raised a ``TypeError``. [#2347]
 
   - Fixed the ``plot_grid`` title when the instrument, detector, or
     filter metadata is missing. The missing values left stray spaces in
@@ -1118,7 +1113,7 @@ Bug Fixes
 - ``photutils.utils``
 
   - Fixed a thread-safety issue in ``ImageDepth`` by using a copy of the
-    user's SigmaClip instance. [#2364]
+    user's ``SigmaClip`` instance. [#2364]
 
   - Fixed ``ImageDepth`` so that repeated calls on the same instance
     no longer accumulate the ``fluxes`` attribute across calls. The
@@ -1131,17 +1126,17 @@ Bug Fixes
   - The local WCS Jacobians and pixel scales used by the aperture
     ``to_sky`` and ``to_pixel`` methods and by the ``SourceCatalog`` sky
     position errors are now computed with central finite differences
-    (half a pixel either side of the position) instead of one-sided
+    (half a pixel on either side of the position) instead of one-sided
     1-pixel differences. [#2425]
 
   - The WCS helper functions now evaluate a ``gwcs`` transform with its
     bounding box disabled. Previously, sources within half a pixel of
     the array edge received NaN Jacobians and pixel scales because the
     finite-difference offsets fell outside the bounding box. [#2425]
+
   - Fixed ``CutoutImage`` raising a ``ValueError`` instead of a
     ``NoOverlapError`` when ``shape`` is a NumPy array and the cutout
     ends exactly at the lower edge of the data. [#2484]
-
 
 API Changes
 ^^^^^^^^^^^
@@ -1197,8 +1192,8 @@ API Changes
     and back returns the original radius. Previously, a distorted WCS
     or a ``gwcs`` used the arithmetic mean of the singular values, and
     an undistorted ``astropy.wcs.WCS`` used the geometric mean of the x
-    and y pixel scales. The radii are unchanged for undistorted WCS with
-    orthogonal pixel axes. [#2425]
+    and y pixel scales. The radii are unchanged for an undistorted WCS
+    with orthogonal pixel axes. [#2425]
 
   - The ``ApertureStats`` ``covariance`` is now regularized by raising
     each eigenvalue to at least ``1/12`` pixel**2 instead of adding
@@ -1240,7 +1235,7 @@ API Changes
 
   - The ``make_model_params`` output table now includes the creation
     date and photutils version metadata, consistent with
-    ``make_random_models_table``. [#2384]
+    ``make_random_models_table``. [#2374]
 
 - ``photutils.detection``
 
@@ -1317,7 +1312,7 @@ API Changes
 
   - The ``EPSFBuildResult`` class returned by ``EPSFBuilder`` has been
     renamed to ``EPSFBuildResults``. The old ``EPSFBuildResult`` name is
-    deprecated and will be removed in a future version. [#2326]
+    deprecated and will be removed in version 4.0. [#2326]
 
   - The default convergence criterion of ``EPSFBuilder`` has changed.
     The build now converges when at least 95% of the successfully
@@ -1340,7 +1335,8 @@ API Changes
     been removed from the ``STDPSFGrid`` ``meta`` dictionary. The
     ``meta`` dictionary now contains only the metadata parsed from the
     filename (e.g., ``STDPSF``, ``detector``, and ``filter``). Use the
-    ``grid_xypos`` and ``oversampling`` attributes instead. [#2344]
+    ``grid_xypos``, ``oversampling``, and ``grid_shape`` attributes
+    instead. [#2344]
 
   - The ``STDPSFGrid`` ``grid_xypos`` attribute is now a ``numpy``
     array instead of a list, matching the ``GriddedPSFModel``
@@ -1375,9 +1371,9 @@ API Changes
   - The ``mask`` and ``error`` keywords of ``PSFPhotometry`` and
     ``IterativePSFPhotometry`` now raise a ``ValueError`` when the
     input data is an ``NDData`` instance. Previously, they were
-    silently ignored in favor of the ``NDData`` attributes. NDData
-    input is now also documented in the ``__call__`` docstrings.
-    [#2395]
+    silently ignored in favor of the ``NDData`` attributes.
+    ``NDData`` input is now also documented in the ``__call__``
+    docstrings. [#2395]
 
   - The error message raised for non-positive or non-finite ``error``
     values within a fit region now includes the location of the fit
@@ -1435,7 +1431,7 @@ API Changes
 
   - The conditions for the ``SourceCatalog`` ``centroid_win`` fallback
     to the isophotal centroid have been expanded. The windowed centroid
-    is reset when it diverged far from the isophotal centroid and
+    is reset when it has diverged far from the isophotal centroid and
     lies outside the 1-sigma ellipse, the total weighted flux is
     non-positive, the windowed second-order moments are negative, or the
     windowed covariance determinant is negative. Previously, only the
@@ -1925,7 +1921,7 @@ API Changes
     ``Ellipse.fit_isophote``, and ``EllipseSample`` has been renamed to
     ``n_clip``. The old name is deprecated. [#2241]
 
-  - The ``Isophote`` and ``IsophotList`` ``niter``, ``ndata``, and
+  - The ``Isophote`` and ``IsophoteList`` ``niter``, ``ndata``, and
     ``nflag`` attributes have been renamed to ``n_iter``, ``n_data``, and
     ``n_flag``, respectively. The old names are deprecated. [#2241]
 
@@ -2197,6 +2193,13 @@ New Features
     eliminates recursion limits and significantly reduces memory usage
     for large groups. [#2100]
 
+  - Added a ``decode_psf_flags`` utility function for decoding PSF
+    photometry bit flags. [#2090]
+
+  - Added a ``PSF_FLAGS`` object to hold all PSF photometry bit flags in
+    one place. PSF_FLAGS provides readable, named constants for each bit
+    flag and helper utilities for decoding bit flags. [#2091]
+
 - ``photutils.segmentation``
 
   - An optional ``array`` keyword was added to the ``SourceCatalog``
@@ -2204,13 +2207,6 @@ New Features
 
   - Added a ``group`` keyword to the ``SegmentationImage``
     ``to_regions`` method. [#2060, #2065]
-
-  - Added a ``decode_psf_flags`` utility function for decoding PSF
-    photometry bit flags. [#2090]
-
-  - Added a ``PSF_FLAGS`` object to hold all PSF photometry bit flags in
-    one place. PSF_FLAGS provides readable, named constants for each bit
-    flag and helper utilities for decoding bit flags. [#2091]
 
 Bug Fixes
 ^^^^^^^^^
@@ -2287,8 +2283,8 @@ API Changes
   - The ``GriddedPSFModel`` ``data`` and ``grid_xypos`` attributes are
     now read-only. [#2036]
 
-  - The ``PSFPhotometry`` ``fit_param`` attribute is now deprecated. Use
-    the new ``results_to_init_params`` method instead. [#2084]
+  - The ``PSFPhotometry`` ``fit_params`` attribute is now deprecated. Use
+    the ``results`` attribute instead. [#2084]
 
   - The deprecated ``PSFPhotometry`` ``fit_results`` attribute has been
     removed. [#2084]
@@ -2738,7 +2734,7 @@ API Changes
     ``image_models`` and ``gridded_models``, respectively. [#1838]
 
   - The ``IntegratedGaussianPRF`` model class has been renamed to
-    ``CircularGaussianPRF``. ``IntegratedGaussianPRF`` is now
+    ``CircularGaussianSigmaPRF``. ``IntegratedGaussianPRF`` is now
     deprecated. [#1845]
 
   - Some PSF tools have moved to new modules. The ``PRFAdapter``
@@ -2779,14 +2775,14 @@ API Changes
 - ``photutils.segmentation``
 
   - The ``SegmentationImage`` ``relabel_consecutive``,
-    ``resassign_label(s)``, ``keep_label(s)``, ``remove_label(s)``,
+    ``reassign_label(s)``, ``keep_label(s)``, ``remove_label(s)``,
     ``remove_border_labels``, and ``remove_masked_labels`` methods now
     keep the original dtype of the segmentation image instead of always
     changing it to ``int`` (``int64``). [#1878, #1923]
 
   - The ``detect_sources`` and ``deblend_sources`` functions now return
     a ``SegmentationImage`` instance whose data dtype is ``np.int32``
-    instead of ``int`` (``int64``) unless more than (2**32 - 1) labels
+    instead of ``int`` (``int64``) unless more than (2**31 - 1) labels
     are needed. [#1878]
 
 
@@ -2919,21 +2915,21 @@ API Changes
     values differ. [#1760]
 
   - The ``make_gaussian_prf_sources_image`` function is now
-    deprecated. Use the ``make_model_psf_image`` function or the new
+    deprecated. Use the ``make_psf_model_image`` function or the new
     ``make_model_image`` function instead. [#1762]
 
-  - The ``make_gaussian_sources_table`` function now includes an "id"
+  - The ``make_random_gaussians_table`` function now includes an "id"
     column and always returns both ``'flux'`` and ``'amplitude'`` columns.
     [#1763]
 
-  - The ``make_model_sources_table`` function now includes an "id"
+  - The ``make_random_models_table`` function now includes an "id"
     column. [#1764]
 
-  - The ``make_gaussian_sources_table`` function is now deprecated.
-    Use the ``make_model_sources_table`` function instead. [#1764]
+  - The ``make_random_gaussians_table`` function is now deprecated.
+    Use the ``make_random_models_table`` function instead. [#1764]
 
   - The ``make_test_psf_data`` function is now deprecated. Use the new
-    ``make_model_psf_image`` function instead. [#1785]
+    ``make_psf_model_image`` function instead. [#1785]
 
 - ``photutils.detection``
 
@@ -2982,7 +2978,7 @@ API Changes
 
   - Removed the deprecated ``BasicPSFPhotometry``,
     ``IterativelySubtractedPSFPhotometry``, ``DAOPhotPSFPhotometry``,
-    ``DAOGroup``, ``DBSCANGroup``, and ``GroupStarsBase``, and
+    ``DAOGroup``, ``DBSCANGroup``, ``GroupStarsBase``, and
     ``NonNormalizable`` classes and the ``prepare_psf_model``,
     ``get_grouped_psf_model``, and ``subtract_psf`` functions. [#1774]
 

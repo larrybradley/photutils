@@ -2,8 +2,9 @@
 
 .. _importing:
 
+************************
 Importing from Photutils
-========================
+************************
 
 **Photutils** functionality is organized into subpackages that must be
 imported explicitly. Importing only the top-level ``photutils`` package

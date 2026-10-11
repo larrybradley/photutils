@@ -3755,8 +3755,8 @@ class EPSFBuilder:
 def __getattr__(name):
     # EPSFBuildResult was renamed to EPSFBuildResults in 3.1.
     if name == 'EPSFBuildResult':
-        msg = ('EPSFBuildResult is deprecated and will be removed in a '
-               'future version. Use EPSFBuildResults instead.')
+        msg = ('EPSFBuildResult is deprecated and will be removed in '
+               'version 4.0. Use EPSFBuildResults instead.')
         warnings.warn(msg, PhotutilsDeprecationWarning, stacklevel=2)
         return EPSFBuildResults
 

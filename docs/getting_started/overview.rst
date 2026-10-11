@@ -1,5 +1,6 @@
+********
 Overview
-========
+********
 
 Introduction
 ------------
@@ -42,5 +43,5 @@ The code and issue tracker are available at the following links:
 Like much astronomy software, Photutils is an evolving package. The
 developers try to maintain backwards compatibility, but at times the
 API may change if there is a benefit to doing so. If there are specific
-areas you think API stability is important, please let us know as part
-of the development process.
+areas where you think API stability is important, please let us know as
+part of the development process.

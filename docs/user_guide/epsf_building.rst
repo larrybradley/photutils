@@ -1,6 +1,6 @@
 .. _build-epsf:
 
-Building an effective Point Spread Function (ePSF)
+Building an Effective Point Spread Function (ePSF)
 ==================================================
 
 The ePSF
@@ -489,7 +489,7 @@ The fixed kernels are applied on the oversampled grid, so their physical
 width is ``5 / oversampling`` detector pixels. The 5x5 quartic kernel
 was developed for HST data with an oversampling factor of 4, where it
 is about 0.7 FWHM wide. When using a fixed kernel for an undersampled
-ePSF with fewer than about seven grid points per FWHM, the kernel lowers
+ePSF with fewer than about 7 grid points per FWHM, the kernel lowers
 the peak of the ePSF, and ``smoothing_kernel=None`` is a better choice,
 especially when the stars have high signal-to-noise. Smoothing is most
 useful for well-sampled ePSFs built from noisy or few stars.
@@ -577,8 +577,8 @@ where :math:`D` is the telescope diameter, :math:`\lambda` is the
 mean wavelength of the bandpass (in the same units as :math:`D`), and
 :math:`p` is the pixel scale in radians per pixel. A telescope transmits
 no signal above this frequency. For example, for HST (:math:`D = 2.4`
-m) WFC3/IR (0.13 arcsec per pixel) at 1.1 microns, :math:`\nu_c = 2.4
-\times 6.3 \times 10^{-7} / 1.1 \times 10^{-6} = 1.4` cycles per pixel.
+m) WFC3/IR (0.13 arcsec per pixel) at 1.1 microns, :math:`\nu_c = (2.4
+\times 6.3 \times 10^{-7}) / (1.1 \times 10^{-6}) = 1.4` cycles per pixel.
 
 .. list-table::
     :header-rows: 1
@@ -809,7 +809,7 @@ and on the systematic tests of `Godden and Blundell 2026 (RASTI
 oversampling and star-count advice updated from tests of the current
 :class:`~photutils.psf.EPSFBuilder` implementation.
 
-Choosing the oversampling factor
+Choosing the Oversampling Factor
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The ePSF is tabulated on a grid with a spacing of ``1 / oversampling``
@@ -849,7 +849,7 @@ A smaller factor that still satisfies ``oversampling >= 4 / FWHM`` saves
 run time and memory, and for well-sampled data (a FWHM of 4 pixels or
 more) it gives the same fitted positions and fluxes.
 
-Choosing the ePSF size
+Choosing the ePSF Size
 ^^^^^^^^^^^^^^^^^^^^^^
 
 The size of the ePSF is set by the size of the star cutouts, or by
@@ -868,7 +868,7 @@ ePSF is built from pixels that are dominated by the background noise.
 The fitted positions and fluxes of the stars do not depend on the ePSF
 size, because only the central pixels of each star are fitted.
 
-Choosing the star sample
+Choosing the Star Sample
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
 The noise of the ePSF falls as more stars are used. In the tests
