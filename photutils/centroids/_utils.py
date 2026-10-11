@@ -80,8 +80,8 @@ def _process_data_mask(data, mask, *, ndim=2, fill_value=np.nan):
     -------
     data : `~numpy.ndarray`
         Processed data with masked and non-finite values replaced by
-        ``fill_value``. Always returned as a plain `~numpy.ndarray`
-        (never a `~numpy.ma.MaskedArray`).
+        ``fill_value``. A `~numpy.ma.MaskedArray` input is returned as
+        a plain `~numpy.ndarray`.
     """
     data = _validate_data(data, ndim=ndim)
     is_copied = False
@@ -126,7 +126,7 @@ def _validate_gaussian_inputs(data, mask, error):
 
     Parameters
     ----------
-    data : 2D `~numpy.ndarray`
+    data : 2D array_like
         The input data array.
 
     mask : 2D bool `~numpy.ndarray` or `None`
