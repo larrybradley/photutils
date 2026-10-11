@@ -78,12 +78,14 @@ Apertures
 
 PSF Models
 
+* `~photutils.psf.AiryDiskPRF`
 * `~photutils.psf.AiryDiskPSF`
 * `~photutils.psf.CircularGaussianPRF`
 * `~photutils.psf.CircularGaussianPSF`
 * `~photutils.psf.CircularGaussianSigmaPRF`
 * `~photutils.psf.GaussianPRF`
 * `~photutils.psf.GaussianPSF`
+* `~photutils.psf.MoffatPRF`
 * `~photutils.psf.MoffatPSF`
 * `~photutils.psf.GriddedPSFModel`
 * `~photutils.psf.ImagePSF`
@@ -112,7 +114,7 @@ Photutils 3.1 introduces a new `~photutils.aperture.AperturePhotometry`
 class, which is now the recommended tool for aperture photometry.
 Like `~photutils.aperture.ApertureStats`, the data, apertures, and
 options are supplied to the constructor, and the results are exposed as
-lazily-computed attributes or as an Astropy `~astropy.table.QTable` via
+lazily computed attributes or as an Astropy `~astropy.table.QTable` via
 the ``to_table`` method::
 
     >>> import numpy as np
@@ -198,7 +200,7 @@ apertures with fewer than two unmasked pixels::
     >>> aper = CircularAperture((50, 50), r=10)
     >>> stats = ApertureStats(data, aper)
     >>> stats.mean_err
-    0.27447881801886487
+    np.float64(0.2744788180188647)
 
 
 Corrected Flux Errors for Partial Pixels
@@ -245,7 +247,7 @@ standard deviation::
     >>> aper = CircularAperture((50, 50), r=10)
     >>> stats = ApertureStats(data, aper, ddof=1)
     >>> stats.std
-    4.793566477062262
+    np.float64(4.793566477062259)
 
 The ``ddof`` keyword affects only the ``var`` and ``std`` properties.
 All other properties are unaffected, including the ``mean_err`` and
@@ -256,7 +258,7 @@ sample standard deviation regardless of the value of ``ddof``.
 .. _whatsnew-3.1-thread-safe-photometry:
 
 Thread-Safe and Free-Threading-Compatible Aperture Photometry
-==============================================================
+=============================================================
 
 The new aperture photometry implementation releases the Python global
 interpreter lock (GIL) during the computation and uses no global state,
@@ -336,10 +338,45 @@ interpreter lock (GIL), so the threads run in parallel::
     >>> data = rng.normal(100.0, 5.0, (4096, 4096))
     >>> bkg = Background2D(data, (64, 64), n_threads=8)
 
+The ``n_threads`` keyword also multithreads the interpolation of the
+low-resolution meshes to the full-size ``background`` and
+``background_rms`` maps (for the ``'reflect'`` and ``'mirror'``
+interpolation boundary modes, with SciPy 1.16 or later).
+
+`~photutils.background.Background2D` is also significantly faster when
+the ``sigma_clip``, ``bkg_estimator``, and ``bkg_rms_estimator`` inputs
+are among the standard photutils options. The sigma clipping and the
+box statistics are then computed in a single combined pass in compiled
+code. Custom estimator callables use the previous implementation and
+give the same results as before.
+
 In addition, `~photutils.background.Background2D` instances are now
 immutable after construction (aside from internal lazy-attribute
 caches), so a single instance is safe to share across threads and
 independent images can be processed concurrently.
+
+
+Faster Local Backgrounds
+========================
+
+`~photutils.background.LocalBackground` is now significantly faster
+when the ``bkg_estimator`` is a standard photutils estimator class. The
+local backgrounds for all positions are computed with the batched
+`~photutils.aperture.ApertureStats` kernels instead of a Python loop
+over the apertures. A new ``n_threads`` keyword measures the local
+backgrounds using multiple threads, with results identical to the
+single-threaded computation. `~astropy.units.Quantity` input data is
+now also supported, and the result has the same unit as the input data.
+
+
+Faster and Thread-Safe Profiles
+===============================
+
+The radial profile and curve-of-growth classes are now about 3x faster.
+The aperture photometry and unmasked areas for all radii are computed
+in a single batched `~photutils.aperture.AperturePhotometry` call
+instead of one calculation per radius. The profile classes are now also
+thread-safe.
 
 
 Faster PSF Fitting via Analytic Jacobians
@@ -370,7 +407,7 @@ step size of a finite-difference approximation.
 evaluations are now significantly faster. Both models evaluate their
 interpolating splines, and the spline derivatives of their analytic
 Jacobians, with a compiled kernel instead of separate spline calls. For
-fit regions of 5 x 5 to 25 x 25 pixels, `~photutils.psf.GriddedPSFModel`
+fit regions of 5x5 to 25x25 pixels, `~photutils.psf.GriddedPSFModel`
 evaluations are about 3 to 8 times faster and its Jacobian evaluations
 about 6 to 14 times faster. `~photutils.psf.ImagePSF` evaluations are
 about 1.2 to 3 times faster and its Jacobian evaluations about 2 to 5
@@ -612,7 +649,6 @@ Example of using the new segmentation-based masking::
     >>> segm[4:7, 4:7] = 1
     >>> segm[4:7, 7:10] = 2
     >>> segm = SegmentationImage(segm)
-    >>> labels = 1
     >>> aperture = CircularAperture((5, 5), r=4)
     >>> phot = AperturePhotometry(data, aperture, segmentation_image=segm,
     ...                           labels=1, mask_method='mask')
@@ -662,7 +698,7 @@ nonzero aperture weight, not simply the aperture bounding box. The
 new :func:`~photutils.aperture.decode_aperture_flags` function and
 the :meth:`photutils.aperture.AperturePhotometry.decode_flags` and
 :meth:`photutils.aperture.ApertureStats.decode_flags` methods (which
-return a dictionary keyed by aperture position id) decode flag values
+return a dictionary keyed by aperture position ID) decode flag values
 into human-readable names::
 
     >>> import numpy as np
@@ -789,7 +825,8 @@ few usable annulus pixels).
 `~photutils.segmentation.SegmentationImage` exposes the per-label
 provenance flags via a new ``flags`` attribute, and a new
 :func:`~photutils.segmentation.decode_segmentation_flags` function
-decodes flag values into names.
+decodes flag values into names. The flag definitions are available in
+the new public ``SEGMENTATION_FLAGS`` registry.
 
 :meth:`~photutils.segmentation.SourceCatalog.decode_flags` is a
 convenience method that decodes the catalog's own flag values into
@@ -828,16 +865,45 @@ the property, and the ``flags`` attribute and the default
 :meth:`~photutils.segmentation.SourceCatalog.to_table` output are
 about 5x faster for large catalogs. The results are unchanged to
 within floating-point rounding. Because no property loops over the
-sources in Python any more, no progress bar is displayed and the
+sources in Python anymore, no progress bar is displayed and the
 ``progress_bar`` keyword is deprecated (see :ref:`New Deprecations
 <whatsnew-3.1-deprecations>`).
+
+The compiled code reads the input arrays directly when they share a
+common ``float32`` or ``float64`` dtype. Otherwise, it makes full-image
+working copies that are cached for the lifetime of the catalog. The new
+:meth:`~photutils.segmentation.SourceCatalog.release_cache` method frees
+that memory after the desired properties have been calculated.
+
+
+Faster Segmentation Images
+==========================
+
+Creating a `~photutils.segmentation.SegmentationImage` and getting its
+``labels``, ``areas``, and ``slices`` attributes is now typically ~3x
+to ~15x faster, depending on the number of labels and the fraction of
+labeled pixels. They are measured by compiled code in a single pass
+over the segmentation array, producing identical results.
+
+
+Mapping Labels Between Segmentation Images
+==========================================
+
+The new
+:meth:`~photutils.segmentation.SegmentationImage.get_label_mapping`
+method finds the mapping of labels between two segmentation images
+defined on the same pixel grid. For each label, it returns the labels
+in the other segmentation image that cover any of the same pixels. A
+typical use is mapping the original (parent) labels to the deblended
+(child) labels for segmentation images made before and after deblending,
+e.g., images read from files.
 
 
 Source Deblending Performance Improvements
 ==========================================
 
 Source deblending with :func:`~photutils.segmentation.deblend_sources`
-and `~photutils.segmentation.SourceFinder` is now typically 7--50 times
+and `~photutils.segmentation.SourceFinder` is now typically 7 to 30 times
 faster, producing identical results. The whole watershed step now runs
 in compiled code.
 
@@ -933,7 +999,8 @@ iteration, so that they match the returned stars.
 
 The `~photutils.psf.EPSFBuildResults` now keep the ePSF image
 of every iteration (``iteration_epsfs``) and a table of the
-convergence statistics of each iteration (``iteration_info``). The new
+convergence statistics of each iteration (``iteration_info``), as well
+as the image of the input ePSF, if any (``initial_epsf``). The new
 ``plot_iterations`` method plots the ePSF after each iteration and its
 change from the previous iteration, which shows whether the build has
 stopped changing and where it is still changing.
@@ -948,10 +1015,10 @@ The wings of the final ePSF are now smoothed more strongly than its core
 (``wing_smoothing``, `True` by default). Beyond 3.5 FWHM from the center,
 where the ePSF is faint and varies slowly, each value is replaced by a
 least-squares quadratic fit to the values in a box 1.25 to 1.75 FWHM
-wide. This lowers the noise of the wings, by up to about 50 percent for
+wide. This lowers the noise of the wings, by up to about 50% for
 undersampled ePSFs built from a few hundred stars. The core changes only
-by the renormalization of the smoothed ePSF (less than 0.03 percent
-in tests). The smoothing also removes real structure in the wings that
+by the renormalization of the smoothed ePSF (less than 0.03% in
+tests). The smoothing also removes real structure in the wings that
 is finer than about two FWHM, such as diffraction rings and spikes, so
 set ``wing_smoothing=False`` for large star samples of high
 signal-to-noise. With an oversampling factor of 1 it can make the wings
@@ -975,7 +1042,8 @@ iteration, in addition to their centers. This breaks the degeneracy
 between the flux of a star and its subpixel position caused by
 intra-pixel sensitivity variations, which would otherwise be absorbed
 into the ePSF. Set ``constrain_fluxes=False`` if the linked images have
-different flux scales.
+different flux scales. The constraint is also available as the new
+:meth:`~photutils.psf.LinkedEPSFStar.constrain_fluxes` method.
 
 The default smoothing kernel and fitting box now scale with the FWHM
 of the ePSF (``smoothing_kernel='auto'`` and ``fit_shape='auto'``).
@@ -1092,7 +1160,7 @@ existing results are unchanged::
     >>> aperture = SkyCircularAperture(SkyCoord(150.0, 20.0, unit='deg'),
     ...                                r=1 * u.arcsec)
     >>> ellipse = aperture.to_pixel(wcs, as_ellipse=True)
-    >>> repr(ellipse)
+    >>> ellipse
     <EllipticalAperture([49., 49.], a=33.33333336112715, b=20.000000013646787, theta=90.00000000582446 deg)>
 
 For most imagers the pixel anisotropy is a percent or less, and the flux
@@ -1100,6 +1168,15 @@ difference between the ellipse and the mean-scale circle is negligible.
 The ellipse matters for strongly rectangular pixels or a strongly
 sheared WCS, and whenever the footprint of the aperture must follow
 the WCS rather than the mean pixel scale.
+
+
+Faster Aperture WCS Conversions
+===============================
+
+The ``to_sky`` and ``to_pixel`` methods of all apertures are now two to
+five times faster. The ``to_pixel`` methods of the sky apertures invert
+the WCS only once, for the aperture positions, and reuse that pixel
+position for the shape conversion.
 
 
 Per-Pixel Sky Areas from a WCS
@@ -1147,7 +1224,7 @@ New Deprecations
 ----------------
 
 ``PixelAperture.do_photometry`` Deprecated
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The ``PixelAperture.do_photometry`` method is now
 deprecated and will be removed in version 4.0. Use the new
@@ -1196,6 +1273,13 @@ been renamed to ``n_coords`` for naming consistency within photutils.
 The old ``ncoords`` name is deprecated and will be removed in version
 4.0.
 
+``ApertureStats.ids`` Renamed
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The `~photutils.aperture.ApertureStats` ``ids`` attribute has been
+renamed to ``id``. The old ``ids`` name is deprecated and will be
+removed in version 4.0.
+
 ``ApertureStats.n_apertures`` Renamed
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -1237,6 +1321,21 @@ unchanged, but :func:`~photutils.psf.decode_psf_flags` now returns the
 new names, so code that compares decoded names with the old names must
 be updated.
 
+``EPSFBuilder.coord_transformer`` Deprecated
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The `~photutils.psf.EPSFBuilder` ``coord_transformer`` attribute is
+deprecated and will be removed in a future version. It is an internal
+helper object that was never intended to be public.
+
+Custom ``ImagePSF`` Interpolators Deprecated
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Defining a custom interpolator for `~photutils.psf.ImagePSF`, by
+overriding its ``interpolator`` attribute in a subclass or by assigning
+an interpolator to it, is deprecated and will be removed in version
+4.0.
+
 Dataset Loading Functions Deprecated
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -1248,10 +1347,6 @@ images and the simulated HST star image remain available in the
 repository and can be loaded directly with
 :func:`astropy.io.fits.getdata`, as shown in the :ref:`PSF matching
 <psf_matching>` and :ref:`ePSF building <build-epsf>` user guides.
-
-Removed Deprecations
---------------------
-
 
 .. _whatsnew-3.1-breaking-changes:
 
@@ -1284,10 +1379,10 @@ The ``covariance`` matrix of
 sources, because a source cannot have a second moment smaller than
 ``1/12`` pixel**2, the variance of a uniform distribution across a
 single pixel. Previously, ``1/12`` was added to both diagonal elements
-when the covariance determinant was below ``(1/12)**2``. It misses a
-thin source that is unresolved along only its minor axis if its major
-axis is long, it inflates the variance along a resolved axis, and it is
-discontinuous.
+when the covariance determinant was below ``(1/12)**2``. That approach
+missed a thin source that is unresolved along only its minor axis if
+its major axis is long, inflated the variance along a resolved axis,
+and was discontinuous.
 
 The variance along each principal axis (each eigenvalue of the
 covariance matrix) is now raised to at least ``1/12`` while the
@@ -1314,11 +1409,89 @@ for a FWHM of 2 pixels or more. The model now conserves flux for any
 subpixel position of the source. A rotated Gaussian is evaluated with
 Owen's T function, which is about four times slower than the product
 of error functions that is still used when the Gaussian is not rotated
-(roughly 0.2 ms instead of 0.05 ms for a 25 x 25 pixel stamp). The
+(roughly 0.2 ms instead of 0.05 ms for a 25x25 pixel stamp). The
 slower evaluation applies only when ``theta`` is not a multiple of 90
 degrees and the x and y widths differ. Positions that are not on a grid
 with a spacing of one pixel are about ten times slower, because their
 pixels share no corners.
+
+Pixel Scale of Circular Aperture Conversions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The ``to_pixel`` and ``to_sky`` methods of the circular apertures and
+annuli now use the geometric mean of the two singular values of the
+local WCS Jacobian as the isotropic pixel scale for every WCS. This
+scale preserves the area of the mapped circle and inverts exactly,
+so a conversion to pixels and back returns the original radius.
+Previously, a distorted WCS or a ``gwcs`` used the arithmetic mean of
+the singular values. The radii are unchanged for an undistorted WCS
+with orthogonal pixel axes.
+
+Aperture Photometry Masks Must Be Boolean
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The ``mask`` input to aperture photometry and to the aperture
+``area_overlap`` method must now be a boolean array (or `None`).
+
+Orientation Range
+^^^^^^^^^^^^^^^^^
+
+The ``orientation`` values returned by
+`~photutils.segmentation.SourceCatalog`,
+`~photutils.detection.DAOStarFinder`, and
+`~photutils.detection.IRAFStarFinder` are now in the range (-90, 90]
+degrees, consistent with `~photutils.aperture.ApertureStats`.
+Previously, they were incorrectly wrapped to [0, 360) degrees.
+
+Windowed Centroid Fallback Conditions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The conditions for the `~photutils.segmentation.SourceCatalog`
+``centroid_win`` fallback to the isophotal centroid have been expanded.
+The windowed centroid is now also reset when the total weighted flux is
+non-positive, the windowed second-order moments are negative, or the
+windowed covariance determinant is negative. Previously, it was reset
+only when it had diverged far from the isophotal centroid and was
+outside the 1-sigma ellipse.
+
+Segmentation Input Validation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+:func:`~photutils.segmentation.detect_sources` now emits an
+``AstropyUserWarning`` if the ``threshold`` is negative or, for a
+threshold array, has any negative values.
+`~photutils.segmentation.SegmentationImage` now raises a ``TypeError``
+for masked array input.
+
+PSF Photometry ``mask`` and ``error`` with ``NDData`` Input
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The ``mask`` and ``error`` keywords of `~photutils.psf.PSFPhotometry`
+and `~photutils.psf.IterativePSFPhotometry` now raise a ``ValueError``
+when the input data is an `~astropy.nddata.NDData` instance.
+Previously, they were silently ignored in favor of the
+`~astropy.nddata.NDData` attributes.
+
+``resize_psf`` Output Size
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+:func:`~photutils.psf_matching.resize_psf` now returns a PSF with
+exactly the requested pixel scale. Previously, the output pixel scale
+was off by a factor of ``(n_in - 1) / (n_out - 1)``, where ``n_in``
+and ``n_out`` are the input and output sizes, which made the resized
+PSF too broad or too narrow by up to several percent. The output size
+is now the largest odd size for which the output grid lies within the
+outermost pixel centers of the input PSF, which can be smaller than
+before.
+
+``calc_total_error`` Output Dtype
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+:func:`~photutils.utils.calc_total_error` now returns an array whose
+dtype follows the NumPy type promotion of its floating-point inputs,
+with a minimum of ``float32``. For example, ``float32`` inputs now give
+a ``float32`` total error. Previously, the result was always
+``float64``. Integer inputs still give a ``float64`` result.
 
 PSF ``decode_flags`` Methods Return a Dictionary
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1328,7 +1501,7 @@ The :meth:`photutils.psf.PSFPhotometry.decode_flags` and
 now return a dictionary mapping each source ID from the results
 table to its list of active flag names (or bit values), instead of a
 positional list of lists. Decoded flags can now be looked up directly
-by source ID, which may not be sequential when custom ids are input via
+by source ID, which may not be sequential when custom IDs are input via
 ``init_params``, and the result is consistent with the new aperture
 and segmentation ``decode_flags`` methods. Code that iterated over
 the previous list should iterate over the dictionary's ``.values()``
@@ -1363,9 +1536,10 @@ The ``grid_xypos``, ``oversampling``, and ``grid_shape`` keys have
 been removed from the `~photutils.psf.STDPSFGrid` ``meta`` dictionary.
 The ``meta`` dictionary now contains only the metadata parsed from the
 filename (e.g., ``STDPSF``, ``detector``, and ``filter``). The grid
-positions and oversampling factors are available as the ``grid_xypos``
-and ``oversampling`` attributes, which are now the single source of
-truth for this information::
+positions, oversampling factors, and grid shape are available as the
+``grid_xypos`` and ``oversampling`` attributes and the new
+``grid_shape`` property, which are now the single source of truth for
+this information::
 
     >>> from photutils.psf import STDPSFGrid
     >>> psfgrid = STDPSFGrid('STDPSF_ACSWFC_F814W.fits')
@@ -1387,12 +1561,14 @@ that both always match the attributes of the same name.
 The ``'grid_shape'`` key has been removed from the
 `~photutils.psf.GriddedPSFModel` ``meta`` dictionary. Use the new
 ``grid_shape`` attribute instead, i.e., ``psfmodel.grid_shape`` instead
-of ``psfmodel.meta['grid_shape']``.
+of ``psfmodel.meta['grid_shape']``. The redundant ``nxpsfs`` and
+``nypsfs`` metadata keys of a `~photutils.psf.GriddedPSFModel` read
+from a STDPSF file have also been removed.
 
 Deblending Warning Information
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-`~photutils.segmentation.deblend_sources` now emits a
+:func:`~photutils.segmentation.deblend_sources` now emits a
 `~photutils.utils.DeblendWarning` (a subclass of astropy's
 ``AstropyUserWarning``) when the deblending mode is changed to a
 fallback mode for one or more sources. The affected input labels are

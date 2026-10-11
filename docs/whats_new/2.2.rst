@@ -17,7 +17,7 @@ smaller improvements and bug fixes, which are described in the full
 
 
 Converting Aperture Objects to Region Objects
----------------------------------------------
+=============================================
 
 A new `~photutils.aperture.aperture_to_region` function was added to
 convert an `~photutils.aperture.Aperture` object to a `regions.Region`
@@ -31,18 +31,18 @@ methods can be used to write the region(s) to a file.
 
 
 Segmentation Image Outlines as Regions Objects
-----------------------------------------------
+==============================================
 
 A new :meth:`~photutils.segmentation.SegmentationImage.to_regions`
 method was added to convert the outlines of the source segments to
 a `regions.Regions` object. The `regions.Regions` object contains a
 list of `regions.PolygonPixelRegion` objects, one for each source
 segment. The `regions.Regions` object can be written to a file using the
-:meth:`regions.Region.write` method.
+:meth:`regions.Regions.write` method.
 
 
 Raw Radial Profile
-------------------
+==================
 
 New ``data_radius`` and ``data_profile`` attributes were added to the
 `~photutils.profiles.RadialProfile` class for calculating the raw radial
@@ -50,8 +50,8 @@ profile. These attributes return the radii and values of the data points
 within the maximum radius defined by the input radii.
 
 
-Pixel-based Aperture ``theta`` Units
-------------------------------------
+Pixel-Based Aperture ``theta`` Units
+====================================
 
 The ``theta`` attribute of `~photutils.aperture.EllipticalAperture`,
 `~photutils.aperture.EllipticalAnnulus`,

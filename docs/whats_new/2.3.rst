@@ -33,7 +33,7 @@ PSF Photometry Improvements
 ===========================
 
 Enhanced Error Handling and Validation
----------------------------------------
+--------------------------------------
 
 The PSF photometry classes have been significantly improved with better
 error handling and validation:
@@ -67,7 +67,7 @@ Improved Performance and Memory Usage
   memory usage for large groups).
 
 
-New Reduced Chi-squared Fit Statistic
+New Reduced Chi-Squared Fit Statistic
 -------------------------------------
 
 The PSF photometry classes now return a reduced chi-squared statistic
@@ -87,7 +87,7 @@ formatting:
 
 
 Enhanced Flexibility
----------------------
+--------------------
 
 - ``GriddedPSFModel`` can now be used with a single input ePSF model,
   making it equivalent to ``ImagePSF`` for simpler use cases.
@@ -121,7 +121,7 @@ Segmentation Enhancements
 =========================
 
 ``SegmentationImage`` Improvements
------------------------------------
+----------------------------------
 
 - The ``to_regions`` method now supports a ``group`` keyword for
   better control over region grouping.
@@ -138,7 +138,7 @@ Segmentation Enhancements
 
 
 ``SourceCatalog`` Features
----------------------------
+--------------------------
 
 - The ``make_cutouts`` method now includes an optional ``array`` keyword
   for more flexible cutout generation.
@@ -161,8 +161,8 @@ read-only to prevent accidental modification.
 Deprecations and Removals
 -------------------------
 
-- The ``PSFPhotometry`` ``fit_param`` attribute is now deprecated. Use the
-  new ``results_to_init_params`` method instead.
+- The ``PSFPhotometry`` ``fit_params`` attribute is now deprecated. Use
+  the ``results`` attribute instead.
 
 - The deprecated ``PSFPhotometry`` ``fit_results`` attribute has been
   removed.

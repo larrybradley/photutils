@@ -17,24 +17,24 @@ Photutils 1.1 is a major release that adds new functionality since the
 :ref:`changelog` for the complete list of changes.
 
 
-New SourceCatalog class
+New SourceCatalog Class
 =======================
 
 A new, significantly faster, `~photutils.segmentation.SourceCatalog`
 class was implemented. This new class simplifies the API and takes the
 place of the ``source_properties`` function and the ``SourceProperties``
-``LegacySourceCatalog`` classes. The ``source_properties`` function
+and ``LegacySourceCatalog`` classes. The ``source_properties`` function
 and ``SourceProperties`` class are now deprecated and will eventually
-be removed. The ``source_properties`` function now returns
-``LegacySourceCatalog`` class (deprecated) to distinguish it from the
+be removed. The ``source_properties`` function now returns a
+``LegacySourceCatalog`` object (deprecated) to distinguish it from the
 new `~photutils.segmentation.SourceCatalog`.
 
 Optional keyword arguments in `~photutils.segmentation.SourceCatalog`
-can not be input as positional arguments. Please see the
-`~photutils.segmentation.SourceCatalog` documentation for the keywords
+cannot be input as positional arguments. Please see the
+`~photutils.segmentation.SourceCatalog` documentation for the keyword
 inputs and their allowed values.
 
-Renamed properties
+Renamed Properties
 ------------------
 
 Note that many of the source properties have been slightly renamed
@@ -64,7 +64,7 @@ Also, the 'centroid' and 'cutout_centroid' properties now return
 centroids in (x, y) order to be consistent with the tools in
 ``photutils.centroid``.
 
-New methods and attributes
+New Methods and Attributes
 --------------------------
 
 The new `~photutils.segmentation.SourceCatalog` class has the following
