@@ -3,12 +3,20 @@
 Tests for the _utils module.
 """
 
-import numpy as np
-from numpy.testing import assert_allclose, assert_equal
+import warnings
 
+import astropy.units as u
+import numpy as np
+import pytest
+from numpy.testing import assert_allclose, assert_equal
+from scipy.ndimage import correlate
+
+from photutils.segmentation import detect_sources
 from photutils.segmentation.utils import (_make_binary_structure,
                                           _mask_to_mirrored_value,
-                                          make_2dgaussian_kernel)
+                                          make_2dgaussian_kernel,
+                                          matched_filter)
+from photutils.utils.exceptions import NoDetectionsWarning
 
 
 def test_make_2dgaussian_kernel():
@@ -177,3 +185,180 @@ def test_mask_to_mirrored_value_return_uncorrected_masked():
     assert result[0, 2] == 0
     assert result[1, 1] == 0
     assert result[3, 3] == 0
+
+
+class TestMatchedFilter:
+    """
+    Test the matched_filter function.
+    """
+
+    @pytest.fixture
+    def kernel(self):
+        # An asymmetric kernel distinguishes correlation from
+        # convolution
+        yy, xx = np.mgrid[-3:4, -2:3]
+        kernel = np.exp(-((xx - 0.7)**2 / 2.0 + (yy + 0.4)**2 / 5.0))
+        return kernel / kernel.sum()
+
+    def test_uniform_error(self, kernel):
+        """
+        Test that the filtered image is the correlation with the kernel
+        for uniform noise, including for images that are taller than
+        the strips of rows used internally.
+        """
+        rng = np.random.default_rng(0)
+        data = rng.normal(0.0, 1.0, (600, 40))
+        filtered, filtered_err = matched_filter(data, kernel, 2.5)
+        expected = correlate(data, kernel, mode='constant')
+        inside = (slice(3, -3), slice(2, -2))
+        assert_allclose(filtered[inside], expected[inside], atol=1.0e-12)
+        assert_allclose(filtered_err[inside],
+                        2.5 * np.sqrt(np.sum(kernel**2)))
+
+        # An array of errors and an unnormalized kernel give the same
+        # result
+        error = np.full(data.shape, 2.5)
+        filtered2, filtered_err2 = matched_filter(data, 7.0 * kernel, error)
+        assert_allclose(filtered2, filtered, atol=1.0e-12)
+        assert_allclose(filtered_err2, filtered_err)
+
+    def test_borders(self, kernel):
+        """
+        Test that no values are assumed beyond the image borders. The
+        filtered value at the center of a source with the shape of the
+        kernel does not depend on how much of it is in the image.
+        """
+        amplitude = 5.0
+        expected = amplitude * np.sum(kernel**2)
+        for ycen, xcen in ((15, 20), (0, 0), (1, 38), (29, 20)):
+            data = np.zeros((30 + 6, 40 + 4))
+            data[ycen:ycen + 7, xcen:xcen + 5] = amplitude * kernel
+            data = data[3:-3, 2:-2]
+            filtered, filtered_err = matched_filter(data, kernel, 1.0)
+            assert_allclose(filtered[ycen, xcen], expected)
+            assert np.all(np.isfinite(filtered_err))
+        assert filtered_err[0, 0] > filtered_err[15, 20]
+
+    def test_excluded_pixels(self, kernel):
+        """
+        Test that masked, nonfinite, and infinite-error pixels are
+        excluded.
+        """
+        rng = np.random.default_rng(1)
+        shape = (40, 50)
+        data = rng.normal(10.0, 1.0, shape)
+        bad = rng.uniform(size=shape) < 0.1
+        data_bad = data.copy()
+        data_bad[bad] = 1.0e9
+        result0 = matched_filter(data_bad, kernel, 1.0, mask=bad)
+
+        error = np.ones(shape)
+        error[bad] = np.inf
+        result1 = matched_filter(data_bad, kernel, error)
+        error[bad] = -1.0
+        result2 = matched_filter(data_bad, kernel, error)
+        data_bad[bad] = np.nan
+        result3 = matched_filter(data_bad, kernel, 1.0)
+        for result in (result1, result2, result3):
+            assert_allclose(result[0], result0[0])
+            assert_allclose(result[1], result0[1])
+        assert np.max(result0[0]) < 20.0
+
+        # Excluding pixels increases the uncertainty
+        _, filtered_err = matched_filter(data, kernel, 1.0)
+        assert np.all(result0[1] > 0.999999 * filtered_err)
+        assert np.any(result0[1] > 1.1 * filtered_err)
+
+        # The filtered value at the center of a source with the shape
+        # of the kernel does not depend on the excluded pixels
+        source = np.zeros(shape)
+        source[10:17, 20:25] = 4.0 * kernel
+        source_bad = source.copy()
+        source_bad[bad] = -50.0
+        filtered0, _ = matched_filter(source, kernel, 1.0)
+        filtered1, _ = matched_filter(source_bad, kernel, 1.0, mask=bad)
+        assert_allclose(filtered0[13, 22], 4.0 * np.sum(kernel**2))
+        assert_allclose(filtered1[13, 22], filtered0[13, 22])
+
+    def test_no_included_pixels(self, kernel):
+        data = np.ones((40, 50))
+        mask = np.zeros(data.shape, dtype=bool)
+        mask[:, :25] = True
+        filtered, filtered_err = matched_filter(data, kernel, 1.0, mask=mask)
+        assert_equal(filtered[:, :20], 0.0)
+        assert np.all(np.isinf(filtered_err[:, :20]))
+        assert_allclose(filtered[5:-5, 30:-5], 1.0)
+        assert np.all(np.isfinite(filtered_err[:, 30:]))
+
+    def test_variable_error(self):
+        """
+        Test a source next to a region with larger noise, which is
+        found with the matched filter and not with a convolution.
+        """
+        size = 16
+        xx, yy = np.meshgrid(np.arange(size), np.arange(size))
+        error = np.ones((size, size))
+        error[yy > xx] = 4.0
+        kernel = np.array([[1.0, 2.0, 1.0], [2.0, 4.0, 2.0],
+                           [1.0, 2.0, 1.0]])
+        rng = np.random.default_rng(5)
+        n_matched = 0
+        n_convolved = 0
+        n_trials = 50
+        for _ in range(n_trials):
+            data = error * rng.normal(size=(size, size))
+            data[6:9, 6:9] += 3.0 * kernel
+            filtered, filtered_err = matched_filter(data, kernel, error)
+            convolved = correlate(data, kernel / kernel.sum(),
+                                  mode='constant')
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', NoDetectionsWarning)
+                segm = detect_sources(filtered / filtered_err, 3.0,
+                                      n_pixels=5)
+                n_matched += segm is not None and segm.data[7, 7] > 0
+                segm = detect_sources(convolved / error, 3.0, n_pixels=5)
+                n_convolved += segm is not None and segm.data[7, 7] > 0
+        assert n_matched == n_trials
+        assert n_convolved < 0.7 * n_trials
+
+    def test_units(self, kernel):
+        rng = np.random.default_rng(0)
+        data = rng.normal(0.0, 1.0, (30, 40))
+        result0 = matched_filter(data, kernel, 2.0)
+        result1 = matched_filter(data << u.Jy, kernel, 2.0 << u.Jy)
+        for value0, value1 in zip(result0, result1, strict=True):
+            assert value1.unit == u.Jy
+            assert_allclose(value1.value, value0)
+
+    def test_kernel2d(self):
+        rng = np.random.default_rng(0)
+        data = rng.normal(0.0, 1.0, (30, 40))
+        kernel = make_2dgaussian_kernel(3.0, size=5)
+        result0 = matched_filter(data, kernel, 1.0)
+        result1 = matched_filter(data, kernel.array, 1.0)
+        assert_equal(result0[0], result1[0])
+        assert_equal(result0[1], result1[1])
+
+    def test_inputs(self, kernel):
+        data = np.ones((30, 40))
+        match = 'data must be a 2D array'
+        with pytest.raises(ValueError, match=match):
+            matched_filter(np.ones(10), kernel, 1.0)
+        match = 'kernel must be a 2D array'
+        with pytest.raises(ValueError, match=match):
+            matched_filter(data, np.ones(5), 1.0)
+        match = 'kernel must have odd dimensions'
+        with pytest.raises(ValueError, match=match):
+            matched_filter(data, np.ones((4, 5)), 1.0)
+        match = 'kernel must have finite values and a positive sum'
+        with pytest.raises(ValueError, match=match):
+            matched_filter(data, np.zeros((5, 5)), 1.0)
+        match = 'mask must have the same shape as data'
+        with pytest.raises(ValueError, match=match):
+            matched_filter(data, kernel, 1.0, mask=np.zeros((3, 3), bool))
+        match = 'error must be a scalar or have the same shape as data'
+        with pytest.raises(ValueError, match=match):
+            matched_filter(data, kernel, np.ones((3, 3)))
+        match = 'error must have finite and positive values'
+        with pytest.raises(ValueError, match=match):
+            matched_filter(data, kernel, 0.0)
