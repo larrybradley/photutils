@@ -94,6 +94,27 @@ class TestMatchedFilterStarFinder:
         assert_allclose(tbl['x_centroid'], 60.0, atol=1.0e-6)
         assert_allclose(tbl['y_centroid'], 50.0, atol=1.0e-6)
 
+    @pytest.mark.parametrize('local_bkg', [True, False])
+    def test_large_image(self, kernel, local_bkg):
+        """
+        Test stars at the boundaries of the row strips that are used
+        for the convolutions.
+        """
+        shape = (600, 60)
+        ycens = (150.0, 255.6, 256.0, 511.6, 590.0)
+        xcens = (15.0, 45.0, 15.0, 45.0, 15.0)
+        data = np.zeros(shape)
+        for xcen, ycen in zip(xcens, ycens, strict=True):
+            data += make_psf_image(xcen, ycen, 1000.0, shape=shape)
+        finder = MatchedFilterStarFinder(5.0, kernel, local_bkg=local_bkg)
+        tbl = finder(data, error=NOISE)
+        assert len(tbl) == len(ycens)
+        tbl.sort('y_centroid')
+        assert_allclose(tbl['y_centroid'], ycens, atol=0.01)
+        assert_allclose(tbl['x_centroid'], xcens, atol=0.01)
+        assert_allclose(tbl['flux'], 1000.0, rtol=0.01)
+        assert_allclose(tbl['flux_err'], tbl['flux_err'][0], rtol=1.0e-3)
+
     def test_subpixel_position(self, kernel):
         """
         Test the position of a noiseless star at a subpixel offset.
