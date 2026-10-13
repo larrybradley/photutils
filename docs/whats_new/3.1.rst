@@ -899,6 +899,43 @@ typical use is mapping the original (parent) labels to the deblended
 e.g., images read from files.
 
 
+Matched Filter for Source Detection
+===================================
+
+The new :func:`~photutils.segmentation.matched_filter` function is an
+alternative to convolving the data before detecting sources with
+:func:`~photutils.segmentation.detect_sources`. It filters an image
+with a kernel, weighting each pixel by its inverse variance, and
+returns the filtered image and its uncertainty. Their ratio is a
+signal-to-noise ratio (S/N) image, so a detection threshold applied to
+it is a significance whose meaning does not depend on the kernel or on
+the noise level::
+
+    >>> import numpy as np
+    >>> from photutils.segmentation import (detect_sources,
+    ...                                     make_2dgaussian_kernel,
+    ...                                     matched_filter)
+    >>> rng = np.random.default_rng(0)
+    >>> yy, xx = np.mgrid[0:51, 0:51]
+    >>> error = np.where(xx > 30, 4.0, 1.0)
+    >>> data = rng.normal(0.0, 1.0, (51, 51)) * error
+    >>> data += 10.0 * np.exp(-((xx - 20)**2 + (yy - 25)**2) / 4.0)
+    >>> kernel = make_2dgaussian_kernel(3.0, size=5)
+    >>> filtered_data, filtered_error = matched_filter(data, kernel, error)
+    >>> snr = filtered_data / filtered_error
+    >>> segment_map = detect_sources(snr, 3.0, n_pixels=5)
+    >>> segment_map.n_labels
+    1
+
+Pixels with a larger uncertainty have a smaller weight, which improves
+the detection of faint sources in images where the noise varies from
+pixel to pixel (e.g., from rejected cosmic rays or a variable number
+of coadded exposures). Masked pixels, nonfinite pixels, and pixels
+beyond the image borders are excluded, so no values are assumed for
+them. For uniform noise, the matched filter and a convolution detect the
+same sources. See :ref:`segmentation_matched_filter` for more details.
+
+
 Source Deblending Performance Improvements
 ==========================================
 
