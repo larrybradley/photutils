@@ -1213,6 +1213,55 @@ distortions. Pass ``interpolate=False`` to evaluate the area exactly at
 every pixel instead.
 
 
+Matched-Filter Star Finder
+==========================
+
+The new :class:`~photutils.detection.MatchedFilterStarFinder` class
+detects stars as the peaks of a signal-to-noise ratio (S/N) image.
+At every pixel, it fits the flux of a point source by weighted least
+squares, using an input PSF kernel and the inverse variance of each
+pixel as its weight. Compared to the other star finders:
+
+* The ``threshold`` is the minimum S/N of the fitted flux. Its meaning
+  does not depend on the width of the kernel or on the noise level of
+  the image.
+
+* It can detect significantly fainter stars at the same rate of false
+  detections. The other star finders fit the height of a kernel and a
+  local background using only the pixels within a small kernel
+  footprint, which makes the fitted height much noisier.
+
+* It accepts an ``error`` array, so that noisier pixels have a smaller
+  weight and the threshold is relative to the local noise.
+
+* Masked pixels, nonfinite pixels, and pixels beyond the image borders
+  are excluded from the fit.
+
+* The output table includes the fitted ``flux`` of each source, its
+  uncertainty, and its S/N.
+
+Example usage::
+
+    >>> from photutils.datasets import make_noise_image
+    >>> from photutils.detection import MatchedFilterStarFinder
+    >>> from photutils.psf import CircularGaussianPRF, make_psf_model_image
+    >>> from photutils.segmentation import make_2dgaussian_kernel
+    >>> psf_model = CircularGaussianPRF(fwhm=3.0)
+    >>> data, true_params = make_psf_model_image(
+    ...     (201, 201), psf_model, 30, flux=(40, 600), min_separation=15,
+    ...     border_size=15, seed=0)
+    >>> data += make_noise_image(data.shape, mean=0.0, stddev=2.0, seed=0)
+    >>> kernel = make_2dgaussian_kernel(3.0, size=11)
+    >>> finder = MatchedFilterStarFinder(5.0, kernel)
+    >>> sources = finder(data, error=2.0)
+    >>> len(sources)
+    28
+
+By default, a constant local background is fitted along with the flux
+at every pixel, so that the detection does not depend on the background
+level. See :ref:`matched_filter_star_finder` for more details.
+
+
 .. _whatsnew-3.1-api-changes:
 
 API Changes
