@@ -24,6 +24,43 @@ __all__ = ['MatchedFilterStarFinder']
 # unmasked data in its kernel footprint to be fitted
 _MIN_WEIGHT_FRACTION = 1.0e-8
 
+# Number of image rows that are convolved at a time
+_N_STRIP_ROWS = 256
+
+
+def _correlate(image, kernel):
+    """
+    Correlate an image with a kernel, with zeros beyond the image.
+
+    The image is processed in strips of rows to limit the memory used
+    by the fast Fourier transforms.
+
+    Parameters
+    ----------
+    image : 2D `~numpy.ndarray`
+        The 2D image array.
+
+    kernel : 2D `~numpy.ndarray`
+        The kernel array, which must have odd dimensions.
+
+    Returns
+    -------
+    result : 2D `~numpy.ndarray`
+        The correlated image.
+    """
+    # Convolution with the flipped kernel is correlation
+    kernel = kernel[::-1, ::-1]
+    half = kernel.shape[0] // 2
+    n_rows = image.shape[0]
+    result = np.empty(image.shape)
+    for start in range(0, n_rows, _N_STRIP_ROWS):
+        stop = min(start + _N_STRIP_ROWS, n_rows)
+        low = max(start - half, 0)
+        high = min(stop + half, n_rows)
+        strip = oaconvolve(image[low:high], kernel, mode='same')
+        result[start:stop] = strip[start - low:stop - low]
+    return result
+
 
 class MatchedFilterStarFinder(StarFinderBase):
     """
@@ -240,8 +277,10 @@ class MatchedFilterStarFinder(StarFinderBase):
             bad |= ~good_error
             weights = 1.0 / np.where(good_error, error, 1.0)**2
 
-        weights[bad] = 0.0
-        return np.where(bad, 0.0, data), weights
+        if np.any(bad):
+            weights[bad] = 0.0
+            data = np.where(bad, 0.0, data)
+        return data, weights
 
     def _make_snr_image(self, data, weights):
         """
@@ -261,33 +300,46 @@ class MatchedFilterStarFinder(StarFinderBase):
             The S/N image. Pixels with too little unmasked data in their
             kernel footprint are zero.
         """
-        # Convolution with the flipped kernel is correlation
-        kernel = self.kernel[::-1, ::-1]
-        sum_pd = oaconvolve(data * weights, kernel, mode='same')
-        sum_pp = oaconvolve(weights, kernel**2, mode='same')
-        min_pp = _MIN_WEIGHT_FRACTION * np.max(sum_pp)
+        # The arrays are modified in place to limit the memory use
+        kernel = self.kernel
+        data_weights = data * weights
+        sum_pd = _correlate(data_weights, kernel)
+        sum_pp = _correlate(weights, kernel**2)
+        valid = sum_pp > _MIN_WEIGHT_FRACTION * np.max(sum_pp)
 
         if not self.local_bkg:
-            valid = sum_pp > min_pp
-            sum_pp[~valid] = 1.0
-            snr = sum_pd / np.sqrt(sum_pp)
+            del data_weights
+            denom = sum_pp
         else:
-            shape = self.kernel.shape
-            n_pixels = self.kernel.size
-            sum_w = uniform_filter(weights, shape, mode='constant') * n_pixels
-            sum_d = (uniform_filter(data * weights, shape, mode='constant')
-                     * n_pixels)
-            sum_p = oaconvolve(weights, kernel, mode='same')
+            shape = kernel.shape
+            sum_d = uniform_filter(data_weights, shape, mode='constant')
+            del data_weights
+            sum_d *= kernel.size
+            sum_w = uniform_filter(weights, shape, mode='constant')
+            sum_w *= kernel.size
+            sum_p = _correlate(weights, kernel)
+
+            # Numerator of the fitted flux
+            sum_pd *= sum_w
+            sum_d *= sum_p
+            sum_pd -= sum_d
+            del sum_d
 
             # Determinant of the normal equations for the flux and the
             # local background
-            det = sum_pp * sum_w - sum_p**2
-            valid = ((sum_pp > min_pp)
-                     & (det > _MIN_WEIGHT_FRACTION * sum_pp * sum_w))
-            denom = sum_w * det
-            denom[~valid] = 1.0
-            snr = (sum_pd * sum_w - sum_p * sum_d) / np.sqrt(denom)
+            sum_pp *= sum_w
+            sum_p *= sum_p
+            det = np.subtract(sum_pp, sum_p, out=sum_p)
+            sum_pp *= _MIN_WEIGHT_FRACTION
+            valid &= det > sum_pp
+            del sum_pp
+            det *= sum_w
+            denom = det
 
+        denom[~valid] = 1.0
+        np.sqrt(denom, out=denom)
+        snr = sum_pd
+        snr /= denom
         snr[~valid] = 0.0
         return snr
 
