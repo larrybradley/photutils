@@ -275,6 +275,15 @@ New Features
     The ``columns`` keyword now accepts a single string in addition to a
     list of column names. [#2329]
 
+  - Added a new ``MatchedFilterStarFinder`` class that detects stars
+    as the peaks of a signal-to-noise ratio image, which is made by
+    fitting the flux of a point source at every pixel using an input
+    PSF kernel and inverse-variance weights. Its threshold is the
+    significance of the fitted flux, it accepts an error array, and it
+    excludes masked pixels and pixels beyond the image borders from the
+    fit. It can detect fainter stars than the other star finders at the
+    same rate of false detections. [#2512]
+
   - Added a ``min_n_pixels`` keyword to ``IRAFStarFinder`` to set the
     minimum number of positive sky-subtracted pixels within the kernel
     footprint that a source must have. It is equivalent to the
