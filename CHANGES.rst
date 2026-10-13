@@ -474,6 +474,14 @@ New Features
   - Added validation of the ``SourceCatalog.to_table()`` ``columns``
     keyword. [#2329]
 
+  - Added a new ``matched_filter`` function that filters an image
+    with a kernel using inverse-variance weights and returns the
+    filtered image and its uncertainty. Their ratio is a signal-to-noise
+    ratio image that can be input to ``detect_sources`` with a
+    threshold that is a significance. Pixels with a larger uncertainty
+    have a smaller weight, and masked pixels and pixels beyond the
+    image borders are excluded. [#2513]
+
   - ``SegmentationImage`` objects now always have an ``info`` attribute,
     a dictionary containing auxiliary information. Segmentation
     images returned by ``deblend_sources`` store the input labels
