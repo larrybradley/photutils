@@ -129,6 +129,77 @@ image showing the detected sources:
     fig.tight_layout()
 
 
+.. _segmentation_matched_filter:
+
+Matched Filtering
+^^^^^^^^^^^^^^^^^
+
+In the example above, the detection threshold was defined from the
+noise of the data, but it was applied to the convolved data. The
+convolution reduces the noise, so the significance of the threshold is
+larger than its nominal value and it depends on the kernel. For the
+kernel used above, the noise of the convolved data is about 4 times
+smaller than the noise of the data, so the 1.5-sigma threshold is
+actually a 6.3-sigma threshold on the convolved data::
+
+    >>> import numpy as np
+    >>> factor = np.sqrt(np.sum(kernel.array**2))
+    >>> print(f'{factor:.2f} {1.5 / factor:.1f}')
+    0.24 6.3
+
+The :func:`~photutils.segmentation.matched_filter` function is an
+alternative to the convolution. It returns a filtered image and the
+uncertainty of the filtered image. Each pixel of the filtered image is
+the amplitude of the kernel, centered on that pixel, that best fits the
+data in a weighted least-squares sense, where each pixel is weighted
+by its inverse variance. The ratio of the filtered image to its
+uncertainty is a signal-to-noise ratio (S/N) image. A threshold applied
+to the S/N image is therefore a significance, whose meaning does not
+depend on the kernel or on the noise level::
+
+    >>> from photutils.segmentation import matched_filter
+    >>> filtered_data, filtered_error = matched_filter(
+    ...     data, kernel, bkg.background_rms)
+    >>> snr = filtered_data / filtered_error
+
+The noise of this image is nearly uniform, so detecting the sources with
+a S/N greater than 6.3 gives the same number of sources as the example
+above::
+
+    >>> segment_map_snr = detect_sources(snr, 6.3, n_pixels=10)
+    >>> print(segment_map_snr.n_labels)
+    86
+
+The matched filter differs from a convolution in the following ways:
+
+* Pixels with a larger uncertainty have a smaller weight. This improves
+  the detection of faint sources in images where the noise varies
+  from pixel to pixel (e.g., from rejected cosmic rays or a variable
+  number of coadded exposures). For uniform noise, the matched filter
+  and the convolution detect the same sources.
+
+* Masked pixels, nonfinite pixels, and pixels beyond the image borders
+  have zero weight and are excluded. No values are assumed for the
+  pixels beyond the image borders.
+
+* The threshold is a significance. The same threshold can be used with
+  different kernels and for images with different noise levels.
+
+Please note the following limitations:
+
+* The S/N values of neighboring pixels are correlated by the filter.
+  The number of connected pixels (``n_pixels``) should be chosen with
+  that in mind.
+
+* The S/N is overestimated for images with correlated noise (e.g.,
+  resampled images).
+
+* The filter fits the amplitude of the kernel. Where pixels are
+  excluded, the filtered value at the center of a source with the shape
+  of the kernel is preserved, but the filtered values of sources with
+  other shapes are not.
+
+
 Source Deblending
 -----------------
 
