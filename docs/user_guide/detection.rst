@@ -51,6 +51,11 @@ centroid, roundness, and sharpness using image moments.
 of a custom user-defined kernel as a 2D array. This allows for more
 generalization beyond simple Gaussian kernels.
 
+:class:`~photutils.detection.MatchedFilterStarFinder` takes a
+different approach. It fits the flux of a point source at every pixel
+and detects the peaks of the resulting signal-to-noise ratio image.
+See :ref:`matched_filter_star_finder` below.
+
 The usage of :class:`~photutils.detection.IRAFStarFinder` and
 :class:`~photutils.detection.StarFinder` follows the same pattern
 as :class:`~photutils.detection.DAOStarFinder` shown below. Replace
@@ -211,6 +216,120 @@ rectangular regions. No sources will be detected in the masked regions:
     rect2 = RectangularAperture((350, 350), 400, 200, theta=0)
     p2 = rect1.plot(ax=ax, color='white', ls='dashed')
     p3 = rect2.plot(ax=ax, color='white', ls='dashed')
+
+
+.. _matched_filter_star_finder:
+
+Matched-Filter Star Finder
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The star finders above convolve the image with a kernel that sums
+to zero, which is equivalent to fitting the height of the kernel
+plus a constant local background at every pixel. That fit uses only
+the pixels within a small kernel footprint, so the fitted height is
+much noisier than the data allow. The ``threshold`` of those finders is
+also in the units of the data, and the significance it corresponds to
+depends on the kernel.
+
+:class:`~photutils.detection.MatchedFilterStarFinder` instead fits
+the flux of a point source at every pixel by weighted least squares,
+using the input ``kernel`` as the point spread function (PSF) and the
+inverse variance of each pixel as its weight. Stars are the local
+maxima of the resulting signal-to-noise ratio (S/N) image. The main
+differences from the other star finders are:
+
+* The ``threshold`` is the minimum S/N of the fitted flux. Its meaning
+  does not depend on the width of the kernel or on the noise level of
+  the image.
+
+* It can detect significantly fainter stars at the same rate of false
+  detections, because the fit uses all of the pixels within the
+  ``kernel`` array.
+
+* It accepts an ``error`` array. Pixels with a larger uncertainty have
+  a smaller weight, and the threshold is relative to the local noise.
+
+* Masked pixels, nonfinite pixels, and pixels beyond the image borders
+  are excluded from the fit. No values are assumed for the pixels
+  beyond the image borders.
+
+* The output table includes the fitted ``flux`` of each source, its
+  uncertainty, and its S/N.
+
+The ``kernel`` should be the PSF of the image as a 2D array, and it
+should be large enough to include most of the PSF flux. By default,
+a constant local background is fitted along with the flux at every
+pixel (``local_bkg=True``), so that the detection does not depend on the
+background level.
+
+As an example, let's create a simulated image of 30 stars with a
+Gaussian PSF that has a FWHM of 3 pixels, and add Gaussian noise with a
+standard deviation of 2::
+
+    >>> from photutils.datasets import make_noise_image
+    >>> from photutils.psf import CircularGaussianPRF, make_psf_model_image
+    >>> psf_model = CircularGaussianPRF(fwhm=3.0)
+    >>> data, true_params = make_psf_model_image(
+    ...     (201, 201), psf_model, 30, flux=(40, 600), min_separation=15,
+    ...     border_size=15, seed=0)
+    >>> data += make_noise_image(data.shape, mean=0.0, stddev=2.0, seed=0)
+
+We define the kernel as a Gaussian with the same FWHM and find the stars
+with a fitted flux that has a S/N of at least 5. The ``error`` input is
+the background noise of the image. It can be either a scalar or an array
+with the same shape as the data. If it is not input, a constant noise
+level is estimated from the data::
+
+    >>> from photutils.detection import MatchedFilterStarFinder
+    >>> from photutils.segmentation import make_2dgaussian_kernel
+    >>> kernel = make_2dgaussian_kernel(3.0, size=11)
+    >>> finder = MatchedFilterStarFinder(5.0, kernel)
+    >>> sources = finder(data, error=2.0)
+    >>> for col in sources.colnames:
+    ...     if col != 'id':
+    ...         sources[col].info.format = '%.2f'  # for consistent table output
+    >>> sources.pprint(max_lines=12, max_width=76)
+     id x_centroid y_centroid  flux  ... local_bkg reduced_chi2 peak_excess
+    --- ---------- ---------- ------ ... --------- ------------ -----------
+      1     138.33      19.11 432.46 ...      0.08         1.15        1.71
+      2      21.96      21.86 420.62 ...     -0.04         0.92        2.44
+      3     125.61      29.69 458.88 ...      0.06         1.10        1.29
+      4      45.00      36.87 280.88 ...     -0.03         1.11        1.68
+    ...        ...        ...    ... ...       ...          ...         ...
+     25     139.78     154.11 428.01 ...     -0.41         1.13        1.53
+     26     171.13     156.27 356.66 ...     -0.07         0.91        0.76
+     27      87.32     162.53 441.82 ...     -0.10         1.11        1.65
+     28      68.10     166.10 548.58 ...     -0.02         1.28        1.10
+    Length = 28 rows
+
+The two stars that were not found have a S/N less than 5. For
+comparison, :class:`~photutils.detection.DAOStarFinder` with the
+equivalent ``threshold`` of 5 times the noise finds 23 of the 30
+stars::
+
+    >>> from photutils.detection import DAOStarFinder
+    >>> daofind = DAOStarFinder(5.0 * 2.0, fwhm=3.0)
+    >>> len(daofind(data))
+    23
+
+Single-pixel artifacts such as cosmic rays and hot pixels can be
+rejected with the ``max_peak_excess`` keyword. The ``peak_excess``
+of a source is its largest positive residual from the fit within one
+pixel of its peak, in units of the pixel uncertainty. For this test,
+the pixel uncertainty should include the Poisson noise of the sources.
+Otherwise, bright stars can also be rejected.
+
+Please note the following limitations:
+
+* If ``local_bkg=False``, the image must be accurately
+  background-subtracted. A background residual that is a small fraction
+  of the pixel noise can then produce spurious sources.
+
+* The S/N is overestimated for images with correlated noise (e.g.,
+  resampled images).
+
+* The positions and fluxes of stars that are truncated by the image
+  border are less accurate. Set ``exclude_border=True`` to exclude them.
 
 
 Local Peak Detection
