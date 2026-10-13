@@ -208,6 +208,10 @@ def matched_filter(data, kernel, error, *, mask=None):
     kernel /= np.sum(kernel)
 
     bad = ~np.isfinite(data)
+    if np.any(bad):
+        # Nonfinite values must be replaced because they are not
+        # removed by a zero weight
+        data = np.where(bad, 0.0, data)
     if mask is not None:
         mask = np.asarray(mask, dtype=bool)
         if mask.shape != data.shape:
@@ -223,11 +227,21 @@ def matched_filter(data, kernel, error, *, mask=None):
     if not np.any(good_error):
         msg = 'error must have finite and positive values'
         raise ValueError(msg)
-    weights = np.broadcast_to(1.0 / np.where(good_error, error, 1.0)**2,
-                              data.shape).copy()
-    bad |= ~good_error
-    weights[bad] = 0.0
-    data = np.where(bad, 0.0, data)
+
+    if error.ndim == 0 and not np.any(bad):
+        # Every pixel has the same weight. A scalar weight avoids an
+        # array with the size of the image.
+        weights = 1.0 / float(error)**2
+    elif error.ndim == 0:
+        weights = np.full(data.shape, 1.0 / float(error)**2)
+        weights[bad] = 0.0
+    else:
+        weights = np.where(good_error, error, 1.0)
+        np.square(weights, out=weights)
+        np.reciprocal(weights, out=weights)
+        bad |= ~good_error
+        weights[bad] = 0.0
+    uniform = np.ndim(weights) == 0
 
     # Convolution with the flipped kernel is correlation
     flipped = kernel[::-1, ::-1]
@@ -238,7 +252,7 @@ def matched_filter(data, kernel, error, *, mask=None):
     # The image is filtered in strips of rows to limit the memory used
     # by the fast Fourier transforms
     half = kernel.shape[0] // 2
-    n_rows = data.shape[0]
+    n_rows, n_cols = data.shape
     filtered_data = np.empty(data.shape)
     filtered_error = np.empty(data.shape)
     for start in range(0, n_rows, _N_STRIP_ROWS):
@@ -247,7 +261,10 @@ def matched_filter(data, kernel, error, *, mask=None):
         low = max(start - half, 0)
         high = min(stop + half, n_rows)
         rows = slice(start - low, stop - low)
-        strip_weights = weights[low:high]
+        if uniform:
+            strip_weights = np.full((high - low, n_cols), weights)
+        else:
+            strip_weights = weights[low:high]
         sum_kd = oaconvolve(data[low:high] * strip_weights, flipped,
                             mode='same')[rows]
         sum_kk = oaconvolve(strip_weights, flipped2, mode='same')[rows]
