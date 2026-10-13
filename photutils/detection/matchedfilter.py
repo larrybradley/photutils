@@ -24,16 +24,14 @@ __all__ = ['MatchedFilterStarFinder']
 # unmasked data in its kernel footprint to be fitted
 _MIN_WEIGHT_FRACTION = 1.0e-8
 
-# Number of image rows that are convolved at a time
+# Number of image rows that are processed at a time to limit the memory
+# use
 _N_STRIP_ROWS = 256
 
 
 def _correlate(image, kernel):
     """
     Correlate an image with a kernel, with zeros beyond the image.
-
-    The image is processed in strips of rows to limit the memory used
-    by the fast Fourier transforms.
 
     Parameters
     ----------
@@ -49,17 +47,7 @@ def _correlate(image, kernel):
         The correlated image.
     """
     # Convolution with the flipped kernel is correlation
-    kernel = kernel[::-1, ::-1]
-    half = kernel.shape[0] // 2
-    n_rows = image.shape[0]
-    result = np.empty(image.shape)
-    for start in range(0, n_rows, _N_STRIP_ROWS):
-        stop = min(start + _N_STRIP_ROWS, n_rows)
-        low = max(start - half, 0)
-        high = min(stop + half, n_rows)
-        strip = oaconvolve(image[low:high], kernel, mode='same')
-        result[start:stop] = strip[start - low:stop - low]
-    return result
+    return oaconvolve(image, kernel[::-1, ::-1], mode='same')
 
 
 class MatchedFilterStarFinder(StarFinderBase):
@@ -244,9 +232,11 @@ class MatchedFilterStarFinder(StarFinderBase):
         data : 2D `~numpy.ndarray`
             The image with the zero-weight pixels set to zero.
 
-        weights : 2D `~numpy.ndarray`
+        weights : float or 2D `~numpy.ndarray`
             The inverse-variance weights, which are zero for the
-            excluded pixels.
+            excluded pixels. A scalar is returned if every pixel has
+            the same weight, which avoids an array with the size of
+            the image.
         """
         bad = ~np.isfinite(data)
         if mask is not None:
@@ -255,6 +245,7 @@ class MatchedFilterStarFinder(StarFinderBase):
                 msg = 'mask must have the same shape as data'
                 raise ValueError(msg)
             bad |= mask
+        any_bad = np.any(bad)
 
         if error is None:
             error = mad_std(data[~bad])
@@ -267,6 +258,8 @@ class MatchedFilterStarFinder(StarFinderBase):
             if not error > 0:
                 msg = 'error must be positive'
                 raise ValueError(msg)
+            if not any_bad:
+                return data, 1.0 / error**2
             weights = np.full(data.shape, 1.0 / error**2)
         else:
             error = np.asarray(error, dtype=float)
@@ -275,9 +268,10 @@ class MatchedFilterStarFinder(StarFinderBase):
                 raise ValueError(msg)
             good_error = np.isfinite(error) & (error > 0)
             bad |= ~good_error
+            any_bad = np.any(bad)
             weights = 1.0 / np.where(good_error, error, 1.0)**2
 
-        if np.any(bad):
+        if any_bad:
             weights[bad] = 0.0
             data = np.where(bad, 0.0, data)
         return data, weights
@@ -286,12 +280,15 @@ class MatchedFilterStarFinder(StarFinderBase):
         """
         Make the image of the fitted-flux signal-to-noise ratio.
 
+        The image is processed in strips of rows, so that the arrays
+        of sums needed for the fit are never as large as the image.
+
         Parameters
         ----------
         data : 2D `~numpy.ndarray`
             The 2D image array with the zero-weight pixels set to zero.
 
-        weights : 2D `~numpy.ndarray`
+        weights : float or 2D `~numpy.ndarray`
             The inverse-variance weights.
 
         Returns
@@ -300,46 +297,76 @@ class MatchedFilterStarFinder(StarFinderBase):
             The S/N image. Pixels with too little unmasked data in their
             kernel footprint are zero.
         """
-        # The arrays are modified in place to limit the memory use
+        half = self.kernel.shape[0] // 2
+        n_rows, n_cols = data.shape
+        uniform = np.ndim(weights) == 0
+        min_pp = (_MIN_WEIGHT_FRACTION * np.max(weights)
+                  * np.sum(self.kernel**2))
+
+        snr = np.empty(data.shape)
+        for start in range(0, n_rows, _N_STRIP_ROWS):
+            stop = min(start + _N_STRIP_ROWS, n_rows)
+            # Rows beyond the strip that are within the kernel of it
+            low = max(start - half, 0)
+            high = min(stop + half, n_rows)
+            if uniform:
+                strip_weights = np.full((high - low, n_cols), weights)
+            else:
+                strip_weights = weights[low:high]
+            strip = self._make_snr_strip(data[low:high], strip_weights,
+                                         min_pp)
+            snr[start:stop] = strip[start - low:stop - low]
+        return snr
+
+    def _make_snr_strip(self, data, weights, min_pp):
+        """
+        Make the S/N image of a strip of image rows.
+
+        Parameters
+        ----------
+        data : 2D `~numpy.ndarray`
+            The strip of the image.
+
+        weights : 2D `~numpy.ndarray`
+            The inverse-variance weights of the strip.
+
+        min_pp : float
+            The weighted sum of the squared kernel below which a pixel
+            has too little unmasked data to be fitted.
+
+        Returns
+        -------
+        snr : 2D `~numpy.ndarray`
+            The S/N image of the strip. The rows within half the kernel
+            height of a strip edge that is not an image edge are not
+            valid.
+        """
         kernel = self.kernel
         data_weights = data * weights
         sum_pd = _correlate(data_weights, kernel)
         sum_pp = _correlate(weights, kernel**2)
-        valid = sum_pp > _MIN_WEIGHT_FRACTION * np.max(sum_pp)
+        valid = sum_pp > min_pp
 
         if not self.local_bkg:
-            del data_weights
-            denom = sum_pp
+            numerator = sum_pd
+            denominator = sum_pp
         else:
             shape = kernel.shape
-            sum_d = uniform_filter(data_weights, shape, mode='constant')
-            del data_weights
-            sum_d *= kernel.size
-            sum_w = uniform_filter(weights, shape, mode='constant')
-            sum_w *= kernel.size
+            sum_w = (uniform_filter(weights, shape, mode='constant')
+                     * kernel.size)
+            sum_d = (uniform_filter(data_weights, shape, mode='constant')
+                     * kernel.size)
             sum_p = _correlate(weights, kernel)
-
-            # Numerator of the fitted flux
-            sum_pd *= sum_w
-            sum_d *= sum_p
-            sum_pd -= sum_d
-            del sum_d
 
             # Determinant of the normal equations for the flux and the
             # local background
-            sum_pp *= sum_w
-            sum_p *= sum_p
-            det = np.subtract(sum_pp, sum_p, out=sum_p)
-            sum_pp *= _MIN_WEIGHT_FRACTION
-            valid &= det > sum_pp
-            del sum_pp
-            det *= sum_w
-            denom = det
+            det = sum_pp * sum_w - sum_p**2
+            valid &= det > _MIN_WEIGHT_FRACTION * sum_pp * sum_w
+            numerator = sum_pd * sum_w - sum_p * sum_d
+            denominator = sum_w * det
 
-        denom[~valid] = 1.0
-        np.sqrt(denom, out=denom)
-        snr = sum_pd
-        snr /= denom
+        denominator[~valid] = 1.0
+        snr = numerator / np.sqrt(denominator)
         snr[~valid] = 0.0
         return snr
 
@@ -397,7 +424,7 @@ class MatchedFilterStarFinder(StarFinderBase):
         data : 2D `~numpy.ndarray`
             The 2D image array with the zero-weight pixels set to zero.
 
-        weights : 2D `~numpy.ndarray`
+        weights : float or 2D `~numpy.ndarray`
             The inverse-variance weights.
 
         xpeak, ypeak : 1D `~numpy.ndarray` of int
@@ -415,8 +442,11 @@ class MatchedFilterStarFinder(StarFinderBase):
         shape = self.kernel.shape
         ycen = shape[0] // 2
         xcen = shape[1] // 2
-        cut_data, _ = _make_cutouts(data, xpeak, ypeak, shape)
-        cut_weights, _ = _make_cutouts(weights, xpeak, ypeak, shape)
+        cut_data, overlap = _make_cutouts(data, xpeak, ypeak, shape)
+        if np.ndim(weights) == 0:
+            cut_weights = weights * overlap
+        else:
+            cut_weights, _ = _make_cutouts(weights, xpeak, ypeak, shape)
 
         # Kernel shifted to the subpixel position of each source
         yy, xx = np.mgrid[0:shape[0], 0:shape[1]]
