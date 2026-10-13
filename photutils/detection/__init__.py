@@ -7,5 +7,6 @@ or local peaks in an astronomical image.
 from .core import *  # noqa: F403
 from .daofinder import *  # noqa: F403
 from .irafstarfinder import *  # noqa: F403
+from .matchedfilter import *  # noqa: F403
 from .peakfinder import *  # noqa: F403
 from .starfinder import *  # noqa: F403
