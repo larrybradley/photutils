@@ -824,6 +824,21 @@ class TestSourceGroups:
         plt.close(fig)
 
     @pytest.mark.skipif(not HAS_MATPLOTLIB, reason='matplotlib is required')
+    def test_plot_cmap_instance(self, sample_groups):
+        """
+        Test Colormap instance input.
+        """
+        import matplotlib.pyplot as plt
+        from matplotlib import colormaps
+
+        fig, ax = plt.subplots()
+        groups = sample_groups['groups']
+        result_ax = groups.plot(radius=0.5, ax=ax, cmap=colormaps['Blues'])
+
+        assert result_ax is ax
+        plt.close(fig)
+
+    @pytest.mark.skipif(not HAS_MATPLOTLIB, reason='matplotlib is required')
     def test_plot_with_label_offset(self, sample_groups):
         """
         Test plot with label offset.
