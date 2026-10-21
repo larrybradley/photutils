@@ -3,6 +3,7 @@
 MatchedFilterStarFinder class.
 """
 
+import math
 import warnings
 
 import numpy as np
@@ -20,18 +21,172 @@ from photutils.utils.exceptions import NoDetectionsWarning
 
 __all__ = ['MatchedFilterStarFinder']
 
-# Fraction of the largest weight sum below which a pixel has too little
-# unmasked data in its kernel footprint to be fitted
+# Fraction of the weight sum of a full kernel footprint of typical
+# weights below which a pixel has too little unmasked data in its kernel
+# footprint to be fitted
 _MIN_WEIGHT_FRACTION = 1.0e-8
 
 # Number of image rows that are processed at a time to limit the memory
 # use
 _N_STRIP_ROWS = 256
 
+# Weighted values and weights larger than this factor times their
+# typical size are added directly instead of through the fast Fourier
+# transform and the running sums of the box filter, whose rounding
+# errors scale with the largest value they include
+_DIRECT_FACTOR = 1.0e6
 
-def _correlate(image, kernel):
+# Approximate number of pixels sampled to estimate the typical weight
+_N_SAMPLES = 1_000_000
+
+
+def _typical_weight(data, error, mask):
+    """
+    Return the median inverse-variance weight of the usable pixels.
+
+    The weights are sampled on a regular grid of about ``_N_SAMPLES``
+    pixels, or on all of the pixels if the sample has no usable pixels.
+    A median, unlike the largest weight, is not changed by a few pixels
+    with tiny uncertainties.
+
+    Parameters
+    ----------
+    data : 2D `~numpy.ndarray`
+        The 2D image array.
+
+    error : float or 2D `~numpy.ndarray`
+        The 1-sigma uncertainty of ``data``.
+
+    mask : 2D bool `~numpy.ndarray` or `None`
+        The pixel mask.
+
+    Returns
+    -------
+    weight : float or `None`
+        The median weight, or `None` if no pixel is usable.
+    """
+    step = max(1, math.ceil(math.sqrt(data.size / _N_SAMPLES)))
+    for stride in dict.fromkeys((step, 1)):
+        sample = (slice(None, None, stride),) * 2
+        usable = np.isfinite(data[sample])
+        if mask is not None:
+            usable &= ~mask[sample]
+        if np.ndim(error) == 0:
+            if np.any(usable):
+                return 1.0 / error**2
+            continue
+        sample_error = np.asarray(error[sample], dtype=float)
+        usable &= np.isfinite(sample_error) & (sample_error > 0)
+        if np.any(usable):
+            return 1.0 / np.median(sample_error[usable])**2
+    return None
+
+
+def _make_weights(data, error, mask):
+    """
+    Return the image and its inverse-variance weights as float64 arrays.
+
+    Parameters
+    ----------
+    data : `~numpy.ndarray`
+        The image, a strip of it, or a stack of cutouts.
+
+    error : float or `~numpy.ndarray`
+        The 1-sigma uncertainty of ``data``, with the same shape as
+        ``data`` if it is an array.
+
+    mask : bool `~numpy.ndarray` or `None`
+        The excluded pixels, with the same shape as ``data``.
+
+    Returns
+    -------
+    data, weights : `~numpy.ndarray`
+        Float64 copies of the data and the weights. Both are zero at the
+        excluded pixels.
+    """
+    data = np.array(data, dtype=float)
+    bad = ~np.isfinite(data)
+    if mask is not None:
+        bad |= mask
+    if np.ndim(error) == 0:
+        weights = np.full(data.shape, 1.0 / error**2)
+    else:
+        error = np.asarray(error, dtype=float)
+        good_error = np.isfinite(error) & (error > 0)
+        bad |= ~good_error
+        weights = 1.0 / np.where(good_error, error, 1.0)**2
+
+    # Nonfinite values must be replaced because they are not removed by
+    # a zero weight
+    data[bad] = 0.0
+    weights[bad] = 0.0
+    return data, weights
+
+
+def _split_large(image, limit):
+    """
+    Remove the values of an image that are larger than a limit.
+
+    Parameters
+    ----------
+    image : 2D `~numpy.ndarray`
+        The 2D image array.
+
+    limit : float
+        The absolute value above which an image value is removed.
+
+    Returns
+    -------
+    small : 2D `~numpy.ndarray`
+        The image with the large values set to zero.
+
+    yy, xx, values : 1D `~numpy.ndarray`
+        The positions and values of the large values.
+    """
+    large = np.abs(image) > limit
+    if not np.any(large):
+        empty = np.array([], dtype=int)
+        return image, empty, empty, np.array([])
+    yy, xx = np.nonzero(large)
+    return np.where(large, 0.0, image), yy, xx, image[yy, xx]
+
+
+def _add_kernel_copies(result, yy, xx, values, flipped):
+    """
+    Add scaled copies of a kernel to an image, as a convolution of
+    isolated values would.
+
+    Parameters
+    ----------
+    result : 2D `~numpy.ndarray`
+        The image, which is changed in place.
+
+    yy, xx, values : 1D `~numpy.ndarray`
+        The positions and values of the isolated image values.
+
+    flipped : 2D `~numpy.ndarray`
+        The flipped kernel, which must have odd dimensions.
+    """
+    n_rows, n_cols = result.shape
+    yhalf = flipped.shape[0] // 2
+    xhalf = flipped.shape[1] // 2
+    for ypos, xpos, value in zip(yy, xx, values, strict=True):
+        y0 = max(ypos - yhalf, 0)
+        y1 = min(ypos + yhalf + 1, n_rows)
+        x0 = max(xpos - xhalf, 0)
+        x1 = min(xpos + xhalf + 1, n_cols)
+        result[y0:y1, x0:x1] += value * flipped[
+            y0 - ypos + yhalf:y1 - ypos + yhalf,
+            x0 - xpos + xhalf:x1 - xpos + xhalf]
+
+
+def _correlate(image, kernel, limit):
     """
     Correlate an image with a kernel, with zeros beyond the image.
+
+    The values larger than ``limit`` are left out of the fast Fourier
+    transform and added as scaled copies of the kernel instead, so they
+    change only the pixels within the kernel footprint around them.
 
     Parameters
     ----------
@@ -41,13 +196,53 @@ def _correlate(image, kernel):
     kernel : 2D `~numpy.ndarray`
         The kernel array, which must have odd dimensions.
 
+    limit : float
+        The absolute value above which an image value is added
+        directly.
+
     Returns
     -------
     result : 2D `~numpy.ndarray`
         The correlated image.
     """
     # Convolution with the flipped kernel is correlation
-    return oaconvolve(image, kernel[::-1, ::-1], mode='same')
+    flipped = kernel[::-1, ::-1]
+    small, yy, xx, values = _split_large(image, limit)
+    result = oaconvolve(small, flipped, mode='same')
+    _add_kernel_copies(result, yy, xx, values, flipped)
+    return result
+
+
+def _box_sum(image, shape, limit):
+    """
+    Sum an image in a box centered on each pixel, with zeros beyond the
+    image.
+
+    The values larger than ``limit`` are left out of the running sums of
+    the box filter and added directly instead, so they change only the
+    pixels within the box around them.
+
+    Parameters
+    ----------
+    image : 2D `~numpy.ndarray`
+        The 2D image array.
+
+    shape : tuple of int
+        The odd ``(ny, nx)`` shape of the box.
+
+    limit : float
+        The absolute value above which an image value is added
+        directly.
+
+    Returns
+    -------
+    result : 2D `~numpy.ndarray`
+        The box sums.
+    """
+    small, yy, xx, values = _split_large(image, limit)
+    result = uniform_filter(small, shape, mode='constant') * math.prod(shape)
+    _add_kernel_copies(result, yy, xx, values, np.ones(shape))
+    return result
 
 
 class MatchedFilterStarFinder(StarFinderBase):
@@ -139,6 +334,10 @@ class MatchedFilterStarFinder(StarFinderBase):
     background of each source are then fitted again with the kernel
     shifted to that position.
 
+    A single extreme value, such as a corrupt pixel or a pixel with a
+    tiny uncertainty, changes only the S/N values within the kernel
+    footprint around it.
+
     The S/N is correct only if the input ``error`` describes the noise
     of the image and the noise of different pixels is not correlated.
     For images with correlated noise (e.g., resampled images), the S/N
@@ -212,9 +411,9 @@ class MatchedFilterStarFinder(StarFinderBase):
         return self.find_stars(data, error=error, mask=mask)
 
     @staticmethod
-    def _make_weights(data, error, mask):
+    def _validate_error(data, error, mask):
         """
-        Make the inverse-variance weights.
+        Validate the uncertainty, estimating it if it is not input.
 
         Parameters
         ----------
@@ -224,31 +423,19 @@ class MatchedFilterStarFinder(StarFinderBase):
         error : `None`, float, or 2D `~numpy.ndarray`
             The 1-sigma uncertainty of ``data``.
 
-        mask : 2D bool array or `None`
+        mask : 2D bool `~numpy.ndarray` or `None`
             The pixel mask.
 
         Returns
         -------
-        data : 2D `~numpy.ndarray`
-            The image with the zero-weight pixels set to zero.
-
-        weights : float or 2D `~numpy.ndarray`
-            The inverse-variance weights, which are zero for the
-            excluded pixels. A scalar is returned if every pixel has
-            the same weight, which avoids an array with the size of
-            the image.
+        error : float or 2D `~numpy.ndarray`
+            The uncertainty. An array is returned without a copy.
         """
-        bad = ~np.isfinite(data)
-        if mask is not None:
-            mask = np.asarray(mask, dtype=bool)
-            if mask.shape != data.shape:
-                msg = 'mask must have the same shape as data'
-                raise ValueError(msg)
-            bad |= mask
-        any_bad = np.any(bad)
-
         if error is None:
-            error = mad_std(data[~bad])
+            bad = ~np.isfinite(data)
+            if mask is not None:
+                bad |= mask
+            error = mad_std(np.asarray(data[~bad], dtype=float))
             if not error > 0:
                 msg = ('The noise could not be estimated from data. Input '
                        'the error array.')
@@ -258,38 +445,35 @@ class MatchedFilterStarFinder(StarFinderBase):
             if not error > 0:
                 msg = 'error must be positive'
                 raise ValueError(msg)
-            if not any_bad:
-                return data, 1.0 / error**2
-            weights = np.full(data.shape, 1.0 / error**2)
-        else:
-            error = np.asarray(error, dtype=float)
-            if error.shape != data.shape:
-                msg = 'error must have the same shape as data'
-                raise ValueError(msg)
-            good_error = np.isfinite(error) & (error > 0)
-            bad |= ~good_error
-            any_bad = np.any(bad)
-            weights = 1.0 / np.where(good_error, error, 1.0)**2
+            return float(error)
 
-        if any_bad:
-            weights[bad] = 0.0
-            data = np.where(bad, 0.0, data)
-        return data, weights
+        error = np.asanyarray(error)
+        if error.shape != data.shape:
+            msg = 'error must have the same shape as data'
+            raise ValueError(msg)
+        return error
 
-    def _make_snr_image(self, data, weights):
+    def _make_snr_image(self, data, error, mask, typical_weight):
         """
         Make the image of the fitted-flux signal-to-noise ratio.
 
-        The image is processed in strips of rows, so that the arrays
-        of sums needed for the fit are never as large as the image.
+        The image is processed in strips of rows. Only one strip of the
+        image and its weights is converted to float64 at a time, so that
+        the S/N image is the only array with the size of the image.
 
         Parameters
         ----------
         data : 2D `~numpy.ndarray`
-            The 2D image array with the zero-weight pixels set to zero.
+            The 2D image array.
 
-        weights : float or 2D `~numpy.ndarray`
-            The inverse-variance weights.
+        error : float or 2D `~numpy.ndarray`
+            The 1-sigma uncertainty of ``data``.
+
+        mask : 2D bool `~numpy.ndarray` or `None`
+            The pixel mask.
+
+        typical_weight : float
+            The median weight of the usable pixels.
 
         Returns
         -------
@@ -298,10 +482,13 @@ class MatchedFilterStarFinder(StarFinderBase):
             kernel footprint are zero.
         """
         half = self.kernel.shape[0] // 2
-        n_rows, n_cols = data.shape
-        uniform = np.ndim(weights) == 0
-        min_pp = (_MIN_WEIGHT_FRACTION * np.max(weights)
+        n_rows = data.shape[0]
+        min_pp = (_MIN_WEIGHT_FRACTION * typical_weight
                   * np.sum(self.kernel**2))
+        # A weighted value is the significance of the pixel times the
+        # square root of its weight
+        limits = (_DIRECT_FACTOR * math.sqrt(typical_weight),
+                  _DIRECT_FACTOR * typical_weight)
 
         snr = np.empty(data.shape)
         for start in range(0, n_rows, _N_STRIP_ROWS):
@@ -309,23 +496,24 @@ class MatchedFilterStarFinder(StarFinderBase):
             # Rows beyond the strip that are within the kernel of it
             low = max(start - half, 0)
             high = min(stop + half, n_rows)
-            if uniform:
-                strip_weights = np.full((high - low, n_cols), weights)
-            else:
-                strip_weights = weights[low:high]
-            strip = self._make_snr_strip(data[low:high], strip_weights,
-                                         min_pp)
+            rows = slice(low, high)
+            strip_error = error if np.ndim(error) == 0 else error[rows]
+            strip_mask = None if mask is None else mask[rows]
+            strip, weights = _make_weights(data[rows], strip_error,
+                                           strip_mask)
+            strip = self._make_snr_strip(strip, weights, min_pp, limits)
             snr[start:stop] = strip[start - low:stop - low]
         return snr
 
-    def _make_snr_strip(self, data, weights, min_pp):
+    def _make_snr_strip(self, data, weights, min_pp, limits):
         """
         Make the S/N image of a strip of image rows.
 
         Parameters
         ----------
         data : 2D `~numpy.ndarray`
-            The strip of the image.
+            The strip of the image, with the excluded pixels set to
+            zero.
 
         weights : 2D `~numpy.ndarray`
             The inverse-variance weights of the strip.
@@ -333,6 +521,11 @@ class MatchedFilterStarFinder(StarFinderBase):
         min_pp : float
             The weighted sum of the squared kernel below which a pixel
             has too little unmasked data to be fitted.
+
+        limits : tuple of float
+            The absolute values above which a weighted data value and a
+            weight are added directly instead of through the fast
+            Fourier transform or the box filter.
 
         Returns
         -------
@@ -342,9 +535,10 @@ class MatchedFilterStarFinder(StarFinderBase):
             valid.
         """
         kernel = self.kernel
+        data_limit, weight_limit = limits
         data_weights = data * weights
-        sum_pd = _correlate(data_weights, kernel)
-        sum_pp = _correlate(weights, kernel**2)
+        sum_pd = _correlate(data_weights, kernel, data_limit)
+        sum_pp = _correlate(weights, kernel**2, weight_limit)
         valid = sum_pp > min_pp
 
         if not self.local_bkg:
@@ -352,11 +546,9 @@ class MatchedFilterStarFinder(StarFinderBase):
             denominator = sum_pp
         else:
             shape = kernel.shape
-            sum_w = (uniform_filter(weights, shape, mode='constant')
-                     * kernel.size)
-            sum_d = (uniform_filter(data_weights, shape, mode='constant')
-                     * kernel.size)
-            sum_p = _correlate(weights, kernel)
+            sum_w = _box_sum(weights, shape, weight_limit)
+            sum_d = _box_sum(data_weights, shape, data_limit)
+            sum_p = _correlate(weights, kernel, weight_limit)
 
             # Determinant of the normal equations for the flux and the
             # local background
@@ -414,7 +606,7 @@ class MatchedFilterStarFinder(StarFinderBase):
             offsets.append(offset)
         return offsets[0], offsets[1]
 
-    def _fit_sources(self, data, weights, xpeak, ypeak, dx, dy):
+    def _fit_sources(self, data, error, mask, xpeak, ypeak, dx, dy):
         """
         Fit the flux and the local background of each source with the
         kernel shifted to the source position.
@@ -422,10 +614,13 @@ class MatchedFilterStarFinder(StarFinderBase):
         Parameters
         ----------
         data : 2D `~numpy.ndarray`
-            The 2D image array with the zero-weight pixels set to zero.
+            The 2D image array.
 
-        weights : float or 2D `~numpy.ndarray`
-            The inverse-variance weights.
+        error : float or 2D `~numpy.ndarray`
+            The 1-sigma uncertainty of ``data``.
+
+        mask : 2D bool `~numpy.ndarray` or `None`
+            The pixel mask.
 
         xpeak, ypeak : 1D `~numpy.ndarray` of int
             The pixel coordinates of the peaks.
@@ -443,10 +638,15 @@ class MatchedFilterStarFinder(StarFinderBase):
         ycen = shape[0] // 2
         xcen = shape[1] // 2
         cut_data, overlap = _make_cutouts(data, xpeak, ypeak, shape)
-        if np.ndim(weights) == 0:
-            cut_weights = weights * overlap
-        else:
-            cut_weights, _ = _make_cutouts(weights, xpeak, ypeak, shape)
+        cut_bad = ~overlap
+        if mask is not None:
+            cut_mask, _ = _make_cutouts(mask, xpeak, ypeak, shape)
+            cut_bad |= cut_mask.astype(bool)
+        cut_error = error
+        if np.ndim(error) != 0:
+            cut_error, _ = _make_cutouts(error, xpeak, ypeak, shape,
+                                         fill_value=np.inf)
+        cut_data, cut_weights = _make_weights(cut_data, cut_error, cut_bad)
 
         # Kernel shifted to the subpixel position of each source
         yy, xx = np.mgrid[0:shape[0], 0:shape[1]]
@@ -542,13 +742,24 @@ class MatchedFilterStarFinder(StarFinderBase):
         """
         (data, error), unit = process_quantities((data, error),
                                                  ('data', 'error'))
-        data = np.asarray(data, dtype=float)
+        # The inputs are not converted to float64 here. Only strips of
+        # rows and the cutouts of the sources are converted.
+        data = np.asanyarray(data)
         if data.ndim != 2:
             msg = 'data must be a 2D array'
             raise ValueError(msg)
+        if mask is not None:
+            mask = np.asarray(mask, dtype=bool)
+            if mask.shape != data.shape:
+                msg = 'mask must have the same shape as data'
+                raise ValueError(msg)
 
-        data, weights = self._make_weights(data, error, mask)
-        snr = self._make_snr_image(data, weights)
+        error = self._validate_error(data, error, mask)
+        typical_weight = _typical_weight(data, error, mask)
+        if typical_weight is None:
+            snr = np.zeros(data.shape)
+        else:
+            snr = self._make_snr_image(data, error, mask, typical_weight)
 
         xypos = self._find_stars(snr, self.kernel, self.threshold,
                                  min_separation=self.min_separation,
@@ -561,7 +772,7 @@ class MatchedFilterStarFinder(StarFinderBase):
         xpeak = xypos[:, 0]
         ypeak = xypos[:, 1]
         dx, dy = self._subpixel_offsets(snr, xpeak, ypeak)
-        fit = self._fit_sources(data, weights, xpeak, ypeak, dx, dy)
+        fit = self._fit_sources(data, error, mask, xpeak, ypeak, dx, dy)
 
         table = QTable()
         table.meta.update(_get_meta())
