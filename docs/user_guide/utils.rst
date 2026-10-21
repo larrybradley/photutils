@@ -32,6 +32,9 @@ Some functions and classes of note include:
 * :func:`~photutils.utils.compute_pixel_area_map`: Function to compute
   the on-sky area of every pixel in an image from a WCS.
 
+* :func:`~photutils.utils.pixel_to_sky_errors`: Function to convert
+  pixel position errors to sky position errors from a WCS.
+
 * :func:`~photutils.utils.make_random_cmap`: Function to create a
   colormap consisting of random muted colors. This type of colormap is
   useful for plotting segmentation images.
