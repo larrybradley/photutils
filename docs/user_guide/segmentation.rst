@@ -192,12 +192,38 @@ Please note the following limitations:
   that in mind.
 
 * The S/N is overestimated for images with correlated noise (e.g.,
-  resampled images).
+  resampled images), unless it is corrected as described below.
 
 * The filter fits the amplitude of the kernel. Where pixels are
   excluded, the filtered value at the center of a source with the shape
   of the kernel is preserved, but the filtered values of sources with
   other shapes are not.
+
+When the noise of neighboring pixels is correlated, the uncertainty
+of the filtered image is underestimated. The ``error_scale`` keyword
+multiplies ``filtered_error`` by a factor to correct it. The factor
+can be input if it is known (e.g., from the parameters used to
+resample the image). With ``error_scale='empirical'``, the factor is
+estimated from the S/N image itself as its sigma-clipped standard
+deviation, so that the S/N of the noise has a standard deviation of
+1. The estimate assumes that most pixels contain only noise. Pixels
+that contain sources can be left out of it with the ``source_mask``
+keyword::
+
+    >>> filtered_data, filtered_error = matched_filter(
+    ...     data, kernel, bkg.background_rms, error_scale='empirical')
+    >>> snr = filtered_data / filtered_error
+
+A single factor is appropriate if the noise correlation is the same
+over the image. If it varies over the image, the S/N image can instead
+be divided by a map of its noise, for example the background RMS of a
+:class:`~photutils.background.Background2D` of the S/N image::
+
+    >>> filtered_data, filtered_error = matched_filter(
+    ...     data, kernel, bkg.background_rms)
+    >>> snr = filtered_data / filtered_error
+    >>> snr_bkg = Background2D(snr, (50, 50), filter_size=(3, 3))
+    >>> snr_local = snr / snr_bkg.background_rms
 
 
 Source Deblending
