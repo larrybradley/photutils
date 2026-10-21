@@ -933,7 +933,10 @@ pixel to pixel (e.g., from rejected cosmic rays or a variable number
 of coadded exposures). Masked pixels, nonfinite pixels, and pixels
 beyond the image borders are excluded, so no values are assumed for
 them. For uniform noise, the matched filter and a convolution detect the
-same sources. See :ref:`segmentation_matched_filter` for more details.
+same sources. For images with correlated noise (e.g., resampled
+images), the ``error_scale`` keyword corrects the uncertainty of the
+filtered image. See :ref:`segmentation_matched_filter` for more
+details.
 
 
 Source Deblending Performance Improvements

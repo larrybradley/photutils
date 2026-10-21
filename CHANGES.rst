@@ -480,7 +480,8 @@ New Features
     ratio image that can be input to ``detect_sources`` with a
     threshold that is a significance. Pixels with a larger uncertainty
     have a smaller weight, and masked pixels and pixels beyond the
-    image borders are excluded. [#2513]
+    image borders are excluded. The ``error_scale`` keyword corrects
+    the uncertainty for correlated noise. [#2513]
 
   - ``SegmentationImage`` objects now always have an ``info`` attribute,
     a dictionary containing auxiliary information. Segmentation
