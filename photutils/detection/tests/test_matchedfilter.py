@@ -261,6 +261,64 @@ class TestMatchedFilterStarFinder:
             assert len(tbl) == 2
             assert np.all(tbl['x_centroid'] > 70)
 
+    @staticmethod
+    def _assert_same_far_sources(tbl0, tbl1, xpos, ypos):
+        """
+        Assert that the sources farther than the kernel size from (xpos,
+        ypos) are the same in two tables.
+        """
+        far = np.hypot(tbl1['x_centroid'] - xpos,
+                       tbl1['y_centroid'] - ypos) > 17
+        tbl1 = tbl1[far]
+        assert len(tbl1) == len(tbl0)
+        tbl0.sort('y_centroid')
+        tbl1.sort('y_centroid')
+        for name in ('x_centroid', 'y_centroid', 'flux', 'flux_err',
+                     'local_bkg'):
+            assert_allclose(tbl1[name], tbl0[name], rtol=1.0e-10,
+                            atol=1.0e-10)
+
+    @pytest.mark.parametrize('local_bkg', [True, False])
+    @pytest.mark.parametrize('value', [1.0e12, 1.0e20])
+    def test_extreme_value(self, data, kernel, local_bkg, value):
+        """
+        Test that one extreme pixel value does not change the stars that
+        are away from it, including a star in the same rows.
+        """
+        finder = MatchedFilterStarFinder(5.0, kernel, local_bkg=local_bkg)
+        tbl0 = finder(data, error=NOISE)
+        data = data.copy()
+        data[70, 20] = value
+        tbl1 = finder(data, error=NOISE)
+        self._assert_same_far_sources(tbl0, tbl1, 20, 70)
+
+    @pytest.mark.parametrize('local_bkg', [True, False])
+    @pytest.mark.parametrize('value', [1.0e-5, 1.0e-10])
+    def test_tiny_error(self, data, kernel, local_bkg, value):
+        """
+        Test that one pixel with a tiny uncertainty does not change the
+        stars that are away from it.
+        """
+        finder = MatchedFilterStarFinder(5.0, kernel, local_bkg=local_bkg)
+        error = np.full(data.shape, NOISE)
+        tbl0 = finder(data, error=error)
+        error[70, 20] = NOISE * value
+        tbl1 = finder(data, error=error)
+        self._assert_same_far_sources(tbl0, tbl1, 20, 70)
+
+    def test_float32_input(self, data, kernel):
+        """
+        Test that float32 inputs give the float64 result.
+        """
+        rng = np.random.default_rng(1)
+        data = data.astype(np.float32)
+        error = rng.uniform(2.5, 3.5, data.shape).astype(np.float32)
+        finder = MatchedFilterStarFinder(5.0, kernel)
+        tbl0 = finder(data.astype(float), error=error.astype(float))
+        tbl1 = finder(data, error=error)
+        for name in tbl0.colnames:
+            assert_allclose(tbl1[name], tbl0[name], rtol=1.0e-12)
+
     def test_inputs(self, data, kernel):
         match = 'threshold must be a positive scalar value'
         with pytest.raises(ValueError, match=match):
