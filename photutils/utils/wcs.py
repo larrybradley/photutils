@@ -1,16 +1,21 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 """
-Tools for computing the on-sky area of image pixels from a WCS.
+Tools for computing the on-sky area of image pixels and the sky errors
+of pixel positions from a WCS.
 """
 
 import warnings
 
+import astropy.units as u
 import numpy as np
 from astropy.utils.exceptions import AstropyUserWarning
 
-from photutils.utils._wcs_helpers import compute_pixel_to_sky_jacobians
+from photutils.utils._moments import PSD_RTOL, pixel_to_sky_covariance
+from photutils.utils._wcs_helpers import (_is_gwcs, _low_level_wcs,
+                                          compute_pixel_to_sky_jacobians)
 
-__all__ = ['compute_pixel_area_map', 'compute_pixel_areas']
+__all__ = ['compute_pixel_area_map', 'compute_pixel_areas',
+           'pixel_to_sky_errors']
 
 
 def compute_pixel_areas(wcs, x, y):
@@ -270,3 +275,160 @@ def compute_pixel_area_map(wcs, shape, *, interpolate=True, step=None):
 
     spline = RectBivariateSpline(grid_y, grid_x, coarse)
     return spline(np.arange(ny, dtype=float), np.arange(nx, dtype=float))
+
+
+def _as_pixel_array(value, name, unit):
+    """
+    Return an input as a float array in pixel units.
+
+    A `~astropy.units.Quantity` is converted to ``unit``. The masked
+    values of a masked array are replaced with NaN.
+    """
+    if isinstance(value, u.Quantity):
+        try:
+            value = value.to_value(unit)
+        except u.UnitConversionError:
+            msg = f'{name} must be in units of {unit}'
+            raise ValueError(msg) from None
+    if np.ma.isMaskedArray(value):
+        return value.astype(float).filled(np.nan)
+    return np.asarray(value, dtype=float)
+
+
+def pixel_to_sky_errors(wcs, x, y, x_err, y_err, *, xy_cov=0.0):
+    """
+    Convert pixel position errors to sky position errors.
+
+    The pixel error covariance of each position is transported to the
+    plane tangent to the sky at that position with the local forward WCS
+    Jacobian ``F`` (``sky_covariance = F pixel_covariance F^T``). The
+    Jacobian is evaluated by central finite differences half a pixel
+    on either side of each position (see `compute_pixel_areas`), so
+    the errors follow the distortion across the field and are well
+    defined at the celestial poles and across the longitude wraparound.
+    The finite differences ignore any gwcs bounding box, so the errors
+    are defined for positions within half a pixel of the bounding-box
+    edge.
+
+    The returned errors are the square roots of the diagonal elements of
+    the sky covariance. The propagation is linear, so it assumes that
+    the errors are small compared with the scale over which the WCS
+    distortion changes.
+
+    Parameters
+    ----------
+    wcs : WCS object
+        A world coordinate system (WCS) transformation that
+        supports the `astropy shared interface for WCS
+        <https://docs.astropy.org/en/stable/wcs/wcsapi.html>`_ (e.g.,
+        `astropy.wcs.WCS`, `gwcs.wcs.WCS`).
+
+    x, y : float, array_like, or `~astropy.units.Quantity`
+        The pixel coordinates. Both must have the same shape. A
+        `~astropy.units.Quantity` must be in pixel units.
+
+    x_err, y_err : float, array_like, or `~astropy.units.Quantity`
+        The nonnegative 1-sigma errors of the ``x`` and ``y`` pixel
+        coordinates. They must be broadcastable to the shape of ``x``
+        and ``y``. A `~astropy.units.Quantity` must be in pixel units.
+
+    xy_cov : float, array_like, or `~astropy.units.Quantity`, optional
+        The covariance of the ``x`` and ``y`` pixel coordinates in
+        pixel\\ :sup:`2`. It must be broadcastable to the shape of ``x``
+        and ``y`` and must not exceed ``x_err * y_err`` in absolute
+        value. A `~astropy.units.Quantity` must be in pixel\\ :sup:`2`
+        units. The default of zero treats the ``x`` and ``y`` errors as
+        independent.
+
+    Returns
+    -------
+    east_err, north_err : `~astropy.units.Quantity`
+        The 1-sigma sky position errors in arcsec along East and North,
+        with the same shape as ``x`` and ``y``. The East error is a
+        great-circle angle (i.e., it includes the cos(latitude) factor).
+        The directions are those of the longitude and latitude axes of
+        the celestial frame of the ``wcs``. They are Right Ascension
+        and Declination only for an equatorial frame (e.g., ICRS). The
+        errors are NaN where the position or any of its errors is not
+        finite or is masked, where the position is outside the bounding
+        box of a gwcs, or where the WCS is undefined (e.g., outside the
+        valid region of the projection).
+
+    Raises
+    ------
+    ValueError
+        If ``x_err`` or ``y_err`` is negative, if the absolute value
+        of ``xy_cov`` exceeds ``x_err * y_err``, or if a
+        `~astropy.units.Quantity` input is not in pixel units.
+
+    See Also
+    --------
+    compute_pixel_areas
+
+    Examples
+    --------
+    >>> from photutils.datasets import make_wcs
+    >>> from photutils.utils import pixel_to_sky_errors
+    >>> wcs = make_wcs((100, 100))  # 0.1 arcsec pixels
+    >>> x_err = [0.1, 0.2]
+    >>> y_err = [0.1, 0.2]
+    >>> east_err, north_err = pixel_to_sky_errors(
+    ...     wcs, [10.0, 50.0], [20.0, 50.0], x_err, y_err)
+    >>> east_err  # doctest: +FLOAT_CMP
+    <Quantity [0.01, 0.02] arcsec>
+    >>> north_err  # doctest: +FLOAT_CMP
+    <Quantity [0.01, 0.02] arcsec>
+    """
+    x = _as_pixel_array(x, 'x', u.pix)
+    y = _as_pixel_array(y, 'y', u.pix)
+    if x.shape != y.shape:
+        msg = 'x and y must have the same shape'
+        raise ValueError(msg)
+
+    x_err = _as_pixel_array(x_err, 'x_err', u.pix)
+    y_err = _as_pixel_array(y_err, 'y_err', u.pix)
+    xy_cov = _as_pixel_array(xy_cov, 'xy_cov', u.pix**2)
+    try:
+        x_err, y_err, xy_cov = (np.broadcast_to(value, x.shape)
+                                for value in (x_err, y_err, xy_cov))
+    except ValueError:
+        msg = ('x_err, y_err, and xy_cov must be broadcastable to the '
+               'shape of x and y')
+        raise ValueError(msg) from None
+
+    if np.any(x_err < 0) or np.any(y_err < 0):
+        msg = 'x_err and y_err must be nonnegative'
+        raise ValueError(msg)
+
+    # Ignore floating-point errors from nonfinite or huge errors, which
+    # give NaN sky errors below. The tolerance allows for the rounding
+    # of an xy_cov computed from a correlation of +1 or -1.
+    with np.errstate(over='ignore', invalid='ignore'):
+        if np.any(np.abs(xy_cov) > x_err * y_err * (1.0 + PSD_RTOL)):
+            msg = 'abs(xy_cov) must not exceed x_err * y_err'
+            raise ValueError(msg)
+
+        pixel_covariance = np.empty((x.size, 2, 2))
+        pixel_covariance[:, 0, 0] = x_err.ravel()**2
+        pixel_covariance[:, 1, 1] = y_err.ravel()**2
+        pixel_covariance[:, 0, 1] = xy_cov.ravel()
+        pixel_covariance[:, 1, 0] = xy_cov.ravel()
+
+    xycen = np.column_stack((x.ravel(), y.ravel()))
+    sky_covariance = pixel_to_sky_covariance(wcs, pixel_covariance, xycen)
+
+    # A covariance on the boundary of validity (abs(xy_cov) equal to
+    # x_err * y_err) can give a variance that is slightly negative from
+    # rounding. The clip keeps NaN variances.
+    errors = np.sqrt(np.maximum(sky_covariance[:, (0, 1), (0, 1)], 0.0))
+
+    # The Jacobians ignore any gwcs bounding box (see above). The
+    # positions are evaluated again with the bounding box applied so
+    # that the errors are NaN wherever pixel_to_world returns NaN.
+    low_level_wcs = _low_level_wcs(wcs)
+    if _is_gwcs(low_level_wcs):
+        world = low_level_wcs.pixel_to_world_values(xycen[:, 0],
+                                                    xycen[:, 1])
+        errors[~np.all(np.isfinite(world), axis=0)] = np.nan
+    east_err, north_err = errors.T.reshape(2, *x.shape)
+    return east_err << u.arcsec, north_err << u.arcsec

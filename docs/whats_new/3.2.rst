@@ -20,6 +20,28 @@ Dependency Version Updates
 ==========================
 
 
+Sky Position Errors from a WCS
+==============================
+
+The new :func:`~photutils.utils.pixel_to_sky_errors` function converts
+pixel position errors, such as those from centroiding or PSF fitting,
+to East and North sky position errors in arcsec. The pixel error
+covariance is transported to the sky with the local WCS Jacobian at
+each position, so the errors follow the distortion across the field
+and are well defined at the celestial poles and across the RA
+wraparound. The optional ``xy_cov`` keyword includes the covariance
+of the ``x`` and ``y`` errors. The function accepts any WCS that
+supports the astropy shared WCS interface, including ``gwcs`` objects::
+
+    >>> from photutils.datasets import make_wcs
+    >>> from photutils.utils import pixel_to_sky_errors
+    >>> wcs = make_wcs((100, 100))  # 0.1 arcsec pixels
+    >>> east_err, north_err = pixel_to_sky_errors(
+    ...     wcs, [10.0, 50.0], [20.0, 50.0], [0.1, 0.2], [0.1, 0.2])
+    >>> east_err
+    <Quantity [0.01, 0.02] arcsec>
+
+
 .. _whatsnew-3.2-api-changes:
 
 API Changes
