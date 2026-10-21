@@ -3,6 +3,8 @@
 Tools for image segmentation.
 """
 
+import math
+
 import numpy as np
 from astropy.convolution import Gaussian2DKernel
 from astropy.stats import gaussian_fwhm_to_sigma
@@ -19,9 +21,19 @@ __all__ = ['make_2dgaussian_kernel', 'matched_filter']
 # use
 _N_STRIP_ROWS = 256
 
-# Fraction of the largest weight sum below which a pixel has too little
-# unmasked data in its kernel footprint to be filtered
+# Fraction of the weight sum of a full kernel footprint of typical
+# weights below which a pixel has too little unmasked data in its kernel
+# footprint to be filtered
 _MIN_WEIGHT_FRACTION = 1.0e-8
+
+# Weighted values and weights larger than this factor times their
+# typical size are correlated directly instead of with the fast Fourier
+# transform, whose rounding errors scale with the largest value in each
+# block of the image
+_DIRECT_FACTOR = 1.0e6
+
+# Approximate number of pixels sampled to estimate the typical weight
+_N_SAMPLES = 1_000_000
 
 
 @deprecated_positional_kwargs(since='3.0', until='4.0')
@@ -157,6 +169,10 @@ def matched_filter(data, kernel, error, *, mask=None):
     depend on which of its pixels are excluded. This is not true for
     sources with other shapes, including a constant background.
 
+    A single extreme value, such as a corrupt pixel or a pixel with a
+    tiny uncertainty, changes only the filtered values within the
+    kernel footprint around it.
+
     The uncertainty is correct only if ``error`` describes the noise
     of the image and the noise of different pixels is not correlated.
     For images with correlated noise (e.g., resampled images), the S/N
@@ -190,7 +206,10 @@ def matched_filter(data, kernel, error, *, mask=None):
     """
     (data, error), unit = process_quantities((data, error),
                                              ('data', 'error'))
-    data = np.asarray(data, dtype=float)
+    # The inputs are not converted to float64 here. Only strips of rows
+    # are converted, so that the outputs are the only arrays with the
+    # size of the image.
+    data = np.asanyarray(data)
     if data.ndim != 2:
         msg = 'data must be a 2D array'
         raise ValueError(msg)
@@ -207,67 +226,220 @@ def matched_filter(data, kernel, error, *, mask=None):
         raise ValueError(msg)
     kernel /= np.sum(kernel)
 
-    bad = ~np.isfinite(data)
-    if np.any(bad):
-        # Nonfinite values must be replaced because they are not
-        # removed by a zero weight
-        data = np.where(bad, 0.0, data)
     if mask is not None:
         mask = np.asarray(mask, dtype=bool)
         if mask.shape != data.shape:
             msg = 'mask must have the same shape as data'
             raise ValueError(msg)
-        bad |= mask
 
-    error = np.asarray(error, dtype=float)
+    error = np.asanyarray(error)
     if error.ndim != 0 and error.shape != data.shape:
         msg = 'error must be a scalar or have the same shape as data'
         raise ValueError(msg)
-    good_error = np.isfinite(error) & (error > 0)
-    if not np.any(good_error):
+    if error.ndim == 0:
+        error = float(error)
+    if not np.any(np.isfinite(error) & (error > 0)):
         msg = 'error must have finite and positive values'
         raise ValueError(msg)
 
-    if error.ndim == 0 and not np.any(bad):
-        # Every pixel has the same weight. A scalar weight avoids an
-        # array with the size of the image.
-        weights = 1.0 / float(error)**2
-    elif error.ndim == 0:
-        weights = np.full(data.shape, 1.0 / float(error)**2)
-        weights[bad] = 0.0
-    else:
-        weights = np.where(good_error, error, 1.0)
-        np.square(weights, out=weights)
-        np.reciprocal(weights, out=weights)
-        bad |= ~good_error
-        weights[bad] = 0.0
-    uniform = np.ndim(weights) == 0
+    filtered_data = np.zeros(data.shape)
+    filtered_error = np.full(data.shape, np.inf)
+    typical_weight = _typical_weight(data, error, mask)
+    if typical_weight is not None:
+        _matched_filter_strips(data, kernel, error, mask, typical_weight,
+                               filtered_data, filtered_error)
 
+    if unit is not None:
+        filtered_data <<= unit
+        filtered_error <<= unit
+
+    return filtered_data, filtered_error
+
+
+def _typical_weight(data, error, mask):
+    """
+    Return the median inverse-variance weight of the usable pixels.
+
+    The weights are sampled on a regular grid of about ``_N_SAMPLES``
+    pixels, or on all of the pixels if the sample has no usable pixels.
+    A median, unlike the largest weight, is not changed by a few pixels
+    with tiny uncertainties.
+
+    Parameters
+    ----------
+    data : 2D `~numpy.ndarray`
+        The 2D image array.
+
+    error : float or 2D `~numpy.ndarray`
+        The 1-sigma uncertainty of ``data``.
+
+    mask : 2D bool `~numpy.ndarray` or `None`
+        The pixel mask.
+
+    Returns
+    -------
+    weight : float or `None`
+        The median weight, or `None` if no pixel is usable.
+    """
+    step = max(1, math.ceil(math.sqrt(data.size / _N_SAMPLES)))
+    for stride in dict.fromkeys((step, 1)):
+        sample = (slice(None, None, stride),) * 2
+        usable = np.isfinite(data[sample])
+        if mask is not None:
+            usable &= ~mask[sample]
+        if np.ndim(error) == 0:
+            if np.any(usable):
+                return 1.0 / error**2
+            continue
+        sample_error = np.asarray(error[sample], dtype=float)
+        usable &= np.isfinite(sample_error) & (sample_error > 0)
+        if np.any(usable):
+            return 1.0 / np.median(sample_error[usable])**2
+    return None
+
+
+def _strip_weights(data, error, mask, rows):
+    """
+    Return a strip of the image and its inverse-variance weights.
+
+    Parameters
+    ----------
+    data : 2D `~numpy.ndarray`
+        The 2D image array.
+
+    error : float or 2D `~numpy.ndarray`
+        The 1-sigma uncertainty of ``data``.
+
+    mask : 2D bool `~numpy.ndarray` or `None`
+        The pixel mask.
+
+    rows : slice
+        The rows of the strip.
+
+    Returns
+    -------
+    strip, weights : 2D `~numpy.ndarray`
+        The strip and its weights as float64 arrays. Both are zero at
+        the excluded pixels.
+    """
+    strip = np.array(data[rows], dtype=float)
+    bad = ~np.isfinite(strip)
+    if mask is not None:
+        bad |= mask[rows]
+    if np.ndim(error) == 0:
+        weights = np.full(strip.shape, 1.0 / error**2)
+    else:
+        strip_error = np.asarray(error[rows], dtype=float)
+        good_error = np.isfinite(strip_error) & (strip_error > 0)
+        bad |= ~good_error
+        weights = 1.0 / np.where(good_error, strip_error, 1.0)**2
+
+    # Nonfinite values must be replaced because they are not removed by
+    # a zero weight
+    strip[bad] = 0.0
+    weights[bad] = 0.0
+    return strip, weights
+
+
+def _correlate(image, kernel, limit):
+    """
+    Correlate an image with a kernel, with zeros beyond the image.
+
+    The rounding errors of the fast Fourier transform scale with the
+    largest value in each block of the image. The values larger than
+    ``limit`` are therefore left out of the transform and added as
+    scaled copies of the kernel instead. They then change only the
+    pixels within the kernel footprint around them, where the result
+    is exact.
+
+    Parameters
+    ----------
+    image : 2D `~numpy.ndarray`
+        The 2D image array.
+
+    kernel : 2D `~numpy.ndarray`
+        The kernel array, which must have odd dimensions.
+
+    limit : float
+        The absolute value above which an image value is added
+        directly.
+
+    Returns
+    -------
+    result : 2D `~numpy.ndarray`
+        The correlated image.
+    """
     # Convolution with the flipped kernel is correlation
     flipped = kernel[::-1, ::-1]
-    flipped2 = flipped**2
-    norm = np.sum(flipped2)
-    min_kk = _MIN_WEIGHT_FRACTION * np.max(weights) * norm
+    large = np.abs(image) > limit
+    if not np.any(large):
+        return oaconvolve(image, flipped, mode='same')
 
-    # The image is filtered in strips of rows to limit the memory used
-    # by the fast Fourier transforms
+    yy, xx = np.nonzero(large)
+    values = image[yy, xx]
+    result = oaconvolve(np.where(large, 0.0, image), flipped, mode='same')
+    n_rows, n_cols = image.shape
+    yhalf = kernel.shape[0] // 2
+    xhalf = kernel.shape[1] // 2
+    for ypos, xpos, value in zip(yy, xx, values, strict=True):
+        y0 = max(ypos - yhalf, 0)
+        y1 = min(ypos + yhalf + 1, n_rows)
+        x0 = max(xpos - xhalf, 0)
+        x1 = min(xpos + xhalf + 1, n_cols)
+        result[y0:y1, x0:x1] += value * flipped[
+            y0 - ypos + yhalf:y1 - ypos + yhalf,
+            x0 - xpos + xhalf:x1 - xpos + xhalf]
+    return result
+
+
+def _matched_filter_strips(data, kernel, error, mask, typical_weight,
+                           filtered_data, filtered_error):
+    """
+    Fill the matched-filter outputs one strip of rows at a time.
+
+    Only one strip of the image and its weights is converted to float64
+    at a time, which also limits the memory used by the fast Fourier
+    transforms.
+
+    Parameters
+    ----------
+    data : 2D `~numpy.ndarray`
+        The 2D image array.
+
+    kernel : 2D `~numpy.ndarray`
+        The normalized kernel.
+
+    error : float or 2D `~numpy.ndarray`
+        The 1-sigma uncertainty of ``data``.
+
+    mask : 2D bool `~numpy.ndarray` or `None`
+        The pixel mask.
+
+    typical_weight : float
+        The median weight of the usable pixels.
+
+    filtered_data, filtered_error : 2D `~numpy.ndarray`
+        The output arrays, which are filled in place.
+    """
+    kernel2 = kernel**2
+    norm = np.sum(kernel2)
+    min_kk = _MIN_WEIGHT_FRACTION * typical_weight * norm
+    # A weighted value is the significance of the pixel times the square
+    # root of its weight
+    data_limit = _DIRECT_FACTOR * math.sqrt(typical_weight)
+    weight_limit = _DIRECT_FACTOR * typical_weight
+
     half = kernel.shape[0] // 2
-    n_rows, n_cols = data.shape
-    filtered_data = np.empty(data.shape)
-    filtered_error = np.empty(data.shape)
+    n_rows = data.shape[0]
     for start in range(0, n_rows, _N_STRIP_ROWS):
         stop = min(start + _N_STRIP_ROWS, n_rows)
         # Rows beyond the strip that are within the kernel of it
         low = max(start - half, 0)
         high = min(stop + half, n_rows)
         rows = slice(start - low, stop - low)
-        if uniform:
-            strip_weights = np.full((high - low, n_cols), weights)
-        else:
-            strip_weights = weights[low:high]
-        sum_kd = oaconvolve(data[low:high] * strip_weights, flipped,
-                            mode='same')[rows]
-        sum_kk = oaconvolve(strip_weights, flipped2, mode='same')[rows]
+        strip, weights = _strip_weights(data, error, mask, slice(low, high))
+        sum_kd = _correlate(strip * weights, kernel, data_limit)[rows]
+        sum_kk = _correlate(weights, kernel2, weight_limit)[rows]
 
         valid = sum_kk > min_kk
         sum_kk[~valid] = 1.0
@@ -275,12 +447,6 @@ def matched_filter(data, kernel, error, *, mask=None):
                                              0.0)
         filtered_error[start:stop] = np.where(valid, norm / np.sqrt(sum_kk),
                                               np.inf)
-
-    if unit is not None:
-        filtered_data <<= unit
-        filtered_error <<= unit
-
-    return filtered_data, filtered_error
 
 
 def _make_binary_structure(ndim, connectivity):
