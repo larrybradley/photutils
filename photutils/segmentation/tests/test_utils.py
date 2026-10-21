@@ -280,6 +280,61 @@ class TestMatchedFilter:
         assert_allclose(filtered0[13, 22], 4.0 * np.sum(kernel**2))
         assert_allclose(filtered1[13, 22], filtered0[13, 22])
 
+    @pytest.mark.parametrize('value', [1.0e12, 1.0e20, 1.0e30])
+    def test_extreme_value(self, kernel, value):
+        """
+        Test that one extreme pixel value changes only the pixels within
+        the kernel footprint around it, where the result is exact.
+        """
+        rng = np.random.default_rng(2)
+        data = rng.normal(0.0, 1.0, (300, 300))
+        result0 = matched_filter(data, kernel, 1.0)
+        data[100, 100] = value
+        result1 = matched_filter(data, kernel, 1.0)
+
+        footprint = np.zeros(data.shape, dtype=bool)
+        footprint[97:104, 98:103] = True
+        assert_allclose(result1[0][~footprint], result0[0][~footprint],
+                        atol=1.0e-12)
+        assert_equal(result1[1], result0[1])
+        expected = correlate(data, kernel, mode='constant')
+        assert_allclose(result1[0][footprint], expected[footprint],
+                        rtol=1.0e-12)
+
+    @pytest.mark.parametrize('value', [1.0e-5, 1.0e-10])
+    def test_tiny_error(self, kernel, value):
+        """
+        Test that one pixel with a tiny uncertainty changes only the
+        pixels within the kernel footprint around it.
+        """
+        rng = np.random.default_rng(3)
+        data = rng.normal(0.0, 1.0, (300, 300))
+        error = np.ones(data.shape)
+        result0 = matched_filter(data, kernel, error)
+        error[100, 100] = value
+        result1 = matched_filter(data, kernel, error)
+
+        footprint = np.zeros(data.shape, dtype=bool)
+        footprint[97:104, 98:103] = True
+        for value0, value1 in zip(result0, result1, strict=True):
+            assert_allclose(value1[~footprint], value0[~footprint],
+                            atol=1.0e-12)
+        assert np.all(np.isfinite(result1[1]))
+
+    def test_float32_input(self, kernel):
+        """
+        Test that float32 inputs give the float64 result.
+        """
+        rng = np.random.default_rng(4)
+        data = rng.normal(0.0, 1.0, (600, 40)).astype(np.float32)
+        error = rng.uniform(1.0, 2.0, data.shape).astype(np.float32)
+        result0 = matched_filter(data.astype(float), kernel,
+                                 error.astype(float))
+        result1 = matched_filter(data, kernel, error)
+        for value0, value1 in zip(result0, result1, strict=True):
+            assert value1.dtype == np.float64
+            assert_equal(value1, value0)
+
     def test_no_included_pixels(self, kernel):
         data = np.ones((40, 50))
         mask = np.zeros(data.shape, dtype=bool)
