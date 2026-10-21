@@ -335,6 +335,83 @@ class TestMatchedFilter:
             assert value1.dtype == np.float64
             assert_equal(value1, value0)
 
+    @staticmethod
+    def _correlated_noise(shape, seed):
+        """
+        Make noise with a per-pixel standard deviation of 1 that is
+        correlated between neighboring pixels, as in a resampled image.
+        """
+        rng = np.random.default_rng(seed)
+        noise = rng.normal(0.0, 1.0, shape)
+        return correlate(noise, np.full((3, 3), 1.0 / 3.0), mode='wrap')
+
+    def test_error_scale_number(self, kernel):
+        rng = np.random.default_rng(5)
+        data = rng.normal(0.0, 1.0, (60, 70))
+        result0 = matched_filter(data, kernel, 1.0)
+        result1 = matched_filter(data, kernel, 1.0, error_scale=2.5)
+        assert_equal(result1[0], result0[0])
+        assert_allclose(result1[1], 2.5 * result0[1])
+
+    def test_error_scale_empirical(self, kernel):
+        """
+        Test that the empirical error scale corrects the S/N of
+        correlated noise and does not change that of white noise.
+        """
+        data = self._correlated_noise((400, 400), 6)
+        filtered, filtered_err = matched_filter(data, kernel, 1.0)
+        assert np.std(filtered / filtered_err) > 1.5
+        filtered, filtered_err = matched_filter(data, kernel, 1.0,
+                                                error_scale='empirical')
+        assert_allclose(np.std(filtered / filtered_err), 1.0, rtol=0.05)
+
+        rng = np.random.default_rng(7)
+        data = rng.normal(0.0, 1.0, (400, 400))
+        result0 = matched_filter(data, kernel, 1.0)
+        result1 = matched_filter(data, kernel, 1.0, error_scale='empirical')
+        assert_equal(result1[0], result0[0])
+        assert_allclose(result1[1], result0[1], rtol=0.03)
+
+    def test_error_scale_source_mask(self, kernel):
+        """
+        Test that source pixels can be left out of the empirical error
+        scale, and that they are still filtered.
+        """
+        rng = np.random.default_rng(8)
+        data = rng.normal(0.0, 1.0, (400, 400))
+        source_mask = np.zeros(data.shape, dtype=bool)
+        source_mask[:, :160] = True
+        data[source_mask] += rng.uniform(0.0, 3.0, np.sum(source_mask))
+        result0 = matched_filter(data, kernel, 1.0, error_scale='empirical')
+        result1 = matched_filter(data, kernel, 1.0, error_scale='empirical',
+                                 source_mask=source_mask)
+        _, filtered_err = matched_filter(data, kernel, 1.0)
+        assert np.all(result0[1] > 1.1 * filtered_err)
+        assert_allclose(result1[1], filtered_err, rtol=0.03)
+        assert_equal(result1[0], result0[0])
+
+    def test_error_scale_inputs(self, kernel):
+        data = np.random.default_rng(9).normal(0.0, 1.0, (30, 40))
+        match = "error_scale must be None, a positive number, or 'empirical'"
+        for error_scale in (0.0, -1.0, np.inf, 'auto', [1.0, 2.0]):
+            with pytest.raises(ValueError, match=match):
+                matched_filter(data, kernel, 1.0, error_scale=error_scale)
+        source_mask = np.zeros(data.shape, dtype=bool)
+        match = "source_mask can be used only with error_scale='empirical'"
+        with pytest.raises(ValueError, match=match):
+            matched_filter(data, kernel, 1.0, source_mask=source_mask)
+        match = 'source_mask must have the same shape as data'
+        with pytest.raises(ValueError, match=match):
+            matched_filter(data, kernel, 1.0, error_scale='empirical',
+                           source_mask=np.zeros((5, 5), dtype=bool))
+        match = 'The empirical error scale could not be estimated'
+        with pytest.raises(ValueError, match=match):
+            matched_filter(data, kernel, 1.0, error_scale='empirical',
+                           source_mask=~source_mask)
+        with pytest.raises(ValueError, match=match):
+            matched_filter(np.zeros(data.shape), kernel, 1.0,
+                           error_scale='empirical')
+
     def test_no_included_pixels(self, kernel):
         data = np.ones((40, 50))
         mask = np.zeros(data.shape, dtype=bool)

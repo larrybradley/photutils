@@ -7,7 +7,7 @@ import math
 
 import numpy as np
 from astropy.convolution import Gaussian2DKernel
-from astropy.stats import gaussian_fwhm_to_sigma
+from astropy.stats import gaussian_fwhm_to_sigma, sigma_clipped_stats
 from scipy.ndimage import generate_binary_structure
 from scipy.signal import oaconvolve
 
@@ -90,7 +90,8 @@ def make_2dgaussian_kernel(fwhm, size, mode='oversample', oversampling=10):
     return kernel
 
 
-def matched_filter(data, kernel, error, *, mask=None):
+def matched_filter(data, kernel, error, *, mask=None, error_scale=None,
+                   source_mask=None):
     """
     Filter an image with a kernel, weighting each pixel by its inverse
     variance.
@@ -134,6 +135,22 @@ def matched_filter(data, kernel, error, *, mask=None):
         value indicates the corresponding element of ``data`` is
         masked. Masked pixels are excluded.
 
+    error_scale : `None`, float, or ``'empirical'``, optional
+        The factor by which ``filtered_error`` is multiplied, for
+        example to correct for noise that is correlated between pixels
+        (see Notes). If `None` (default), the uncertainty is not
+        scaled. If ``'empirical'``, the factor is the standard deviation
+        of the S/N image, so that the S/N of the noise has a standard
+        deviation of 1. It is estimated with sigma clipping from the
+        pixels that are not excluded and not in ``source_mask``, most
+        of which must contain only noise.
+
+    source_mask : 2D bool `~numpy.ndarray`, optional
+        A boolean mask with the same shape as ``data``, where a `True`
+        value indicates a source pixel that is left out of the estimate
+        of the empirical ``error_scale``. Source pixels are still
+        filtered. It can be used only with ``error_scale='empirical'``.
+
     Returns
     -------
     filtered_data : 2D `~numpy.ndarray` or `~astropy.units.Quantity`
@@ -175,8 +192,13 @@ def matched_filter(data, kernel, error, *, mask=None):
 
     The uncertainty is correct only if ``error`` describes the noise
     of the image and the noise of different pixels is not correlated.
-    For images with correlated noise (e.g., resampled images), the S/N
-    is overestimated.
+    For images with correlated noise (e.g., resampled images), the
+    S/N is overestimated unless ``error_scale`` corrects it. A single
+    factor is appropriate if the correlation is the same over the
+    image. A correction that varies over the image can instead be
+    made by dividing the S/N image by a map of its noise, such as the
+    ``background_rms`` of a `~photutils.background.Background2D` of the
+    S/N image.
 
     The S/N of neighboring pixels is correlated by the filter. The
     number of connected pixels required by
@@ -231,6 +253,15 @@ def matched_filter(data, kernel, error, *, mask=None):
         if mask.shape != data.shape:
             msg = 'mask must have the same shape as data'
             raise ValueError(msg)
+    error_scale = _validate_error_scale(error_scale)
+    if source_mask is not None:
+        if error_scale != 'empirical':
+            msg = "source_mask can be used only with error_scale='empirical'"
+            raise ValueError(msg)
+        source_mask = np.asarray(source_mask, dtype=bool)
+        if source_mask.shape != data.shape:
+            msg = 'source_mask must have the same shape as data'
+            raise ValueError(msg)
 
     error = np.asanyarray(error)
     if error.ndim != 0 and error.shape != data.shape:
@@ -248,12 +279,86 @@ def matched_filter(data, kernel, error, *, mask=None):
     if typical_weight is not None:
         _matched_filter_strips(data, kernel, error, mask, typical_weight,
                                filtered_data, filtered_error)
+        if error_scale == 'empirical':
+            error_scale = _empirical_error_scale(
+                filtered_data, filtered_error, mask, source_mask)
+        if error_scale is not None:
+            filtered_error *= error_scale
 
     if unit is not None:
         filtered_data <<= unit
         filtered_error <<= unit
 
     return filtered_data, filtered_error
+
+
+def _validate_error_scale(error_scale):
+    """
+    Validate the ``error_scale`` input of `matched_filter`.
+
+    Parameters
+    ----------
+    error_scale : `None`, float, or ``'empirical'``
+        The input value.
+
+    Returns
+    -------
+    error_scale : `None`, float, or ``'empirical'``
+        The validated value.
+    """
+    if error_scale is None or (isinstance(error_scale, str)
+                               and error_scale == 'empirical'):
+        return error_scale
+    if (not isinstance(error_scale, str) and np.ndim(error_scale) == 0
+            and np.isfinite(error_scale) and error_scale > 0):
+        return float(error_scale)
+    msg = "error_scale must be None, a positive number, or 'empirical'"
+    raise ValueError(msg)
+
+
+def _empirical_error_scale(filtered_data, filtered_error, mask,
+                           source_mask):
+    """
+    Return the standard deviation of the S/N image of the noise.
+
+    The S/N image is sampled on a regular grid of about ``_N_SAMPLES``
+    pixels, or on all of the pixels if the sample has no usable pixels.
+    The standard deviation is the sigma-clipped median absolute
+    deviation, scaled to the standard deviation of a Gaussian.
+
+    Parameters
+    ----------
+    filtered_data, filtered_error : 2D `~numpy.ndarray`
+        The filtered image and its uncertainty, which is infinite where
+        there are no included pixels within the kernel footprint.
+
+    mask : 2D bool `~numpy.ndarray` or `None`
+        The pixel mask.
+
+    source_mask : 2D bool `~numpy.ndarray` or `None`
+        The source pixels to leave out.
+
+    Returns
+    -------
+    scale : float
+        The standard deviation.
+    """
+    step = max(1, math.ceil(math.sqrt(filtered_data.size / _N_SAMPLES)))
+    for stride in dict.fromkeys((step, 1)):
+        sample = (slice(None, None, stride),) * 2
+        values = filtered_data[sample] / filtered_error[sample]
+        usable = np.isfinite(values) & (values != 0)
+        for excluded in (mask, source_mask):
+            if excluded is not None:
+                usable &= ~excluded[sample]
+        if np.any(usable):
+            _, _, scale = sigma_clipped_stats(values[usable], sigma=3.0,
+                                              stdfunc='mad_std')
+            if scale > 0:
+                return float(scale)
+    msg = ('The empirical error scale could not be estimated because there '
+           'are no usable pixels with a nonzero S/N')
+    raise ValueError(msg)
 
 
 def _typical_weight(data, error, mask):
