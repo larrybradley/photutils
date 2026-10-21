@@ -326,10 +326,30 @@ Please note the following limitations:
   of the pixel noise can then produce spurious sources.
 
 * The S/N is overestimated for images with correlated noise (e.g.,
-  resampled images).
+  resampled images), unless it is corrected as described below.
 
 * The positions and fluxes of stars that are truncated by the image
   border are less accurate. Set ``exclude_border=True`` to exclude them.
+
+When the noise of neighboring pixels is correlated, the uncertainty of
+the fitted flux is underestimated. The ``error_scale`` keyword
+multiplies the uncertainty by a factor to correct it, and the S/N
+image is divided by the same factor before the ``threshold`` is
+applied. The factor can be input if it is known (e.g., from the
+parameters used to resample the image). With
+``error_scale='empirical'``, the factor is estimated from the S/N
+image itself as its sigma-clipped standard deviation, so that the S/N
+of the noise has a standard deviation of 1. The estimate assumes that
+most pixels contain only noise. Pixels that contain sources can be
+left out of it with the ``source_mask`` keyword of ``find_stars``::
+
+    >>> finder = MatchedFilterStarFinder(5.0, kernel,
+    ...                                  error_scale='empirical')
+    >>> sources = finder(data, error=2.0)
+
+A single factor is appropriate if the noise correlation is the same
+over the image. If it varies over the image, the ``error`` array can
+instead be multiplied by a map of the correction factor.
 
 
 Local Peak Detection
