@@ -282,7 +282,8 @@ New Features
     significance of the fitted flux, it accepts an error array, and it
     excludes masked pixels and pixels beyond the image borders from the
     fit. It can detect fainter stars than the other star finders at the
-    same rate of false detections. [#2512]
+    same rate of false detections. The ``error_scale`` keyword corrects
+    the uncertainty for correlated noise. [#2512]
 
   - Added a ``min_n_pixels`` keyword to ``IRAFStarFinder`` to set the
     minimum number of positive sky-subtracted pixels within the kernel

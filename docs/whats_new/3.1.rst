@@ -1259,7 +1259,9 @@ Example usage::
 
 By default, a constant local background is fitted along with the flux
 at every pixel, so that the detection does not depend on the background
-level. See :ref:`matched_filter_star_finder` for more details.
+level. For images with correlated noise (e.g., resampled images),
+the ``error_scale`` keyword corrects the uncertainty of the fitted
+flux. See :ref:`matched_filter_star_finder` for more details.
 
 
 .. _whatsnew-3.1-api-changes:
