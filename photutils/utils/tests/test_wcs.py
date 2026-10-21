@@ -11,13 +11,14 @@ import pytest
 from astropy.utils.exceptions import AstropyUserWarning
 from astropy.wcs import WCS
 from astropy.wcs.utils import proj_plane_pixel_area
-from numpy.testing import assert_allclose
+from numpy.testing import assert_allclose, assert_equal
 
 from photutils.datasets import make_gwcs
 from photutils.utils._optional_deps import HAS_GWCS
 from photutils.utils.tests.wcs_test_helpers import (WCS_CDELT_ARCSEC,
                                                     WCS_CENTER, make_sip_wcs)
-from photutils.utils.wcs import compute_pixel_area_map, compute_pixel_areas
+from photutils.utils.wcs import (compute_pixel_area_map, compute_pixel_areas,
+                                 pixel_to_sky_errors)
 
 UNIFORM_AREA = WCS_CDELT_ARCSEC**2
 
@@ -377,3 +378,284 @@ class TestPixelAreaMap:
             u.arcsec**2)
         area = compute_pixel_area_map(simple_wcs, (20, 20))
         assert_allclose(area, expected, rtol=1e-6)
+
+
+def _sky_offsets(wcs, x, y, dx, dy):
+    """
+    Return the (East, North) offsets in arcsec of the sky position at
+    pixel ``(x + dx, y + dy)`` from that at ``(x, y)``, measured with
+    the astropy spherical offsets.
+    """
+    start = wcs.pixel_to_world(x, y)
+    end = wcs.pixel_to_world(x + dx, y + dy)
+    east, north = start.spherical_offsets_to(end)
+    return east.to_value(u.arcsec), north.to_value(u.arcsec)
+
+
+class TestPixelToSkyErrors:
+    def test_uniform_wcs(self, simple_wcs):
+        x = np.array([2.0, 10.0, 17.3])
+        y = np.array([1.5, 10.0, 4.0])
+        x_err = np.array([0.1, 0.2, 0.0])
+        y_err = np.array([0.3, 0.05, 0.0])
+        east_err, north_err = pixel_to_sky_errors(simple_wcs, x, y, x_err,
+                                                  y_err)
+        assert east_err.unit == u.arcsec
+        assert north_err.unit == u.arcsec
+        assert east_err.shape == (3,)
+        assert_allclose(east_err.value, x_err * WCS_CDELT_ARCSEC, rtol=1e-6)
+        assert_allclose(north_err.value, y_err * WCS_CDELT_ARCSEC,
+                        rtol=1e-6)
+
+    @pytest.mark.parametrize('wcs_name', ['rotated_wcs', 'sip_wcs',
+                                          'nonsquare_wcs', 'flipped_wcs',
+                                          'swapped_wcs'])
+    @pytest.mark.parametrize('rho', [-1.0, -0.3, 0.0, 0.3, 1.0])
+    def test_matches_spherical_offsets(self, request, wcs_name, rho):
+        """
+        Test the errors against the propagation of the pixel errors
+        through offsets measured independently with astropy.
+
+        The steps are small enough that the offsets are linear in them.
+        A correlation of +1 or -1 is the boundary of a valid
+        covariance.
+        """
+        wcs = request.getfixturevalue(wcs_name)
+        x = np.array([2.0, 10.0, 17.3])
+        y = np.array([15.5, 10.0, 4.0])
+        x_err = np.array([0.02, 0.05, 0.01])
+        y_err = np.array([0.04, 0.01, 0.03])
+        xy_cov = rho * x_err * y_err
+        east_err, north_err = pixel_to_sky_errors(wcs, x, y, x_err, y_err,
+                                                  xy_cov=xy_cov)
+
+        east_x, north_x = _sky_offsets(wcs, x, y, x_err, 0.0)
+        east_y, north_y = _sky_offsets(wcs, x, y, 0.0, y_err)
+        east_var = east_x**2 + east_y**2 + 2 * rho * east_x * east_y
+        north_var = north_x**2 + north_y**2 + 2 * rho * north_x * north_y
+        assert_allclose(east_err.value, np.sqrt(east_var), rtol=1e-5)
+        assert_allclose(north_err.value, np.sqrt(north_var), rtol=1e-5)
+
+    def test_correlation_changes_errors(self, rotated_wcs):
+        kwargs = {'x_err': 0.1, 'y_err': 0.2}
+        errs = [pixel_to_sky_errors(rotated_wcs, 10.0, 10.0, **kwargs,
+                                    xy_cov=xy_cov)
+                for xy_cov in (-0.02, 0.0, 0.02)]
+        east = [err[0].value for err in errs]
+        assert east[0] != pytest.approx(east[1])
+        assert east[2] != pytest.approx(east[1])
+
+    def test_axis_order_independent(self, simple_wcs, swapped_wcs):
+        x = np.array([2.0, 10.0, 17.3])
+        y = np.array([15.5, 10.0, 4.0])
+        expected = pixel_to_sky_errors(simple_wcs, x, y, 0.1, 0.2,
+                                       xy_cov=0.01)
+        result = pixel_to_sky_errors(swapped_wcs, x, y, 0.1, 0.2,
+                                     xy_cov=0.01)
+        assert_allclose(result[0], expected[0], rtol=1e-6)
+        assert_allclose(result[1], expected[1], rtol=1e-6)
+
+    def test_scalar_input(self, simple_wcs):
+        east_err, north_err = pixel_to_sky_errors(simple_wcs, 10.0, 10.0,
+                                                  0.1, 0.2)
+        assert isinstance(east_err, u.Quantity)
+        assert east_err.isscalar
+        assert north_err.isscalar
+        assert_allclose(east_err.value, 0.1 * WCS_CDELT_ARCSEC, rtol=1e-6)
+        assert_allclose(north_err.value, 0.2 * WCS_CDELT_ARCSEC, rtol=1e-6)
+
+    @pytest.mark.parametrize('shape', [(3, 7), (2, 3, 4)])
+    def test_input_shape_preserved(self, shape):
+        wcs = _make_sip_wcs((200, 200))
+        rng = np.random.default_rng(0)
+        x = rng.uniform(0, 199, shape)
+        y = rng.uniform(0, 199, shape)
+        x_err = rng.uniform(0.01, 0.1, shape)
+        y_err = rng.uniform(0.01, 0.1, shape)
+        east_err, north_err = pixel_to_sky_errors(wcs, x, y, x_err, y_err)
+        assert east_err.shape == shape
+        assert north_err.shape == shape
+        expected = pixel_to_sky_errors(wcs, x.ravel(), y.ravel(),
+                                       x_err.ravel(), y_err.ravel())
+        assert_allclose(east_err.ravel(), expected[0], rtol=1e-12)
+        assert_allclose(north_err.ravel(), expected[1], rtol=1e-12)
+
+    def test_errors_broadcast(self, simple_wcs):
+        x = np.array([2.0, 10.0, 17.3])
+        y = np.array([1.5, 10.0, 4.0])
+        east_err, north_err = pixel_to_sky_errors(simple_wcs, x, y, 0.1,
+                                                  [0.1, 0.2, 0.3])
+        assert_allclose(east_err.value, 0.1 * WCS_CDELT_ARCSEC, rtol=1e-6)
+        assert_allclose(north_err.value,
+                        np.array([0.1, 0.2, 0.3]) * WCS_CDELT_ARCSEC,
+                        rtol=1e-6)
+
+    def test_shape_mismatch(self, simple_wcs):
+        match = 'x and y must have the same shape'
+        with pytest.raises(ValueError, match=match):
+            pixel_to_sky_errors(simple_wcs, [1.0, 2.0], [1.0, 2.0, 3.0],
+                                0.1, 0.1)
+
+    @pytest.mark.parametrize('kwargs', [
+        {'x_err': [0.1, 0.2], 'y_err': 0.1},
+        {'x_err': 0.1, 'y_err': [0.1, 0.2]},
+        {'x_err': 0.1, 'y_err': 0.1, 'xy_cov': [0.0, 0.0]}])
+    def test_errors_not_broadcastable(self, simple_wcs, kwargs):
+        match = ('x_err, y_err, and xy_cov must be broadcastable to the '
+                 'shape of x and y')
+        with pytest.raises(ValueError, match=match):
+            pixel_to_sky_errors(simple_wcs, [1.0, 2.0, 3.0],
+                                [1.0, 2.0, 3.0], **kwargs)
+
+    @pytest.mark.parametrize(('x_err', 'y_err'), [(-0.1, 0.1), (0.1, -0.1)])
+    def test_negative_errors(self, simple_wcs, x_err, y_err):
+        match = 'x_err and y_err must be nonnegative'
+        with pytest.raises(ValueError, match=match):
+            pixel_to_sky_errors(simple_wcs, 10.0, 10.0, x_err, y_err)
+
+    @pytest.mark.parametrize(('x_err', 'y_err', 'xy_cov'), [
+        (0.1, 0.2, 0.0201), (0.1, 0.2, -0.0201), (0.1, 0.2, np.inf),
+        (0.1, 0.2, -np.inf), (1.0, 1e-7, 2e-7), (0.0, 0.1, 1e-3)])
+    def test_invalid_covariance(self, simple_wcs, x_err, y_err, xy_cov):
+        match = r'abs\(xy_cov\) must not exceed x_err \* y_err'
+        with pytest.raises(ValueError, match=match):
+            pixel_to_sky_errors(simple_wcs, 10.0, 10.0, x_err, y_err,
+                                xy_cov=xy_cov)
+
+    def test_huge_errors(self, simple_wcs):
+        """
+        Test that errors whose variances overflow and an infinite error
+        times a zero error give nonfinite errors without a warning.
+        """
+        with warnings.catch_warnings():
+            warnings.simplefilter('error')
+            east_err, north_err = pixel_to_sky_errors(
+                simple_wcs, [10.0, 10.0], [10.0, 10.0], [1e200, np.inf],
+                [1e200, 0.0])
+        assert not np.any(np.isfinite(east_err))
+        assert not np.any(np.isfinite(north_err))
+
+    def test_quantity_input(self, rotated_wcs):
+        x = np.array([2.0, 10.0, 17.3])
+        y = np.array([15.5, 10.0, 4.0])
+        expected = pixel_to_sky_errors(rotated_wcs, x, y, 0.1, 0.2,
+                                       xy_cov=0.01)
+        result = pixel_to_sky_errors(rotated_wcs, x * u.pix, y * u.pix,
+                                     0.1 * u.pix, 0.2 * u.pix,
+                                     xy_cov=0.01 * u.pix**2)
+        assert_equal(result[0], expected[0])
+        assert_equal(result[1], expected[1])
+
+    @pytest.mark.parametrize(('name', 'kwargs'), [
+        ('x', {'x': 10.0 * u.deg}),
+        ('x_err', {'x_err': 0.1 * u.arcsec}),
+        ('y_err', {'y_err': 0.1 * u.dimensionless_unscaled}),
+        ('xy_cov', {'xy_cov': 0.001 * u.pix})])
+    def test_quantity_invalid_unit(self, simple_wcs, name, kwargs):
+        values = {'x': 10.0, 'y': 10.0, 'x_err': 0.1, 'y_err': 0.1}
+        values.update(kwargs)
+        with pytest.raises(ValueError, match=f'{name} must be in units of'):
+            pixel_to_sky_errors(simple_wcs, **values)
+
+    def test_masked_input(self, simple_wcs):
+        """
+        Test that masked positions and errors give NaN errors, even
+        where the masked value is invalid.
+        """
+        x = np.ma.array([10.0, 10.0, 10.0, 10.0],
+                        mask=[False, True, False, False])
+        y = np.full(4, 10.0)
+        x_err = np.ma.array([0.1, 0.1, -1.0, 0.1],
+                            mask=[False, False, True, False])
+        xy_cov = np.ma.array([0.0, 0.0, 0.0, 1.0],
+                             mask=[False, False, False, True])
+        east_err, north_err = pixel_to_sky_errors(simple_wcs, x, y, x_err,
+                                                  0.1, xy_cov=xy_cov)
+        for err in (east_err, north_err):
+            assert not isinstance(err.value, np.ma.MaskedArray)
+            assert_allclose(err.value[0], 0.1 * WCS_CDELT_ARCSEC,
+                            rtol=1e-6)
+            assert np.all(np.isnan(err[1:]))
+
+    @pytest.mark.parametrize('bad', [np.nan, np.inf, -np.inf])
+    def test_nonfinite_input(self, simple_wcs, bad):
+        """
+        Test that a nonfinite position or error gives NaN errors for
+        that source only, without a warning.
+
+        A NaN covariance gives NaN errors. An infinite covariance with
+        finite errors is invalid (see ``test_invalid_covariance``).
+        """
+        x = np.array([10.0, bad, 10.0, 10.0, 10.0])
+        y = np.array([10.0, 10.0, 10.0, 10.0, 10.0])
+        x_err = np.array([0.1, 0.1, abs(bad), 0.1, 0.1])
+        y_err = np.array([0.1, 0.1, 0.1, 0.1, 0.1])
+        xy_cov = np.array([0.0, 0.0, 0.0, 0.0, np.nan])
+        with warnings.catch_warnings():
+            warnings.simplefilter('error')
+            east_err, north_err = pixel_to_sky_errors(
+                simple_wcs, x, y, x_err, y_err, xy_cov=xy_cov)
+        expected = 0.1 * WCS_CDELT_ARCSEC
+        for err in (east_err, north_err):
+            assert_allclose(err.value[[0, 3]], expected, rtol=1e-6)
+            assert np.all(np.isnan(err[[1, 2, 4]]))
+
+    def test_outside_projection(self):
+        # An all-sky Aitoff map has corners outside the projection
+        wcs = _make_allsky_wcs('AIT')
+        east_err, north_err = pixel_to_sky_errors(wcs, [0.0, 180.0],
+                                                  [0.0, 90.0], 0.1, 0.1)
+        for err in (east_err, north_err):
+            assert np.isnan(err[0])
+            assert np.isfinite(err[1])
+
+    def test_no_bounding_box_outside_image(self, simple_wcs):
+        """
+        Test that the errors are finite outside the image for a WCS
+        without a bounding box.
+        """
+        east_err, north_err = pixel_to_sky_errors(simple_wcs, -5.0, 30.0,
+                                                  0.1, 0.2)
+        assert_allclose(east_err.value, 0.1 * WCS_CDELT_ARCSEC, rtol=1e-6)
+        assert_allclose(north_err.value, 0.2 * WCS_CDELT_ARCSEC, rtol=1e-6)
+
+    @pytest.mark.skipif(not HAS_GWCS, reason='gwcs is required')
+    def test_gwcs_bounding_box(self):
+        """
+        Test the errors for a gwcs with a bounding box.
+
+        The errors are NaN exactly where ``pixel_to_world`` returns NaN.
+        Positions within half a pixel of the bounding-box edge are
+        inside it, so their errors must be finite even though the finite
+        differences step outside it.
+        """
+        shape = (40, 50)
+        gwcs = make_gwcs(shape)
+        gwcs.bounding_box = ((-0.5, shape[1] - 0.5), (-0.5, shape[0] - 0.5))
+        x = np.array([0.0, 49.0, 25.0, -0.5, -0.3, 49.3, 49.5, -0.6, 49.6,
+                      25.0, 25.0])
+        y = np.array([0.0, 39.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0,
+                      -0.6, 39.6])
+        east_err, north_err = pixel_to_sky_errors(gwcs, x, y, 0.1, 0.2)
+
+        outside = ~np.isfinite(gwcs.pixel_to_world(x, y).ra.deg)
+        assert_equal(outside, [False] * 7 + [True] * 4)
+        assert np.all(np.isnan(east_err[outside]))
+        assert np.all(np.isnan(north_err[outside]))
+
+        # make_gwcs has a uniform 0.1 arcsec pixel scale. It is rotated,
+        # so only the total error is independent of the orientation.
+        total = np.hypot(east_err[~outside], north_err[~outside])
+        assert_allclose(total.to_value(u.arcsec), 0.1 * np.hypot(0.1, 0.2),
+                        rtol=1e-6)
+
+    @pytest.mark.parametrize('wcs_type', [
+        'fits',
+        pytest.param('gwcs', marks=pytest.mark.skipif(
+            not HAS_GWCS, reason='gwcs is required'))])
+    def test_empty_input(self, simple_wcs, wcs_type):
+        wcs = simple_wcs if wcs_type == 'fits' else make_gwcs((10, 10))
+        east_err, north_err = pixel_to_sky_errors(wcs, [], [], 0.1, 0.2)
+        assert east_err.unit == u.arcsec
+        assert east_err.shape == (0,)
+        assert north_err.shape == (0,)

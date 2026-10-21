@@ -41,6 +41,7 @@ from photutils.utils._optional_deps import HAS_GWCS, HAS_MATPLOTLIB
 from photutils.utils._wcs_helpers import compute_pixel_to_sky_jacobians
 from photutils.utils.cutouts import CutoutImage
 from photutils.utils.exceptions import PhotutilsDeprecationWarning
+from photutils.utils.wcs import pixel_to_sky_errors
 
 
 @pytest.fixture
@@ -4470,6 +4471,45 @@ def test_sky_centroid_err():
                         sky_err[:, 0])
         assert_allclose(getattr(cat, f'{prefix}_dec_err'),
                         sky_err[:, 1])
+
+
+@pytest.mark.parametrize('prefix', ['centroid', 'centroid_win',
+                                    'centroid_quad'])
+def test_sky_centroid_err_matches_pixel_to_sky_errors(prefix):
+    """
+    Test that the sky centroid errors match those from the public
+    `pixel_to_sky_errors` function for the same centroids and pixel
+    error covariances.
+
+    The WCS is rotated, so the x and y errors mix on the sky and the
+    comparison also checks that the x-y error covariance is used.
+    """
+    data = make_100gaussians_image()
+    wcs = make_wcs(data.shape)
+    error = np.full(data.shape, 2.0)
+    segment_map = detect_sources(data, 15.0, n_pixels=10)
+    cat = SourceCatalog(data, segment_map, error=error, wcs=wcs)
+
+    xycen = getattr(cat, prefix)
+    pix_cov = getattr(cat, f'_{prefix}_err_cov')
+    x_err = np.sqrt(pix_cov[:, 0, 0])
+    y_err = np.sqrt(pix_cov[:, 1, 1])
+    xy_cov = pix_cov[:, 0, 1]
+
+    # The sources must have correlated x and y errors for the test to
+    # check that the covariance is used
+    finite = np.isfinite(xy_cov)
+    assert np.count_nonzero(finite) > 10
+    assert np.any(np.abs(xy_cov[finite])
+                  > 0.1 * x_err[finite] * y_err[finite])
+
+    east_err, north_err = pixel_to_sky_errors(wcs, xycen[:, 0], xycen[:, 1],
+                                              x_err, y_err, xy_cov=xy_cov)
+    sky_err = getattr(cat, f'sky_{prefix}_err')
+    assert_allclose(east_err.to_value(u.arcsec),
+                    sky_err[:, 0].to_value(u.arcsec), rtol=1e-12)
+    assert_allclose(north_err.to_value(u.arcsec),
+                    sky_err[:, 1].to_value(u.arcsec), rtol=1e-12)
 
 
 def test_sky_centroid_err_no_wcs():

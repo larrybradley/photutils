@@ -7,6 +7,14 @@ General
 New Features
 ^^^^^^^^^^^^
 
+- ``photutils.utils``
+
+  - Added a ``pixel_to_sky_errors`` function to convert pixel position
+    errors (e.g., from centroiding or PSF fitting) to East and North
+    sky position errors in arcsec using the local WCS Jacobian at each
+    position. An optional ``xy_cov`` keyword includes the covariance of
+    the ``x`` and ``y`` errors. [#2530]
+
 Bug Fixes
 ^^^^^^^^^
 
