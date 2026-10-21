@@ -7,7 +7,7 @@ import math
 import warnings
 
 import numpy as np
-from astropy.stats import mad_std
+from astropy.stats import mad_std, sigma_clipped_stats
 from astropy.table import QTable
 from scipy.ndimage import map_coordinates, uniform_filter
 from scipy.signal import oaconvolve
@@ -80,6 +80,74 @@ def _typical_weight(data, error, mask):
         if np.any(usable):
             return 1.0 / np.median(sample_error[usable])**2
     return None
+
+
+def _validate_error_scale(error_scale):
+    """
+    Validate the ``error_scale`` input.
+
+    Parameters
+    ----------
+    error_scale : `None`, float, or ``'empirical'``
+        The input value.
+
+    Returns
+    -------
+    error_scale : `None`, float, or ``'empirical'``
+        The validated value.
+    """
+    if error_scale is None or (isinstance(error_scale, str)
+                               and error_scale == 'empirical'):
+        return error_scale
+    if (not isinstance(error_scale, str) and np.ndim(error_scale) == 0
+            and np.isfinite(error_scale) and error_scale > 0):
+        return float(error_scale)
+    msg = "error_scale must be None, a positive number, or 'empirical'"
+    raise ValueError(msg)
+
+
+def _empirical_error_scale(snr, mask, source_mask):
+    """
+    Return the standard deviation of the S/N image of the noise.
+
+    The S/N image is sampled on a regular grid of about ``_N_SAMPLES``
+    pixels, or on all of the pixels if the sample has no usable pixels.
+    The standard deviation is the sigma-clipped median absolute
+    deviation, scaled to the standard deviation of a Gaussian.
+
+    Parameters
+    ----------
+    snr : 2D `~numpy.ndarray`
+        The S/N image, which is zero where there is too little unmasked
+        data in the kernel footprint.
+
+    mask : 2D bool `~numpy.ndarray` or `None`
+        The pixel mask.
+
+    source_mask : 2D bool `~numpy.ndarray` or `None`
+        The source pixels to leave out.
+
+    Returns
+    -------
+    scale : float
+        The standard deviation.
+    """
+    step = max(1, math.ceil(math.sqrt(snr.size / _N_SAMPLES)))
+    for stride in dict.fromkeys((step, 1)):
+        sample = (slice(None, None, stride),) * 2
+        values = snr[sample]
+        usable = np.isfinite(values) & (values != 0)
+        for excluded in (mask, source_mask):
+            if excluded is not None:
+                usable &= ~excluded[sample]
+        if np.any(usable):
+            _, _, scale = sigma_clipped_stats(values[usable], sigma=3.0,
+                                              stdfunc='mad_std')
+            if scale > 0:
+                return float(scale)
+    msg = ('The empirical error scale could not be estimated because there '
+           'are no usable pixels with a nonzero S/N')
+    raise ValueError(msg)
 
 
 def _make_weights(data, error, mask):
@@ -286,6 +354,18 @@ class MatchedFilterStarFinder(StarFinderBase):
         background-subtracted. A background residual that is a small
         fraction of the pixel noise can then produce spurious sources.
 
+    error_scale : `None`, float, or ``'empirical'``, optional
+        The factor by which the uncertainty of the fitted flux is
+        multiplied, for example to correct for noise that is correlated
+        between pixels (see Notes). The S/N image is divided by the same
+        factor before the threshold is applied. If `None` (default),
+        the uncertainty is not scaled. If ``'empirical'``, the factor
+        is the standard deviation of the S/N image, so that the S/N of
+        the noise has a standard deviation of 1. It is estimated with
+        sigma clipping from the pixels that are not excluded and not in
+        the ``source_mask`` input to ``find_stars``, most of which must
+        contain only noise.
+
     min_separation : `None` or float, optional
         The minimum separation (in pixels) for detected objects. If
         `None` (default), the minimum separation is the full width
@@ -340,13 +420,16 @@ class MatchedFilterStarFinder(StarFinderBase):
 
     The S/N is correct only if the input ``error`` describes the noise
     of the image and the noise of different pixels is not correlated.
-    For images with correlated noise (e.g., resampled images), the S/N
-    is overestimated.
+    For images with correlated noise (e.g., resampled images), the
+    S/N is overestimated unless ``error_scale`` corrects it. A single
+    factor is appropriate if the correlation is the same over the
+    image.
     """
 
     def __init__(self, threshold, kernel, *, local_bkg=True,
-                 min_separation=None, exclude_border=False,
-                 n_brightest=None, max_peak_excess=None):
+                 error_scale=None, min_separation=None,
+                 exclude_border=False, n_brightest=None,
+                 max_peak_excess=None):
 
         if np.ndim(threshold) != 0 or threshold <= 0:
             msg = 'threshold must be a positive scalar value'
@@ -366,6 +449,7 @@ class MatchedFilterStarFinder(StarFinderBase):
         self.threshold = threshold
         self.kernel = kernel / np.sum(kernel)
         self.local_bkg = local_bkg
+        self.error_scale = _validate_error_scale(error_scale)
         self.exclude_border = exclude_border
         self.n_brightest = _validate_n_brightest(n_brightest)
         self.max_peak_excess = max_peak_excess
@@ -389,8 +473,9 @@ class MatchedFilterStarFinder(StarFinderBase):
         return 2.0 * np.sqrt(2.0 * np.log(2.0)) * sigma
 
     def _repr_str_params(self):
-        params = ('threshold', 'kernel', 'local_bkg', 'min_separation',
-                  'exclude_border', 'n_brightest', 'max_peak_excess')
+        params = ('threshold', 'kernel', 'local_bkg', 'error_scale',
+                  'min_separation', 'exclude_border', 'n_brightest',
+                  'max_peak_excess')
         overrides = {'kernel': f'<array; shape={self.kernel.shape}>'}
         return params, overrides
 
@@ -402,13 +487,14 @@ class MatchedFilterStarFinder(StarFinderBase):
         params, overrides = self._repr_str_params()
         return make_repr(self, params, overrides=overrides, long=True)
 
-    def __call__(self, data, *, error=None, mask=None):
+    def __call__(self, data, *, error=None, mask=None, source_mask=None):
         """
         Find stars in an astronomical image.
 
         See ``find_stars`` for the parameters and the returned table.
         """
-        return self.find_stars(data, error=error, mask=mask)
+        return self.find_stars(data, error=error, mask=mask,
+                               source_mask=source_mask)
 
     @staticmethod
     def _validate_error(data, error, mask):
@@ -687,7 +773,7 @@ class MatchedFilterStarFinder(StarFinderBase):
         return {'flux': flux, 'flux_err': flux_err, 'local_bkg': bkg,
                 'reduced_chi2': reduced_chi2, 'peak_excess': peak_excess}
 
-    def find_stars(self, data, *, error=None, mask=None):
+    def find_stars(self, data, *, error=None, mask=None, source_mask=None):
         """
         Find stars in an astronomical image.
 
@@ -714,6 +800,15 @@ class MatchedFilterStarFinder(StarFinderBase):
             is masked. Masked pixels are excluded from the fits. A
             source can be detected at a masked pixel from the unmasked
             pixels around it.
+
+        source_mask : 2D bool array, optional
+            A boolean mask with the same shape as ``data``, where a
+            `True` value indicates a source pixel that is left out of
+            the estimate of the empirical ``error_scale``. Because the
+            S/N is affected within the kernel footprint of a source, the
+            mask should extend beyond the sources by about half the
+            kernel size. Source pixels are still used to find stars. It
+            can be used only with ``error_scale='empirical'``.
 
         Returns
         -------
@@ -753,6 +848,15 @@ class MatchedFilterStarFinder(StarFinderBase):
             if mask.shape != data.shape:
                 msg = 'mask must have the same shape as data'
                 raise ValueError(msg)
+        if source_mask is not None:
+            if self.error_scale != 'empirical':
+                msg = ('source_mask can be used only with '
+                       "error_scale='empirical'")
+                raise ValueError(msg)
+            source_mask = np.asarray(source_mask, dtype=bool)
+            if source_mask.shape != data.shape:
+                msg = 'source_mask must have the same shape as data'
+                raise ValueError(msg)
 
         error = self._validate_error(data, error, mask)
         typical_weight = _typical_weight(data, error, mask)
@@ -760,6 +864,14 @@ class MatchedFilterStarFinder(StarFinderBase):
             snr = np.zeros(data.shape)
         else:
             snr = self._make_snr_image(data, error, mask, typical_weight)
+
+        error_scale = self.error_scale
+        if error_scale == 'empirical':
+            error_scale = (1.0 if typical_weight is None
+                           else _empirical_error_scale(snr, mask,
+                                                       source_mask))
+        if error_scale is not None:
+            snr /= error_scale
 
         xypos = self._find_stars(snr, self.kernel, self.threshold,
                                  min_separation=self.min_separation,
@@ -773,6 +885,8 @@ class MatchedFilterStarFinder(StarFinderBase):
         ypeak = xypos[:, 1]
         dx, dy = self._subpixel_offsets(snr, xpeak, ypeak)
         fit = self._fit_sources(data, error, mask, xpeak, ypeak, dx, dy)
+        if error_scale is not None:
+            fit['flux_err'] *= error_scale
 
         table = QTable()
         table.meta.update(_get_meta())

@@ -3,10 +3,13 @@
 Tests for the matchedfilter module.
 """
 
+import warnings
+
 import astropy.units as u
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose, assert_equal
+from scipy.ndimage import correlate
 
 from photutils.detection import MatchedFilterStarFinder
 from photutils.utils.exceptions import NoDetectionsWarning
@@ -318,6 +321,101 @@ class TestMatchedFilterStarFinder:
         tbl1 = finder(data, error=error)
         for name in tbl0.colnames:
             assert_allclose(tbl1[name], tbl0[name], rtol=1.0e-12)
+
+    @staticmethod
+    def _correlated_noise(shape, seed):
+        """
+        Make noise with a per-pixel standard deviation of NOISE that is
+        correlated between neighboring pixels, as in a resampled image.
+        """
+        rng = np.random.default_rng(seed)
+        noise = rng.normal(0.0, NOISE, shape)
+        kernel = np.full((3, 3), 1.0 / 3.0)
+        return correlate(noise, kernel, mode='wrap')
+
+    def test_error_scale_number(self, data, kernel):
+        tbl0 = MatchedFilterStarFinder(5.0, kernel)(data, error=NOISE)
+        finder = MatchedFilterStarFinder(5.0, kernel, error_scale=2.0)
+        tbl1 = finder(data, error=NOISE)
+        # Only the stars whose S/N is still above the threshold are found
+        tbl0 = tbl0[tbl0['snr'] > 2.0 * 5.0]
+        assert len(tbl1) == len(tbl0)
+        tbl0.sort('y_centroid')
+        tbl1.sort('y_centroid')
+        assert_allclose(tbl1['flux'], tbl0['flux'])
+        assert_allclose(tbl1['flux_err'], 2.0 * tbl0['flux_err'])
+        assert_allclose(tbl1['snr'], tbl0['snr'] / 2.0)
+
+    @pytest.mark.parametrize('local_bkg', [True, False])
+    def test_error_scale_empirical(self, kernel, local_bkg):
+        """
+        Test that the empirical error scale removes the false detections
+        in correlated noise and keeps the stars.
+        """
+        shape = (300, 300)
+        noise = self._correlated_noise(shape, 2)
+        finder = MatchedFilterStarFinder(5.0, kernel, local_bkg=local_bkg)
+        assert len(finder(noise, error=NOISE)) > 20
+
+        finder = MatchedFilterStarFinder(5.0, kernel, local_bkg=local_bkg,
+                                         error_scale='empirical')
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', NoDetectionsWarning)
+            tbl = finder(noise, error=NOISE)
+        assert tbl is None or len(tbl) <= 1
+
+        data = noise.copy()
+        positions = ((60.0, 70.0), (150.0, 220.0), (240.0, 130.0))
+        for xcen, ycen in positions:
+            data += make_psf_image(xcen, ycen, 3000.0, shape=shape)
+        tbl = finder(data, error=NOISE)
+        assert len(tbl) == len(positions)
+
+    def test_error_scale_source_mask(self, kernel):
+        """
+        Test that source pixels can be left out of the empirical error
+        scale.
+        """
+        rng = np.random.default_rng(3)
+        shape = (300, 300)
+        data = rng.normal(0.0, NOISE, shape)
+        source_mask = np.zeros(shape, dtype=bool)
+        source_mask[:, :120] = True
+        data[source_mask] += rng.uniform(0.0, 3.0 * NOISE,
+                                         np.sum(source_mask))
+        data += make_psf_image(200.0, 150.0, 2000.0, shape=shape)
+        tbl0 = MatchedFilterStarFinder(5.0, kernel)(data, error=NOISE)
+        finder = MatchedFilterStarFinder(5.0, kernel,
+                                         error_scale='empirical')
+        # The S/N is affected within half the kernel size of the sources
+        source_mask[:, :128] = True
+        tbl1 = finder(data, error=NOISE, source_mask=source_mask)
+        tbl2 = finder(data, error=NOISE)
+        idx0 = np.argmax(tbl0['flux'])
+        idx1 = np.argmax(tbl1['flux'])
+        idx2 = np.argmax(tbl2['flux'])
+        assert_allclose(tbl1['flux_err'][idx1], tbl0['flux_err'][idx0],
+                        rtol=0.03)
+        assert tbl2['flux_err'][idx2] > 1.1 * tbl0['flux_err'][idx0]
+
+    def test_error_scale_inputs(self, data, kernel):
+        match = "error_scale must be None, a positive number, or 'empirical'"
+        for error_scale in (0.0, -1.0, np.inf, 'auto', [1.0, 2.0]):
+            with pytest.raises(ValueError, match=match):
+                MatchedFilterStarFinder(5.0, kernel, error_scale=error_scale)
+        source_mask = np.zeros(data.shape, dtype=bool)
+        finder = MatchedFilterStarFinder(5.0, kernel)
+        match = "source_mask can be used only with error_scale='empirical'"
+        with pytest.raises(ValueError, match=match):
+            finder(data, error=NOISE, source_mask=source_mask)
+        finder = MatchedFilterStarFinder(5.0, kernel,
+                                         error_scale='empirical')
+        match = 'source_mask must have the same shape as data'
+        with pytest.raises(ValueError, match=match):
+            finder(data, error=NOISE, source_mask=np.zeros((5, 5), bool))
+        match = 'The empirical error scale could not be estimated'
+        with pytest.raises(ValueError, match=match):
+            finder(data, error=NOISE, source_mask=~source_mask)
 
     def test_inputs(self, data, kernel):
         match = 'threshold must be a positive scalar value'
