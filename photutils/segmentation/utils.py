@@ -148,8 +148,11 @@ def matched_filter(data, kernel, error, *, mask=None, error_scale=None,
     source_mask : 2D bool `~numpy.ndarray`, optional
         A boolean mask with the same shape as ``data``, where a `True`
         value indicates a source pixel that is left out of the estimate
-        of the empirical ``error_scale``. Source pixels are still
-        filtered. It can be used only with ``error_scale='empirical'``.
+        of the empirical ``error_scale``. Because the S/N is affected
+        within the kernel footprint of a source, the mask should extend
+        beyond the sources by about half the kernel size. Source pixels
+        are still filtered. It can be used only with
+        ``error_scale='empirical'``.
 
     Returns
     -------
