@@ -5,9 +5,12 @@ of a simulated image.
 """
 
 import numpy as np
-from astropy.table import QTable
+from astropy.table import QTable, Table
 
-__all__ = ['completeness', 'match_segments', 'match_sources']
+from photutils.simulation.noise import make_noise_image
+
+__all__ = ['completeness', 'false_detection_rate', 'match_segments',
+           'match_sources']
 
 
 def match_segments(segment_img, params_table, *, x_name='x_0',
@@ -368,6 +371,126 @@ def completeness(detected, values, bins, *, confidence=0.683):
     result['lower'] = lower
     result['upper'] = upper
     return result
+
+
+def false_detection_rate(detect, shape, *, n_trials=10, stddev=1.0,
+                         kernel=None, seed=None):
+    """
+    Measure the rate of false detections on pure-noise images.
+
+    A detection algorithm is run on ``n_trials`` images that contain
+    only Gaussian noise with zero mean, so every detection is false.
+
+    Parameters
+    ----------
+    detect : callable
+        The detection algorithm, called as ``detect(image)`` with a 2D
+        noise image. It must return a
+        `~photutils.segmentation.SegmentationImage` (or any object with
+        an ``n_labels`` attribute), an `~astropy.table.Table` with one
+        row per detection, or `None` for no detections.
+
+    shape : 2-tuple of int
+        The shape of the noise images.
+
+    n_trials : int, optional
+        The number of noise images.
+
+    stddev : float, optional
+        The per-pixel standard deviation of the noise.
+
+    kernel : 2D `~numpy.ndarray` or `~astropy.convolution.Kernel2D`, optional
+        If given, the noise is correlated with this kernel (see
+        `make_noise_image`), which mimics resampled images.
+
+    seed : int, optional
+        A seed for the noise. Each trial uses its own seed, derived from
+        ``seed`` with `numpy.random.SeedSequence`, so the trials are
+        independent and the result is reproducible. If `None`, fresh,
+        unpredictable entropy is pulled from the OS.
+
+    Returns
+    -------
+    result : `~astropy.table.QTable`
+        A table with one row per trial and the columns ``'trial'``
+        (starting at 1), ``'n_detections'``, and
+        ``'rate_per_megapixel'`` (the number of detections per million
+        pixels).
+
+    Raises
+    ------
+    ValueError
+        If ``n_trials`` is not a positive integer.
+
+    TypeError
+        If ``detect`` returns an object of another type.
+
+    See Also
+    --------
+    make_noise_image, match_segments
+
+    Examples
+    --------
+    Correlated noise, as in a resampled image, gives false detections
+    with a threshold that assumes uncorrelated noise:
+
+    >>> from astropy.convolution import Gaussian2DKernel
+    >>> from photutils.segmentation import detect_sources
+    >>> from photutils.simulation import false_detection_rate
+    >>> def detect(image):
+    ...     return detect_sources(image, threshold=3.0, n_pixels=5)
+    >>> result = false_detection_rate(detect, (500, 500), n_trials=3,
+    ...                               kernel=Gaussian2DKernel(1.5),
+    ...                               seed=0)
+    >>> print(result)
+    trial n_detections rate_per_megapixel
+    ----- ------------ ------------------
+        1           33              132.0
+        2           25              100.0
+        3           22               88.0
+    """
+    if (isinstance(n_trials, bool)
+            or not isinstance(n_trials, int | np.integer) or n_trials < 1):
+        msg = 'n_trials must be a positive integer'
+        raise ValueError(msg)
+
+    seeds = np.random.SeedSequence(seed).spawn(n_trials)
+    n_detections = np.zeros(n_trials, dtype=int)
+    for trial, trial_seed in enumerate(seeds):
+        image = make_noise_image(shape, mean=0.0, stddev=stddev,
+                                 kernel=kernel, seed=trial_seed)
+        n_detections[trial] = _count_detections(detect(image))
+
+    result = QTable()
+    result['trial'] = np.arange(n_trials) + 1
+    result['n_detections'] = n_detections
+    result['rate_per_megapixel'] = n_detections / np.prod(shape) * 1e6
+    return result
+
+
+def _count_detections(result):
+    """
+    Count the detections returned by a detection algorithm.
+
+    Parameters
+    ----------
+    result : object
+        A segmentation image (or any object with an ``n_labels``
+        attribute), a table, or `None`.
+
+    Returns
+    -------
+    n_detections : int
+        The number of detections.
+    """
+    if result is None:
+        return 0
+    if hasattr(result, 'n_labels'):
+        return int(result.n_labels)
+    if isinstance(result, Table):
+        return len(result)
+    msg = 'detect must return a SegmentationImage, a table, or None'
+    raise TypeError(msg)
 
 
 def _credit_by_priority(labels, priority):
