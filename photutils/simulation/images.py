@@ -350,8 +350,8 @@ def make_convolved_model_image(shape, model, params_table, psf_model, *,
     is much smaller than a cell falls in a single cell, so it renders
     as the PSF model at the center of that cell, displaced from the
     source center by up to half a cell along each axis. Averaged over
-    source positions, this is the same broadening by the box. A source
-    whose center is on a grid point renders exactly as the PSF model.
+    source positions, this is the same broadening by the box. Such a
+    source, centered on a grid point, renders exactly as the PSF model.
     Increase ``oversample`` to reduce the box, or render point sources
     with `make_model_image` and the PSF model. For an
     `~photutils.psf.ImagePSF`, the natural choice of ``oversample`` is
