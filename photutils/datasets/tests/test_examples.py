@@ -13,6 +13,11 @@ from numpy.testing import assert_allclose, assert_array_equal
 from photutils.datasets import make_4gaussians_image, make_100gaussians_image
 from photutils.utils._overlap import overlap_slices
 
+# These tests cover the deprecated functions, so the deprecation
+# warning is ignored
+pytestmark = pytest.mark.filterwarnings(
+    'ignore:This function was deprecated in version 3.2')
+
 _DATA_DIR = get_pkg_data_path('datasets', 'data', package='photutils')
 
 

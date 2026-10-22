@@ -5,11 +5,16 @@ Tools for including noise in simulated data.
 
 import numpy as np
 
-from photutils.utils._deprecation import deprecated_positional_kwargs
+from photutils.utils._deprecation import (deprecated,
+                                          deprecated_positional_kwargs)
 
 __all__ = ['apply_poisson_noise', 'make_noise_image']
 
+__doctest_skip__ = ['*']
 
+
+@deprecated('3.2', alternative='photutils.simulation.apply_poisson_noise',
+            until='4.0')
 @deprecated_positional_kwargs(since='3.0', until='4.0')
 def apply_poisson_noise(data, seed=None):
     """
@@ -77,6 +82,8 @@ def apply_poisson_noise(data, seed=None):
     return rng.poisson(data).astype(data.dtype)
 
 
+@deprecated('3.2', alternative='photutils.simulation.make_noise_image',
+            until='4.0')
 @deprecated_positional_kwargs(since='3.0', until='4.0')
 def make_noise_image(shape, distribution='gaussian', mean=None, stddev=None,
                      seed=None):

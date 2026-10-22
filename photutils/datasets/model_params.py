@@ -9,14 +9,19 @@ from astropy.modeling import Model
 from astropy.table import QTable
 
 from photutils.utils._coords import make_random_xycoords
-from photutils.utils._deprecation import deprecated_positional_kwargs
+from photutils.utils._deprecation import (deprecated,
+                                          deprecated_positional_kwargs)
 from photutils.utils._misc import _get_meta
 from photutils.utils._parameters import as_pair
 
 __all__ = ['make_model_params', 'make_random_models_table',
            'params_table_to_models']
 
+__doctest_skip__ = ['*']
 
+
+@deprecated('3.2', alternative='photutils.simulation.make_model_params',
+            until='4.0')
 def make_model_params(shape, n_sources, *, x_name='x_0', y_name='y_0',
                       min_separation=1, border_size=(0, 0), seed=0, **kwargs):
     """
@@ -186,6 +191,8 @@ def make_model_params(shape, n_sources, *, x_name='x_0', y_name='y_0',
     return model_params
 
 
+@deprecated('3.2', alternative='photutils.simulation.make_random_models_table',
+            until='4.0')
 @deprecated_positional_kwargs(since='3.0', until='4.0')
 def make_random_models_table(n_sources, param_ranges, seed=None):
     """
@@ -287,6 +294,8 @@ def make_random_models_table(n_sources, param_ranges, seed=None):
     return sources
 
 
+@deprecated('3.2', alternative='photutils.simulation.params_table_to_models',
+            until='4.0')
 def params_table_to_models(params_table, model):
     """
     Create a list of models from a table of model parameters.

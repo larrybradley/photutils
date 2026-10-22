@@ -12,6 +12,11 @@ from photutils.datasets import (make_model_params, make_random_models_table,
                                 params_table_to_models)
 from photutils.psf import CircularGaussianPSF
 
+# These tests cover the deprecated functions, so the deprecation
+# warning is ignored
+pytestmark = pytest.mark.filterwarnings(
+    'ignore:This function was deprecated in version 3.2')
+
 
 def test_make_model_params():
     """

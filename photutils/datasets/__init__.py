@@ -5,6 +5,11 @@ data.
 
 These tools are typically used in examples, tutorials, and tests, but
 can also be used for general data analysis or exploration.
+
+.. deprecated:: 3.2
+    The simulation tools in this subpackage are deprecated and this
+    subpackage will be removed in version 4.0. Use the equivalent
+    tools in `photutils.simulation` instead.
 """
 
 from .images import *  # noqa: F401, F403
