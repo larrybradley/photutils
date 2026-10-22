@@ -48,14 +48,20 @@ around host sources, such as faint stars on bright galaxies::
     ...                                   make_pair_params,
     ...                                   make_satellite_params)
     >>> stars = make_model_params((512, 512), 100, flux=(3, 300),
-    ...                           log_params=('flux',), kind='star')
+    ...                           log_params=('flux',), kind='star',
+    ...                           seed=1)
     >>> pairs = make_pair_params((512, 512), 20, (2, 6), flux=(50, 200),
-    ...                          flux_ratio=(0.1, 1), kind='pair')
+    ...                          flux_ratio=(0.1, 1), kind='pair', seed=2)
     >>> hosts = make_model_params((512, 512), 5, r_eff=(10, 20),
-    ...                           min_separation=100, border_size=60)
+    ...                           min_separation=100, border_size=60,
+    ...                           seed=3)
     >>> on_hosts = make_satellite_params(hosts, 10, (0.5, 2.5),
     ...                                  radius_unit='r_eff',
-    ...                                  flux=(5, 300), kind='star_on_gal')
+    ...                                  flux=(5, 300), kind='star_on_gal',
+    ...                                  seed=4)
+
+Populations that will be stacked need different ``seed`` values, or
+their positions are correlated.
 
 
 .. _whatsnew-3.2-api-changes:

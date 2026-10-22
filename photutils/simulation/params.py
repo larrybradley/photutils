@@ -84,6 +84,8 @@ def make_model_params(shape, n_sources, *, x_name='x_0', y_name='y_0',
         added after the parameter columns. It labels the population, so
         tables of different populations can be stacked with
         `~astropy.table.vstack` and told apart afterward.
+        Populations that will be stacked need different ``seed``
+        values, or their positions are correlated.
 
     **kwargs
         Keyword arguments are accepted for additional model parameters.
@@ -201,11 +203,11 @@ def make_model_params(shape, n_sources, *, x_name='x_0', y_name='y_0',
         if np.shape(prange) != (2,):
             msg = f'{param} must be a 2-tuple'
             raise ValueError(msg)
-        model_params[param] = sample_param(rng, prange, len(model_params),
-                                           log=param in log_params,
-                                           name=param)
+        model_params[param] = _sample_param(
+            rng, prange, len(model_params), log=param in log_params,
+            name=param)
 
-    add_kind_column(model_params, kind)
+    _add_kind_column(model_params, kind)
 
     return model_params
 
@@ -273,6 +275,8 @@ def make_pair_params(shape, n_pairs, separation, *, flux=(1, 1),
     kind : str or `None`, optional
         If not `None`, a ``'kind'`` column filled with this value is
         added as the last column.
+        Populations that will be stacked need different ``seed``
+        values, or their positions are correlated.
 
     **kwargs
         Keyword arguments are accepted for additional model parameters.
@@ -343,10 +347,10 @@ def make_pair_params(shape, n_pairs, separation, *, flux=(1, 1),
     n_made = len(midpoints)
     x_mid, y_mid = np.transpose(midpoints)
 
-    separations = sample_param(rng, separation, n_made, name='separation')
+    separations = _sample_param(rng, separation, n_made, name='separation')
     angles = rng.uniform(0, 2 * np.pi, n_made)
-    first_flux = sample_param(rng, flux, n_made, name='flux')
-    ratios = sample_param(rng, flux_ratio, n_made, name='flux_ratio')
+    first_flux = _sample_param(rng, flux, n_made, name='flux')
+    ratios = _sample_param(rng, flux_ratio, n_made, name='flux_ratio')
 
     dx = 0.5 * separations * np.cos(angles)
     dy = 0.5 * separations * np.sin(angles)
@@ -363,9 +367,9 @@ def make_pair_params(shape, n_pairs, separation, *, flux=(1, 1),
     params['pair_id'] = np.repeat(np.arange(n_made) + 1, 2)
 
     for param, prange in kwargs.items():
-        params[param] = sample_param(rng, prange, len(params), name=param)
+        params[param] = _sample_param(rng, prange, len(params), name=param)
 
-    add_kind_column(params, kind)
+    _add_kind_column(params, kind)
 
     return params
 
@@ -392,7 +396,7 @@ def make_satellite_params(host_params, n_per_host, radius, *,
     host_params : `~astropy.table.Table`
         A table of host sources, with ``x_name`` and ``y_name`` position
         columns and, if ``radius_unit='r_eff'``, an ``r_eff_name``
-        column.
+        column. These columns are in pixels and must not have units.
 
     n_per_host : int
         The number of sources placed around each host.
@@ -425,6 +429,8 @@ def make_satellite_params(host_params, n_per_host, radius, *,
     kind : str or `None`, optional
         If not `None`, a ``'kind'`` column filled with this value is
         added as the last column.
+        Populations that will be stacked need different ``seed``
+        values, or their positions are correlated.
 
     **kwargs
         Keyword arguments are accepted for additional model parameters.
@@ -446,8 +452,9 @@ def make_satellite_params(host_params, n_per_host, radius, *,
     ------
     ValueError
         If ``radius_unit`` is invalid, if ``host_params`` has no
-        ``r_eff_name`` column when ``radius_unit='r_eff'``, or if a
-        keyword argument has a reserved name.
+        ``r_eff_name`` column when ``radius_unit='r_eff'``, if a host
+        position or ``r_eff_name`` column has units, or if a keyword
+        argument has a reserved name.
 
     See Also
     --------
@@ -474,6 +481,14 @@ def make_satellite_params(host_params, n_per_host, radius, *,
         msg = f'host_params has no "{r_eff_name}" column'
         raise ValueError(msg)
 
+    unit_columns = [x_name, y_name]
+    if radius_unit == 'r_eff':
+        unit_columns.append(r_eff_name)
+    for column in unit_columns:
+        if getattr(host_params[column], 'unit', None) is not None:
+            msg = f'host_params column "{column}" must not have units'
+            raise ValueError(msg)
+
     for param in kwargs:
         if param in ('id', x_name, y_name, 'host_id'):
             msg = (f'{param} cannot be used as a keyword argument because '
@@ -485,7 +500,7 @@ def make_satellite_params(host_params, n_per_host, radius, *,
     n_sources = len(host_index)
 
     rng = np.random.default_rng(seed)
-    radii = sample_param(rng, radius, n_sources, name='radius')
+    radii = _sample_param(rng, radius, n_sources, name='radius')
     if radius_unit == 'r_eff':
         radii *= np.asarray(host_params[r_eff_name], dtype=float)[host_index]
     angles = rng.uniform(0, 2 * np.pi, n_sources)
@@ -506,14 +521,14 @@ def make_satellite_params(host_params, n_per_host, radius, *,
     params['host_id'] = host_ids[host_index]
 
     for param, prange in kwargs.items():
-        params[param] = sample_param(rng, prange, n_sources, name=param)
+        params[param] = _sample_param(rng, prange, n_sources, name=param)
 
-    add_kind_column(params, kind)
+    _add_kind_column(params, kind)
 
     return params
 
 
-def sample_param(rng, bounds, size, *, log=False, name='parameter'):
+def _sample_param(rng, bounds, size, *, log=False, name='parameter'):
     """
     Sample random values of a parameter.
 
@@ -556,7 +571,7 @@ def sample_param(rng, bounds, size, *, log=False, name='parameter'):
     return 10.0 ** rng.uniform(np.log10(low), np.log10(high), size)
 
 
-def add_kind_column(table, kind):
+def _add_kind_column(table, kind):
     """
     Add a ``'kind'`` column to a table in place.
 

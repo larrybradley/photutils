@@ -3,6 +3,7 @@
 Tests for the params module.
 """
 
+import astropy.units as u
 import numpy as np
 import pytest
 from astropy.table import QTable, Table, vstack
@@ -344,10 +345,10 @@ def test_pairs_inside_image():
     """
     Test that both members of every pair lie inside the border margins.
     """
-    shape = (60, 80)
-    border = (5, 7)
-    params = make_pair_params(shape, 4, (2, 8), border_size=border,
-                              seed=0)
+    # A thin strip puts many pair midpoints near the y edges
+    shape = (20, 2000)
+    border = (2, 2)
+    params = make_pair_params(shape, 60, 6.0, border_size=border, seed=0)
     assert np.all(params['x_0'] >= border[1])
     assert np.all(params['x_0'] < shape[1] - border[1])
     assert np.all(params['y_0'] >= border[0])
@@ -502,3 +503,25 @@ def test_satellite_errors():
         match = f'{name} cannot be used as a keyword argument'
         with pytest.raises(ValueError, match=match):
             make_satellite_params(hosts, 2, 3.0, **{name: (1, 2)})
+
+
+def test_satellite_units_error():
+    """
+    Test that host position or ``r_eff`` columns with units raise an
+    error instead of being used as pixels.
+    """
+    hosts = make_hosts()
+    hosts['r_eff'] = hosts['r_eff'] * u.arcsec
+    match = 'host_params column "r_eff" must not have units'
+    with pytest.raises(ValueError, match=match):
+        make_satellite_params(hosts, 2, 1.0, radius_unit='r_eff')
+
+    # The r_eff column is not used with pixel radii
+    satellites = make_satellite_params(hosts, 2, 1.0)
+    assert len(satellites) == 6
+
+    hosts = make_hosts()
+    hosts['x_0'] = hosts['x_0'] * u.deg
+    match = 'host_params column "x_0" must not have units'
+    with pytest.raises(ValueError, match=match):
+        make_satellite_params(hosts, 2, 1.0)
