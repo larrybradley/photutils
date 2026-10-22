@@ -45,14 +45,18 @@ def optimal_snr(model, params_table, error, *, psf_model=None, n_nodes=None,
     fit model. The SNR is a property of the source and the noise, and
     does not depend on the detection algorithm.
 
-    Each source is rendered exactly as it would be rendered in an
-    image. If ``psf_model`` is `None`, it is rendered as by
-    `~photutils.simulation.make_model_image` with the ``n_nodes``
-    keyword. Otherwise, it is rendered as by
+    Each source is rendered as the image renderers render it when
+    they are called with their default position names, bounding boxes,
+    and no ``params_map``, and with a ``model_shape`` column if
+    ``params_table`` has one. If ``psf_model`` is `None`, the source
+    is rendered as by `~photutils.simulation.make_model_image` with
+    the ``n_nodes`` keyword. Otherwise, it is rendered as by
     `~photutils.simulation.make_convolved_model_image` with the
-    ``psf_model``, ``oversample``, and ``n_nodes`` keywords. The
-    sources are not added to an image, so each SNR is that of the
-    source alone, even if the cutouts of sources overlap.
+    ``psf_model``, ``oversample``, and ``n_nodes`` keywords. With
+    ``psf_model``, the source is always integrated with ``n_nodes``
+    nodes, so it cannot be point-evaluated. The sources are not added
+    to an image, so each SNR is that of the source alone, even if the
+    cutouts of sources overlap.
 
     The errors are assumed to be independent from pixel to pixel. For
     noise that is correlated, as in a resampled image, the SNR is
@@ -116,8 +120,8 @@ def optimal_snr(model, params_table, error, *, psf_model=None, n_nodes=None,
     snr : 1D `~numpy.ndarray`
         The signal-to-noise ratio of each source, in the order of the
         rows of ``params_table``. The SNR is NaN for a row that has a
-        nonfinite model parameter, for a source that does not overlap
-        the image, As for the image renderers, a source outside
+        nonfinite model parameter and for a source that does not
+        overlap the image. As for the image renderers, a source outside
         the image whose light reaches the image through the ``psf_model``
         has an SNR. The SNR is also NaN for a source whose overlap with
         the image has no pixel with a positive, finite error.
