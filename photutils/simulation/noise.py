@@ -105,8 +105,7 @@ def make_noise_image(shape, *, distribution='gaussian', mean=None,
         for Gaussian noise and ignored for Poisson noise (the variance
         of the Poisson distribution is equal to its mean).
 
-    kernel : 2D `~numpy.ndarray`, `~astropy.convolution.Kernel2D`, or \
-            `None`, optional
+    kernel : 2D `~numpy.ndarray` or `~astropy.convolution.Kernel2D`, optional
         If not `None`, the Gaussian noise is correlated by convolving
         white noise with this kernel, then rescaling it so that the
         per-pixel standard deviation is still ``stddev``. This mimics
