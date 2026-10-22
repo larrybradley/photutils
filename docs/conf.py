@@ -79,6 +79,7 @@ extensions += [
 ]
 
 redirects = {
+    'user_guide/datasets': 'simulation.html',
     'user_guide/epsf': 'epsf_building.html',
     'user_guide/profiles': 'radial_profiles.html',
 }

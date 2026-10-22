@@ -528,8 +528,8 @@ PSF Photometry Examples
 
 Let's start with a simple example using simulated stars whose PSF is
 assumed to be Gaussian. We'll create a synthetic image using tools
-provided by the `photutils.psf` and `photutils.simulation`
-modules::
+provided by the `photutils.psf` and
+:ref:`photutils.simulation <simulation>` modules::
 
     >>> import numpy as np
     >>> from photutils.psf import CircularGaussianPRF

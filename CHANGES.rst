@@ -40,6 +40,14 @@ New Features
     releases the GIL, so models can be built in parallel threads.
     [#2551]
 
+- ``photutils.simulation``
+
+  - Added a new ``photutils.simulation`` subpackage for making simulated
+    images and scoring source-detection algorithms on them. It starts
+    with versions of the ``photutils.datasets`` tools and of
+    ``photutils.psf.make_psf_model_image`` whose optional arguments are
+    keyword-only. [#XXXX]
+
 Bug Fixes
 ^^^^^^^^^
 
@@ -416,6 +424,13 @@ API Changes
     ``photutils.asdf.extension`` instead. The ASDF tags and schema URIs
     are unchanged, so existing ASDF files remain readable. [#2540]
 
+- ``photutils.datasets``
+
+  - The ``photutils.datasets`` functions are deprecated and will be
+    removed in version 4.0. Use the functions of the same name in
+    ``photutils.simulation`` instead. Their optional arguments are
+    keyword-only. [#XXXX]
+
 - ``photutils.isophote``
 
   - The ``maxgerr`` and ``going_inwards`` keywords of
@@ -477,6 +492,12 @@ API Changes
     Values that are not defined (e.g., the gradient error of the
     central pixel) are NaN. Previously, such columns had an object
     data type with `None` values. [#2553]
+
+- ``photutils.psf``
+
+  - ``make_psf_model_image`` is deprecated and will be removed in
+    version 4.0. Use ``photutils.simulation.make_psf_model_image``
+    instead. [#XXXX]
 
 
 3.1.1 (2026-10-16)

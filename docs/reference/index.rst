@@ -16,7 +16,7 @@ how to import these tools.
 
 * :doc:`photutils.centroids <centroids_api>`
 
-* :doc:`photutils.datasets <datasets_api>`
+* :doc:`photutils.datasets <datasets_api>` (deprecated)
 
 * :doc:`photutils.detection <detection_api>`
 
@@ -33,6 +33,8 @@ how to import these tools.
 * :doc:`photutils.psf_matching <psf_matching_api>`
 
 * :doc:`photutils.segmentation <segmentation_api>`
+
+* :doc:`photutils.simulation <simulation_api>`
 
 * :doc:`photutils.utils <utils_api>`
 
@@ -53,4 +55,5 @@ how to import these tools.
     psf_api
     psf_matching_api
     segmentation_api
+    simulation_api
     utils_api

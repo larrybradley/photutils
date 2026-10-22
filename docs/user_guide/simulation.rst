@@ -1,16 +1,16 @@
-.. _datasets:
+.. _simulation:
 
-Datasets and Simulation (`photutils.datasets`)
-==============================================
+Simulation (`photutils.simulation`)
+===================================
 
 Introduction
 ------------
 
-`photutils.datasets` provides tools for loading datasets or making
-simulated data. These tools mostly involve astronomical images, but they
-also include PSF models and source catalogs.
+`photutils.simulation` provides tools for making simulated data. These
+tools mostly involve astronomical images, but they also include PSF
+models and source catalogs.
 
-These datasets are useful for the Photutils documentation examples,
+These tools are useful for the Photutils documentation examples,
 tests, and benchmarks. However, they can also be used for general data
 analysis or for users that would like to try out or implement new
 methods for Photutils.
@@ -25,10 +25,9 @@ to create an image of the sources, add noise using
 coordinate system (WCS) using :func:`~photutils.simulation.make_wcs`. An
 example of this process is shown below.
 
-Functions that start with ``load_*`` download example datasets from a
-remote repository. On first load, these datasets are downloaded and
-placed into the Astropy cache on the user's machine. These functions
-are deprecated and will be removed in version 4.0.
+The optional arguments of these functions are keyword-only. These tools
+replace those of the deprecated ``photutils.datasets`` subpackage,
+which will be removed in version 4.0.
 
 
 Simulating Images
@@ -121,4 +120,4 @@ or a generalized WCS using :func:`~photutils.simulation.make_gwcs`:
 API Reference
 -------------
 
-:doc:`../reference/datasets_api`
+:doc:`../reference/simulation_api`
