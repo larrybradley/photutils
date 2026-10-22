@@ -20,6 +20,17 @@ Dependency Version Updates
 ==========================
 
 
+New photutils.simulation Subpackage
+===================================
+
+A new :ref:`photutils.simulation <simulation>` subpackage provides
+tools for making simulated images. It starts with versions of the
+``photutils.datasets`` tools and of
+``photutils.psf.make_psf_model_image`` whose optional arguments are
+keyword-only. These tools will be extended in future releases to make
+simulated images and to score source-detection algorithms on them.
+
+
 .. _whatsnew-3.2-api-changes:
 
 API Changes
@@ -29,6 +40,34 @@ API Changes
 
 New Deprecations
 ----------------
+
+The ``photutils.datasets`` subpackage is deprecated and will be removed
+in version 4.0. Use the functions of the same name in
+:ref:`photutils.simulation <simulation>` instead. Their optional
+arguments are keyword-only, so any optional argument must be passed by
+name. Update your code::
+
+    # Old (deprecated)
+    from photutils.datasets import make_noise_image
+    noise = make_noise_image((100, 100), mean=5, stddev=2, seed=123)
+
+    # New
+    from photutils.simulation import make_noise_image
+    noise = make_noise_image((100, 100), mean=5, stddev=2, seed=123)
+
+The ``photutils.psf.make_psf_model_image`` function is deprecated and
+will be removed in version 4.0. Use
+:func:`~photutils.simulation.make_psf_model_image` instead::
+
+    # Old (deprecated)
+    from photutils.psf import make_psf_model_image
+    data, params = make_psf_model_image((100, 100), psf_model, 10,
+                                        min_separation=5, seed=123)
+
+    # New
+    from photutils.simulation import make_psf_model_image
+    data, params = make_psf_model_image((100, 100), psf_model, 10,
+                                        min_separation=5, seed=123)
 
 
 .. _whatsnew-3.2-breaking-changes:

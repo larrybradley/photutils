@@ -7,6 +7,14 @@ General
 New Features
 ^^^^^^^^^^^^
 
+- ``photutils.simulation``
+
+  - Added a new ``photutils.simulation`` subpackage for making simulated
+    images and scoring source-detection algorithms on them. It starts
+    with versions of the ``photutils.datasets`` tools and of
+    ``photutils.psf.make_psf_model_image`` whose optional arguments are
+    keyword-only. [#XXXX]
+
 Bug Fixes
 ^^^^^^^^^
 
@@ -24,6 +32,19 @@ Bug Fixes
 
 API Changes
 ^^^^^^^^^^^
+
+- ``photutils.datasets``
+
+  - The ``photutils.datasets`` functions are deprecated and will be
+    removed in version 4.0. Use the functions of the same name in
+    ``photutils.simulation`` instead. Their optional arguments are
+    keyword-only. [#XXXX]
+
+- ``photutils.psf``
+
+  - ``make_psf_model_image`` is deprecated and will be removed in
+    version 4.0. Use ``photutils.simulation.make_psf_model_image``
+    instead. [#XXXX]
 
 
 3.1.1 (2026-10-16)
