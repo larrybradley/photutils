@@ -26,7 +26,7 @@ class TestMakeRandomModelsTablePositionalKwargs:
     """
 
     def test_positional_warns(self):
-        match = 'make_random_models_table'
+        match = "positionally to 'make_random_models_table'"
         with pytest.warns(PhotutilsDeprecationWarning, match=match):
             make_random_models_table(5, {'x_mean': [0, 100]}, 0)
 
@@ -41,7 +41,7 @@ class TestApplyPoissonNoisePositionalKwargs:
 
     def test_positional_warns(self):
         data = np.ones((10, 10))
-        match = 'apply_poisson_noise'
+        match = "positionally to 'apply_poisson_noise'"
         with pytest.warns(PhotutilsDeprecationWarning, match=match):
             apply_poisson_noise(data, 0)
 
@@ -56,7 +56,7 @@ class TestMakeNoiseImagePositionalKwargs:
     """
 
     def test_positional_warns(self):
-        match = 'make_noise_image'
+        match = "positionally to 'make_noise_image'"
         with pytest.warns(PhotutilsDeprecationWarning, match=match):
             make_noise_image((10, 10), 'gaussian', mean=0.0, stddev=2.0)
 
@@ -71,7 +71,7 @@ class TestMakeWcsPositionalKwargs:
     """
 
     def test_positional_warns(self):
-        match = 'make_wcs'
+        match = "positionally to 'make_wcs'"
         with pytest.warns(PhotutilsDeprecationWarning, match=match):
             make_wcs((100, 100), False)  # noqa: FBT003
 
@@ -86,7 +86,7 @@ class TestMakeGwcsPositionalKwargs:
 
     @pytest.mark.skipif(not HAS_GWCS, reason='gwcs is required')
     def test_positional_warns(self):
-        match = 'make_gwcs'
+        match = "positionally to 'make_gwcs'"
         with pytest.warns(PhotutilsDeprecationWarning, match=match):
             make_gwcs((100, 100), False)  # noqa: FBT003
 
