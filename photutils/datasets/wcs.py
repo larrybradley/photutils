@@ -9,13 +9,18 @@ from astropy import coordinates as coord
 from astropy.modeling import models
 from astropy.wcs import WCS
 
-from photutils.utils._deprecation import deprecated_positional_kwargs
+from photutils.utils._deprecation import (deprecated,
+                                          deprecated_positional_kwargs)
 
 __all__ = ['make_gwcs', 'make_wcs']
+
+__doctest_skip__ = ['*']
 
 __doctest_requires__ = {'make_gwcs': ['gwcs']}
 
 
+@deprecated('3.2', alternative='photutils.simulation.make_wcs',
+            until='4.0')
 @deprecated_positional_kwargs(since='3.0', until='4.0')
 def make_wcs(shape, galactic=False):
     """
@@ -80,6 +85,8 @@ def make_wcs(shape, galactic=False):
     return wcs
 
 
+@deprecated('3.2', alternative='photutils.simulation.make_gwcs',
+            until='4.0')
 @deprecated_positional_kwargs(since='3.0', until='4.0')
 def make_gwcs(shape, galactic=False):
     """

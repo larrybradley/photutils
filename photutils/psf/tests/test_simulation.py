@@ -11,6 +11,11 @@ from numpy.testing import assert_equal
 
 from photutils.psf import CircularGaussianPRF, make_psf_model_image
 
+# These tests cover the deprecated functions, so the deprecation
+# warning is ignored
+pytestmark = pytest.mark.filterwarnings(
+    'ignore:This function was deprecated in version 3.2')
+
 
 def make_compound_psf_model():
     """

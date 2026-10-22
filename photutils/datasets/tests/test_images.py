@@ -15,6 +15,11 @@ from photutils.datasets.images import _model_shape_from_bbox
 from photutils.psf import (CircularGaussianPSF, CircularGaussianSigmaPRF,
                            ImagePSF)
 
+# These tests cover the deprecated functions, so the deprecation
+# warning is ignored
+pytestmark = pytest.mark.filterwarnings(
+    'ignore:This function was deprecated in version 3.2')
+
 
 def test_make_model_image():
     """

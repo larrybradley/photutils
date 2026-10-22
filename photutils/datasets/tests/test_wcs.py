@@ -9,6 +9,11 @@ from numpy.testing import assert_allclose
 from photutils.datasets import make_gwcs, make_wcs
 from photutils.utils._optional_deps import HAS_GWCS
 
+# These tests cover the deprecated functions, so the deprecation
+# warning is ignored
+pytestmark = pytest.mark.filterwarnings(
+    'ignore:This function was deprecated in version 3.2')
+
 
 def test_make_wcs():
     """

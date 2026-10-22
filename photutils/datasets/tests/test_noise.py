@@ -9,6 +9,11 @@ from numpy.testing import assert_allclose
 
 from photutils.datasets import apply_poisson_noise, make_noise_image
 
+# These tests cover the deprecated functions, so the deprecation
+# warning is ignored
+pytestmark = pytest.mark.filterwarnings(
+    'ignore:This function was deprecated in version 3.2')
+
 
 def test_apply_poisson_noise():
     """

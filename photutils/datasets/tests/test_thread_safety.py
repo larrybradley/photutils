@@ -12,12 +12,18 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
+import pytest
 from astropy.modeling.models import Moffat2D
 from astropy.table import QTable
 from numpy.testing import assert_equal
 
 from photutils.datasets import (make_model_image, make_model_params,
                                 make_noise_image)
+
+# These tests cover the deprecated functions, so the deprecation
+# warning is ignored
+pytestmark = pytest.mark.filterwarnings(
+    'ignore:This function was deprecated in version 3.2')
 
 N_THREADS = 8
 N_CALLS = 10

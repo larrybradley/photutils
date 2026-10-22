@@ -5,14 +5,19 @@ Tools for creating images from PSF models.
 
 import numpy as np
 
-from photutils.datasets import make_model_image, make_model_params
-from photutils.datasets.images import _model_shape_from_bbox
 from photutils.psf.utils import _get_psf_model_main_params
+from photutils.simulation import make_model_image, make_model_params
+from photutils.simulation.images import _model_shape_from_bbox
+from photutils.utils._deprecation import deprecated
 from photutils.utils._parameters import as_pair
 
 __all__ = ['make_psf_model_image']
 
+__doctest_skip__ = ['*']
 
+
+@deprecated('3.2', alternative='photutils.simulation.make_psf_model_image',
+            until='4.0')
 def make_psf_model_image(shape, psf_model, n_sources, *, model_shape=None,
                          min_separation=1, border_size=None, seed=0,
                          progress_bar=False, **kwargs):

@@ -10,13 +10,18 @@ from astropy.modeling import Model
 from astropy.nddata import NoOverlapError
 from astropy.table import Table
 
+from photutils.utils._deprecation import deprecated
 from photutils.utils._overlap import overlap_slices
 from photutils.utils._parameters import as_pair
 from photutils.utils._progress_bars import add_progress_bar
 
 __all__ = ['make_model_image']
 
+__doctest_skip__ = ['*']
 
+
+@deprecated('3.2', alternative='photutils.simulation.make_model_image',
+            until='4.0')
 def make_model_image(shape, model, params_table, *, model_shape=None,
                      bbox_factor=None, x_name='x_0', y_name='y_0',
                      params_map=None, discretize_method='center',
