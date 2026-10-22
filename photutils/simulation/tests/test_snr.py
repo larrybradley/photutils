@@ -206,6 +206,37 @@ def test_optimal_snr_off_image_convolved():
     assert_allclose(result[2], result[3] / np.sqrt(2), rtol=0.02)
 
 
+def test_optimal_snr_large_source_matches_padded_image():
+    """
+    Test that a source much larger than the image, which straddles the
+    image edge, has the SNR it has in a larger image whose added pixels
+    are excluded by a NaN error.
+    """
+    shape = (40, 50)
+    pad = 30
+    params = QTable()
+    params['x_0'] = [2.3, 47.6]
+    params['y_0'] = [12.7, 38.1]
+    params['flux'] = [100.0, 250.0]
+    params['r_eff'] = [6.0, 4.0]
+    params['n'] = [1.0, 2.0]
+    params['ellip'] = [0.2, 0.4]
+    params['theta'] = [0.3, 1.2]
+    source = SersicSource()
+    psf_model = CircularGaussianPRF(fwhm=2.5)
+    error = make_error_image(shape)
+    result = optimal_snr(source, params, error, psf_model=psf_model)
+
+    padded = params.copy()
+    padded['x_0'] += pad
+    padded['y_0'] += pad
+    padded_error = np.full((shape[0] + 2 * pad, shape[1] + 2 * pad), np.nan)
+    padded_error[pad:pad + shape[0], pad:pad + shape[1]] = error
+    expected = optimal_snr(source, padded, padded_error, psf_model=psf_model)
+    assert np.all(result > 0)
+    assert_allclose(result, expected, rtol=1e-12)
+
+
 def test_optimal_snr_nonfinite_row_nan():
     """
     Test that a row with a nonfinite parameter has an SNR of NaN and
