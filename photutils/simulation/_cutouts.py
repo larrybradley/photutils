@@ -207,6 +207,14 @@ def core_nodes(centers, center, cell_size, n_nodes):
     widths = np.diff(edges, axis=1)[..., None]
     middles = 0.5 * (edges[:, :-1] + edges[:, 1:])[..., None]
 
+    # A zero-width piece lies on a cell edge, which can be the source
+    # center. Its nodes have zero weight, so they are moved to the
+    # middle of the first piece of the cell to avoid evaluating the model
+    # where it may be infinite. The first piece always has positive
+    # width, and the middle of a piece is never a piece boundary, so it
+    # is never the source center.
+    middles = np.where(widths == 0, middles[:, :1], middles)
+
     offsets, weights = pixel_nodes(n_nodes)
     n_cells = len(centers)
     nodes = (middles + widths * offsets).reshape(n_cells, -1)

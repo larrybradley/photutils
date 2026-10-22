@@ -5,6 +5,7 @@ Tests for the private cutouts module.
 
 import numpy as np
 import pytest
+from astropy.modeling import custom_model
 from astropy.modeling.models import Polynomial2D, Sersic2D
 from numpy.testing import assert_allclose, assert_array_equal
 
@@ -248,3 +249,23 @@ def test_core_clipped_at_edge():
     outside = (x >= 1.5) | (y >= 1.5)
     assert_array_equal(result[outside],
                        integrate_cells(model, x, y, 1.0, 4)[outside])
+
+
+@pytest.mark.parametrize(('x_0', 'y_0'), [(20.5, 20.5), (20.5, 20.0),
+                                          (20.0, 20.0), (20.3, 19.8)])
+def test_core_never_evaluates_center(x_0, y_0):
+    """
+    Test that no core node lies exactly on the source center, so a
+    model that is infinite there but integrable renders finite values.
+
+    A center on a cell edge or corner gives core pieces of zero width,
+    whose nodes must not be placed at the center.
+    """
+    @custom_model
+    def inverse_radius(x, y, x_0=0.0, y_0=0.0):
+        return 1.0 / np.hypot(x - x_0, y - y_0)
+
+    model = inverse_radius(x_0=x_0, y_0=y_0)
+    x, y = make_grid((41, 41))
+    result = render_cells(model, x, y, x_0, y_0, n_nodes=4)
+    assert np.all(np.isfinite(result))
