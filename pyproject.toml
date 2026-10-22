@@ -113,6 +113,9 @@ namespaces = false
 'photutils.datasets' = [
     'data/*',
 ]
+'photutils.simulation' = [
+    'data/*',
+]
 'photutils.detection.tests' = [
     'data/*',
 ]
