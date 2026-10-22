@@ -6,8 +6,6 @@ return identical results when run concurrently from multiple threads.
 This catches data races and shared-state issues introduced by ``with
 nogil:`` sections in the functions.
 """
-from concurrent.futures import ThreadPoolExecutor
-
 import numpy as np
 import pytest
 from numpy.testing import assert_array_equal
@@ -15,100 +13,72 @@ from numpy.testing import assert_array_equal
 from photutils.geometry import (circular_overlap_grid, elliptical_overlap_grid,
                                 rectangular_overlap_grid)
 from photutils.geometry._polygon_overlap import polygon_overlap_grid
+from photutils.utils.tests.thread_test_helpers import fail_on_warning
 
 N_THREADS = 8
-N_CALLS_PER_THREAD = 4
+
+pytestmark = pytest.mark.force_parallel_threads(N_THREADS)
+
+GRID_SHAPES = ('circular', 'elliptical', 'rectangular', 'polygon')
+
+_angles = np.linspace(0.0, 2.0 * np.pi, 32, endpoint=False)
+_radii = 8.0 + 2.0 * np.sin(5.0 * _angles)
+POLYGON_VX = np.ascontiguousarray(_radii * np.cos(_angles))
+POLYGON_VY = np.ascontiguousarray(_radii * np.sin(_angles))
 
 
-def _run_concurrent(fn, *, n_threads=N_THREADS,
-                    n_calls=N_CALLS_PER_THREAD):
-    expected = fn()
-    with ThreadPoolExecutor(max_workers=n_threads) as ex:
-        futures = [ex.submit(fn)
-                   for _ in range(n_threads * n_calls)]
-        for fut in futures:
-            np.testing.assert_array_equal(fut.result(), expected)
-
-
-@pytest.mark.parametrize('use_exact', [1, 0])
-def test_circular_overlap_grid_threadsafe(use_exact):
-    def fn():
+def _overlap_grid(shape, use_exact):
+    """
+    Return the overlap grid of an aperture of the given shape.
+    """
+    if shape == 'circular':
         return circular_overlap_grid(-15.0, 15.0, -15.0, 15.0, 200, 200,
                                      8.0, use_exact, 5)
-    _run_concurrent(fn)
-
-
-@pytest.mark.parametrize('use_exact', [1, 0])
-def test_elliptical_overlap_grid_threadsafe(use_exact):
-    def fn():
+    if shape == 'elliptical':
         return elliptical_overlap_grid(-15.0, 15.0, -15.0, 15.0, 200, 200,
                                        8.0, 5.0, 0.7, use_exact, 5)
-    _run_concurrent(fn)
-
-
-@pytest.mark.parametrize('use_exact', [1, 0])
-def test_rectangular_overlap_grid_threadsafe(use_exact):
-    def fn():
+    if shape == 'rectangular':
         return rectangular_overlap_grid(-15.0, 15.0, -15.0, 15.0, 200, 200,
                                         12.0, 7.0, 0.5, use_exact, 5)
-    _run_concurrent(fn)
+    return polygon_overlap_grid(-15.0, 15.0, -15.0, 15.0, 200, 200,
+                                POLYGON_VX, POLYGON_VY, use_exact, 8)
 
 
+@pytest.fixture(name='expected_grids', scope='module')
+def fixture_expected_grids():
+    """
+    Return the serial overlap grids, keyed by aperture shape and
+    ``use_exact``.
+    """
+    return {(shape, use_exact): _overlap_grid(shape, use_exact)
+            for shape in GRID_SHAPES for use_exact in (1, 0)}
+
+
+@pytest.mark.iterations(4)
 @pytest.mark.parametrize('use_exact', [1, 0])
-def test_polygon_overlap_grid_threadsafe(use_exact):
-    n_vertices = 32
-    angles = np.linspace(0.0, 2.0 * np.pi, n_vertices, endpoint=False)
-    radii = 8.0 + 2.0 * np.sin(5.0 * angles)
-    vx = np.ascontiguousarray(radii * np.cos(angles))
-    vy = np.ascontiguousarray(radii * np.sin(angles))
-
-    def fn():
-        return polygon_overlap_grid(-15.0, 15.0, -15.0, 15.0, 200, 200,
-                                    vx, vy, use_exact, 8)
-    _run_concurrent(fn)
+@pytest.mark.parametrize('shape', GRID_SHAPES)
+def test_overlap_grid_threadsafe(shape, use_exact, expected_grids):
+    """
+    Test that concurrent calls to each overlap function return results
+    identical to a serial call.
+    """
+    with fail_on_warning():
+        result = _overlap_grid(shape, use_exact)
+    assert_array_equal(result, expected_grids[shape, use_exact])
 
 
-def test_mixed_functions_concurrent():
+@pytest.mark.iterations(8)
+def test_mixed_functions_concurrent(expected_grids, thread_index,
+                                    iteration_index):
     """
     Run all geometry function types concurrently from many threads.
 
     This is a more aggressive smoke test that mixes different functions
     so that if any of them shares mutable state (e.g., a module-level
-    static buffer), interference between calls would surface.
+    static buffer), interference between calls would surface. Each
+    thread changes the function it calls in every iteration.
     """
-    n_vertices = 16
-    angles = np.linspace(0.0, 2.0 * np.pi, n_vertices, endpoint=False)
-    vx = np.ascontiguousarray(7.0 * np.cos(angles))
-    vy = np.ascontiguousarray(5.0 * np.sin(angles))
-
-    expected_circ = circular_overlap_grid(-10.0, 10.0, -10.0, 10.0,
-                                          150, 150, 6.0, 1, 5)
-    expected_ell = elliptical_overlap_grid(-10.0, 10.0, -10.0, 10.0,
-                                           150, 150, 7.0, 4.0, 0.3, 1, 5)
-    expected_rect = rectangular_overlap_grid(-10.0, 10.0, -10.0, 10.0,
-                                             150, 150, 9.0, 5.0, 0.4, 1, 5)
-    expected_poly = polygon_overlap_grid(-10.0, 10.0, -10.0, 10.0,
-                                         150, 150, vx, vy, 1, 5)
-
-    def task(which):
-        if which == 0:
-            return 'c', circular_overlap_grid(
-                -10.0, 10.0, -10.0, 10.0, 150, 150, 6.0, 1, 5)
-        if which == 1:
-            return 'e', elliptical_overlap_grid(
-                -10.0, 10.0, -10.0, 10.0, 150, 150, 7.0, 4.0, 0.3, 1, 5)
-        if which == 2:
-            return 'r', rectangular_overlap_grid(
-                -10.0, 10.0, -10.0, 10.0, 150, 150, 9.0, 5.0, 0.4, 1, 5)
-        return 'p', polygon_overlap_grid(
-            -10.0, 10.0, -10.0, 10.0, 150, 150, vx, vy, 1, 5)
-
-    expected_map = {'c': expected_circ, 'e': expected_ell,
-                    'r': expected_rect, 'p': expected_poly}
-
-    with ThreadPoolExecutor(max_workers=N_THREADS) as ex:
-        futures = [ex.submit(task, i % 4)
-                   for i in range(N_THREADS * 8)]
-        for future in futures:
-            tag, result = future.result()
-            assert_array_equal(result, expected_map[tag])
+    shape = GRID_SHAPES[(thread_index + iteration_index) % len(GRID_SHAPES)]
+    with fail_on_warning():
+        result = _overlap_grid(shape, 1)
+    assert_array_equal(result, expected_grids[shape, 1])
