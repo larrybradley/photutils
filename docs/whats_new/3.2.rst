@@ -63,6 +63,26 @@ around host sources, such as faint stars on bright galaxies::
 Populations that will be stacked need different ``seed`` values, or
 their positions are correlated.
 
+Correlated Noise
+----------------
+
+:func:`~photutils.simulation.make_noise_image` has a new ``kernel``
+keyword that correlates Gaussian noise by convolving it with a kernel,
+while keeping the requested per-pixel standard deviation. This mimics
+resampled images such as mosaics, where the per-pixel error understates
+the noise on larger scales. The new
+:func:`~photutils.simulation.noise_correlation_factor` function returns
+the factor by which a kernel raises the noise on scales larger than the
+kernel::
+
+    >>> from astropy.convolution import Gaussian2DKernel
+    >>> from photutils.simulation import (make_noise_image,
+    ...                                   noise_correlation_factor)
+    >>> kernel = Gaussian2DKernel(1.5)
+    >>> noise = make_noise_image((512, 512), mean=0.0, stddev=1.0,
+    ...                          kernel=kernel, seed=0)
+    >>> factor = noise_correlation_factor(kernel)
+
 
 .. _whatsnew-3.2-api-changes:
 

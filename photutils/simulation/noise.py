@@ -5,7 +5,8 @@ Tools for including noise in simulated data.
 
 import numpy as np
 
-__all__ = ['apply_poisson_noise', 'make_noise_image']
+__all__ = ['apply_poisson_noise', 'make_noise_image',
+           'noise_correlation_factor']
 
 
 def apply_poisson_noise(data, *, seed=None):
@@ -75,7 +76,7 @@ def apply_poisson_noise(data, *, seed=None):
 
 
 def make_noise_image(shape, *, distribution='gaussian', mean=None,
-                     stddev=None, seed=None):
+                     stddev=None, kernel=None, seed=None):
     r"""
     Make a noise image containing Gaussian or Poisson noise.
 
@@ -104,6 +105,18 @@ def make_noise_image(shape, *, distribution='gaussian', mean=None,
         for Gaussian noise and ignored for Poisson noise (the variance
         of the Poisson distribution is equal to its mean).
 
+    kernel : 2D `~numpy.ndarray`, `~astropy.convolution.Kernel2D`, or \
+            `None`, optional
+        If not `None`, the Gaussian noise is correlated by convolving
+        white noise with this kernel, then rescaling it so that the
+        per-pixel standard deviation is still ``stddev``. This mimics
+        resampled images such as mosaics, where neighboring pixels share
+        noise and the per-pixel standard deviation understates the noise
+        on larger scales (see `noise_correlation_factor`). The white
+        noise is drawn on a larger array and convolved without padding,
+        so pixels at the image edges have the same noise properties as
+        the rest. Correlated noise is available only for Gaussian noise.
+
     seed : int, optional
         A seed to initialize the `numpy.random.BitGenerator`. If `None`,
         then fresh, unpredictable entropy will be pulled from the OS.
@@ -118,11 +131,12 @@ def make_noise_image(shape, *, distribution='gaussian', mean=None,
     ------
     ValueError
         If ``mean`` is `None`, if ``stddev`` is `None` for Gaussian
-        noise, or if ``distribution`` is invalid.
+        noise, if ``distribution`` is invalid, if ``kernel`` is not a 2D
+        array, or if ``kernel`` is given for Poisson noise.
 
     See Also
     --------
-    apply_poisson_noise
+    apply_poisson_noise, noise_correlation_factor
 
     Examples
     --------
@@ -149,13 +163,22 @@ def make_noise_image(shape, *, distribution='gaussian', mean=None,
         msg = "'mean' must be input"
         raise ValueError(msg)
 
+    if kernel is not None:
+        kernel = _kernel_array(kernel)
+        if distribution == 'poisson':
+            msg = "'kernel' can be used only with Gaussian noise"
+            raise ValueError(msg)
+
     rng = np.random.default_rng(seed)
 
     if distribution == 'gaussian':
         if stddev is None:
             msg = "'stddev' must be input for Gaussian noise"
             raise ValueError(msg)
-        image = rng.normal(loc=mean, scale=stddev, size=shape)
+        if kernel is None:
+            image = rng.normal(loc=mean, scale=stddev, size=shape)
+        else:
+            image = mean + stddev * _correlated_noise(shape, kernel, rng)
     elif distribution == 'poisson':
         image = rng.poisson(lam=mean, size=shape)
     else:
@@ -164,3 +187,99 @@ def make_noise_image(shape, *, distribution='gaussian', mean=None,
         raise ValueError(msg)
 
     return image
+
+
+def noise_correlation_factor(kernel):
+    """
+    Calculate the noise correlation factor of a kernel.
+
+    White noise convolved with ``kernel`` and rescaled to a per-pixel
+    standard deviation ``stddev`` (as `make_noise_image` does) has a
+    larger standard deviation on scales larger than the kernel than the
+    per-pixel value predicts. The standard deviation of the sum of the
+    noise over a region much larger than the kernel is this factor times
+    the value for uncorrelated noise with the same per-pixel
+    ``stddev``. The factor is ``abs(sum(kernel)) / sqrt(sum(kernel**2))``.
+    It is 1 for a kernel with a single nonzero element, ``n`` for an
+    ``n`` x ``n`` boxcar kernel, and about ``2 * sqrt(pi) * sigma`` for a
+    Gaussian kernel with standard deviation ``sigma`` in pixels.
+
+    Parameters
+    ----------
+    kernel : 2D `~numpy.ndarray` or `~astropy.convolution.Kernel2D`
+        The kernel.
+
+    Returns
+    -------
+    factor : float
+        The noise correlation factor.
+
+    Raises
+    ------
+    ValueError
+        If ``kernel`` is not a 2D array.
+
+    See Also
+    --------
+    make_noise_image
+
+    Examples
+    --------
+    >>> from astropy.convolution import Box2DKernel
+    >>> from photutils.simulation import noise_correlation_factor
+    >>> print(noise_correlation_factor(Box2DKernel(3)))
+    3.0
+    """
+    kernel = _kernel_array(kernel)
+    return float(np.abs(np.sum(kernel)) / np.sqrt(np.sum(kernel**2)))
+
+
+def _kernel_array(kernel):
+    """
+    Return a kernel as a 2D float array.
+
+    Parameters
+    ----------
+    kernel : 2D `~numpy.ndarray` or `~astropy.convolution.Kernel2D`
+        The kernel.
+
+    Returns
+    -------
+    kernel : 2D `~numpy.ndarray`
+        The kernel array.
+    """
+    kernel = np.asarray(getattr(kernel, 'array', kernel), dtype=float)
+    if kernel.ndim != 2:
+        msg = 'kernel must be a 2D array'
+        raise ValueError(msg)
+    return kernel
+
+
+def _correlated_noise(shape, kernel, rng):
+    """
+    Make correlated Gaussian noise with zero mean and unit per-pixel
+    standard deviation.
+
+    Parameters
+    ----------
+    shape : 2-tuple of int
+        The shape of the output image.
+
+    kernel : 2D `~numpy.ndarray`
+        The kernel used to correlate the noise.
+
+    rng : `numpy.random.Generator`
+        The random number generator.
+
+    Returns
+    -------
+    image : 2D `~numpy.ndarray`
+        The correlated noise.
+    """
+    from scipy.signal import fftconvolve
+
+    padded_shape = (shape[0] + kernel.shape[0] - 1,
+                    shape[1] + kernel.shape[1] - 1)
+    white = rng.standard_normal(padded_shape)
+    kernel = kernel / np.sqrt(np.sum(kernel**2))
+    return fftconvolve(white, kernel, mode='valid')
