@@ -231,3 +231,20 @@ def test_core_off_cutout():
     x, y = make_grid((41, 41))
     result = render_cells(model, x, y, x_0, y_0, n_nodes=4)
     assert_array_equal(result, integrate_cells(model, x, y, 1.0, 4))
+
+
+def test_core_clipped_at_edge():
+    """
+    Test a source whose core is partly outside the grid.
+    """
+    x_0, y_0 = 0.2, 0.3
+    model = Sersic2D(amplitude=1.0, r_eff=3.0, n=4, x_0=x_0, y_0=y_0,
+                     ellip=0.3, theta=0.5)
+    x, y = make_grid((21, 21))
+    result = render_cells(model, x, y, x_0, y_0, n_nodes=4)
+    reference = reference_render(model, x, y, x_0, y_0)
+    assert np.abs(result - reference).max() / reference.max() < 1e-3
+    # Refinement leaves cells outside the core unchanged
+    outside = (x >= 1.5) | (y >= 1.5)
+    assert_array_equal(result[outside],
+                       integrate_cells(model, x, y, 1.0, 4)[outside])

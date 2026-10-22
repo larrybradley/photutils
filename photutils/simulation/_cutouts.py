@@ -81,6 +81,29 @@ def validate_n_nodes(n_nodes):
     return int(n_nodes)
 
 
+def evaluate_model(model, x, y):
+    """
+    Evaluate a model on coordinate arrays of any number of dimensions.
+
+    The model is evaluated on the flattened coordinates and the result
+    is reshaped, so models that accept only 1D or 2D inputs also work.
+
+    Parameters
+    ----------
+    model : 2D `astropy.modeling.Model`
+        The model to evaluate.
+
+    x, y : `~numpy.ndarray`
+        The coordinates. The arrays must have the same shape.
+
+    Returns
+    -------
+    result : `~numpy.ndarray` or `~astropy.units.Quantity`
+        The model values, with the shape of ``x``.
+    """
+    return model(x.ravel(), y.ravel()).reshape(x.shape)
+
+
 def integrate_cells(model, x, y, cell_size, n_nodes):
     """
     Return the mean of a model over square cells.
@@ -129,7 +152,8 @@ def integrate_cells(model, x, y, cell_size, n_nodes):
         y_nodes = y + offsets[rows].reshape((-1, 1, *trailing))
         xx, yy = np.broadcast_arrays(x_nodes, y_nodes)
         weights_rows = weights_2d[rows].reshape((-1, n_nodes, *trailing))
-        term = np.sum(model(xx, yy) * weights_rows, axis=(0, 1))
+        values = evaluate_model(model, xx, yy)
+        term = np.sum(values * weights_rows, axis=(0, 1))
         result = term if result is None else result + term
     return result
 
@@ -251,6 +275,6 @@ def render_cells(model, x, y, x_0, y_0, *, cell_size=1.0, n_nodes):
     y_nodes, y_weights = core_nodes(y[in_core], y_0, cell_size, n_nodes)
     xx, yy = np.broadcast_arrays(x_nodes[:, None, :], y_nodes[:, :, None])
     weights = y_weights[:, :, None] * x_weights[:, None, :]
-    values = model(xx, yy)
+    values = evaluate_model(model, xx, yy)
     result[in_core] = np.sum(values * weights, axis=(1, 2))
     return result

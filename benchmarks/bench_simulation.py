@@ -120,7 +120,7 @@ def bench_n_nodes(*, size=500, n_sources=400, n_nodes_list=(None, 2, 4, 8),
     Parameters
     ----------
     size : int, optional
-        The image size; the image is ``(size, size)``.
+        The image size. The image is ``(size, size)``.
 
     n_sources : int, optional
         The number of sources to render.
@@ -130,7 +130,7 @@ def bench_n_nodes(*, size=500, n_sources=400, n_nodes_list=(None, 2, 4, 8),
         the pixel centers.
 
     n_iter : int, optional
-        The number of calls per timing; the per-call time is reported.
+        The number of calls per timing. The per-call time is reported.
 
     repeats : int, optional
         The number of repeats for each timing (best time is kept).
