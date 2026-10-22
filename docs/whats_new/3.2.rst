@@ -27,8 +27,7 @@ A new :ref:`photutils.simulation <simulation>` subpackage provides
 tools for making simulated images. It starts with versions of the
 ``photutils.datasets`` tools and of
 ``photutils.psf.make_psf_model_image`` whose optional arguments are
-keyword-only. These tools will be extended in future releases to make
-simulated images and to score source-detection algorithms on them.
+keyword-only.
 
 
 .. _whatsnew-3.2-api-changes:
@@ -42,10 +41,12 @@ New Deprecations
 ----------------
 
 The ``photutils.datasets`` subpackage is deprecated and will be removed
-in version 4.0. Use the functions of the same name in
-:ref:`photutils.simulation <simulation>` instead. Their optional
-arguments are keyword-only, so any optional argument must be passed by
-name. Update your code::
+in version 4.0. For the functions that make simulated data, use the
+functions of the same name in :ref:`photutils.simulation <simulation>`
+instead. Their optional arguments are keyword-only, so any optional
+argument must be passed by name. The ``load_*`` functions and
+``get_path`` have no replacement and keep their existing deprecation.
+Update your code::
 
     # Old (deprecated)
     from photutils.datasets import make_noise_image

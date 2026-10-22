@@ -35,10 +35,12 @@ API Changes
 
 - ``photutils.datasets``
 
-  - The ``photutils.datasets`` functions are deprecated and will be
-    removed in version 4.0. Use the functions of the same name in
+  - The ``photutils.datasets`` subpackage is deprecated and will be
+    removed in version 4.0. For the functions that make simulated
+    data, use the functions of the same name in
     ``photutils.simulation`` instead. Their optional arguments are
-    keyword-only. [#XXXX]
+    keyword-only. The ``load_*`` functions and ``get_path`` have no
+    replacement and keep their existing deprecation. [#XXXX]
 
 - ``photutils.psf``
 
