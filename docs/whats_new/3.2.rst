@@ -111,6 +111,26 @@ same rendering and an image of the pixel errors::
     >>> error = np.full(shape, 0.5)
     >>> snr = optimal_snr(SersicSource(), params, error, psf_model=psf_model)
 
+Scoring Source Detection
+------------------------
+
+Four new functions score a detection algorithm against the input
+sources of a simulated image.
+:func:`~photutils.simulation.match_segments` matches a segmentation
+image and :func:`~photutils.simulation.match_sources` matches a source
+list (for example from a star finder or PSF photometry). Both credit
+each segment or detection to one input source only, the one with the
+largest flux, so a blend detects only one of its sources.
+:func:`~photutils.simulation.completeness` gives the fraction detected
+in bins of a source property with Wilson score intervals, and
+:func:`~photutils.simulation.false_detection_rate` counts detections on
+pure-noise images::
+
+    >>> from photutils.simulation import completeness, match_segments
+    >>> result = match_segments(segm, truth)  # doctest: +SKIP
+    >>> table = completeness(result['detected'], result['snr'],
+    ...                      [3, 5, 7, 10, 15, 25])  # doctest: +SKIP
+
 
 .. _whatsnew-3.2-api-changes:
 
