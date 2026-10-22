@@ -4,6 +4,7 @@ Tools for making simulated images from astropy models.
 """
 
 import pathlib
+from math import ceil
 
 import astropy.units as u
 import numpy as np
@@ -13,7 +14,10 @@ from astropy.nddata import NoOverlapError
 from astropy.table import QTable, Table
 from astropy.utils.data import get_pkg_data_path
 
-from photutils.simulation._cutouts import render_cells, validate_n_nodes
+from photutils.simulation._cutouts import (psf_half_size, render_cells,
+                                           render_convolved, trim_slices,
+                                           validate_n_nodes,
+                                           validate_psf_model)
 from photutils.simulation.params import make_model_params
 from photutils.utils._overlap import overlap_slices
 from photutils.utils._parameters import as_pair
@@ -22,6 +26,7 @@ from photutils.utils._progress_bars import add_progress_bar
 __all__ = [
     'make_4gaussians_image',
     'make_100gaussians_image',
+    'make_convolved_model_image',
     'make_model_image',
     'make_psf_model_image',
 ]
@@ -309,6 +314,248 @@ def make_model_image(shape, model, params_table, *, model_shape=None,
     return image
 
 
+def make_convolved_model_image(shape, model, params_table, psf_model, *,
+                               oversample=4, n_nodes=4, model_shape=None,
+                               bbox_factor=None, x_name='x_0', y_name='y_0',
+                               params_map=None, progress_bar=False):
+    """
+    Make a 2D image containing sources convolved with a PSF model.
+
+    Use this function for extended sources, such as galaxies made
+    with `~photutils.simulation.SersicSource`, observed through a PSF.
+    The model parameters for each source are taken from the input
+    ``params_table`` table, as for `make_model_image`.
+
+    Each source is rendered in three steps:
+
+    1. The source model is integrated over the square cells of a grid
+       with a spacing of ``1 / oversample`` pixels whose points include
+       every pixel center of the source cutout. Each cell is integrated
+       with ``n_nodes`` x ``n_nodes`` Gauss-Legendre nodes, and the
+       cells near the source center are refined as described for the
+       ``n_nodes`` keyword of `make_model_image`.
+    2. The cell integrals are convolved with the PSF model evaluated at
+       the grid offsets inside its bounding box. The PSF model must be
+       integrated over the pixels, so it already includes the pixel
+       response.
+    3. The result is kept at the pixel centers.
+
+    Each source is integrated over the cells before it is convolved,
+    so the result is the source convolved with a square box of width
+    ``1 / oversample`` pixels and the PSF model, and not the source
+    convolved with the PSF model alone. The box broadens the source
+    by a variance of ``1 / (12 * oversample**2)`` square pixels along
+    each axis, which is negligible for most sources. A source that
+    is much smaller than a cell falls in a single cell, so it renders
+    as the PSF model at the center of that cell, displaced from the
+    source center by up to half a cell along each axis. Averaged over
+    source positions, this is the same broadening by the box. A source
+    whose center is on a grid point renders exactly as the PSF model.
+    Increase ``oversample`` to reduce the box, or render point sources
+    with `make_model_image` and the PSF model. For an
+    `~photutils.psf.ImagePSF`, the natural choice of ``oversample`` is
+    its own oversampling factor, but any value works.
+
+    Flux beyond the source cutout, which is defined by ``model_shape``
+    or the model bounding box, is lost, as is flux beyond the bounding
+    box of the PSF model. Sources are trimmed at the image edges, and
+    a source outside the image whose light reaches the image through
+    the PSF is included.
+
+    Parameters
+    ----------
+    shape : 2-tuple of int or int
+        The shape of the output image. If a single integer is provided,
+        it will be used for both dimensions.
+
+    model : 2D `astropy.modeling.Model`
+        The 2D model of the sources before convolution, such as
+        `~photutils.simulation.SersicSource`. It must not be integrated
+        over the pixels. The model must have parameters for the x and
+        y positions of the sources, named by the ``x_name`` and
+        ``y_name`` keywords.
+
+    params_table : `~astropy.table.Table`
+        A table containing the model parameters for each source, as
+        for `make_model_image`, including the optional ``'model_shape'``
+        column. Rows that contain any nonfinite model parameters will be
+        skipped. The columns must not have units, and the table must not
+        have a ``'local_bkg'`` column.
+
+    psf_model : 2D `astropy.modeling.Model`
+        The PSF model. It must be integrated over the pixels, such as
+        an ePSF (`~photutils.psf.ImagePSF` or
+        `~photutils.psf.GriddedPSFModel`) or an analytic model whose
+        name ends in ``PRF`` (see :ref:`psf-terminology`). A model
+        whose name ends in ``PSF`` is rejected, except for an
+        `~photutils.psf.ImagePSF`. The model must have a bounding box
+        and parameters named ``x_0``, ``y_0``, and ``flux``, or
+        ``x_name``, ``y_name``, and ``flux_name`` attributes that name
+        them. Its other parameters are used for every source. A
+        `~photutils.psf.GriddedPSFModel` is evaluated at the pixel
+        nearest to each source center.
+
+    oversample : int, optional
+        The number of grid points per pixel along each axis.
+
+    n_nodes : `None` or int, optional
+        The number of Gauss-Legendre nodes per axis used to integrate
+        each cell, or `None` to evaluate the source model at the cell
+        centers. As for `make_model_image`, a value of 4 gives about
+        0.1% accuracy relative to the peak for typical galaxies, and
+        a value of 8 or more is needed for Sersic indices of 6 or more
+        and for effective radii below 0.5 pixels. The number of model
+        evaluations scales as ``n_nodes`` squared and as ``oversample``
+        squared.
+
+    model_shape : 2-tuple of int, int, or `None`, optional
+        The shape around the (x, y) center of each source over which
+        the source model is integrated, before convolution. If `None`,
+        then the bounding box of the model will be used (which can
+        optionally be scaled using the ``bbox_factor`` keyword if the
+        model supports it). See `make_model_image`.
+
+    bbox_factor : `None` or float, optional
+        The multiplicative factor to pass to the model ``bounding_box``
+        method to determine the model shape. See `make_model_image`.
+
+    x_name : str, optional
+        The name of the ``model`` parameter that corresponds to the x
+        position of the sources.
+
+    y_name : str, optional
+        The name of the ``model`` parameter that corresponds to the y
+        position of the sources.
+
+    params_map : dict or None, optional
+        A dictionary mapping the model parameter names to the column
+        names in the input ``params_table``. See `make_model_image`.
+
+    progress_bar : bool, optional
+        Whether to display a progress bar while adding the sources
+        to the image. The progress bar requires that the `tqdm
+        <https://tqdm.github.io/>`_ optional dependency be installed.
+
+    Returns
+    -------
+    array : 2D `~numpy.ndarray`
+        The rendered image containing the convolved sources.
+
+    Raises
+    ------
+    TypeError
+        If ``model`` or ``psf_model`` is not an `astropy.modeling.Model`
+        instance, if ``params_table`` is not an `~astropy.table.Table`,
+        or if ``psf_model`` is not integrated over the pixels.
+
+    ValueError
+        If ``model`` does not have 2 inputs and 1 output, if
+        ``oversample`` is not a positive integer, if ``n_nodes`` is
+        not `None` or a positive integer, if ``psf_model`` does not
+        have a bounding box or its x, y, and flux parameters cannot
+        be found, if a ``params_map`` key is not a model parameter
+        name, if a required column is not in ``params_table``, if
+        the model has no ``bounding_box`` attribute and no model shape
+        is specified, if a ``params_table`` column has units or the
+        model output has units, or if ``params_table`` has a
+        ``'local_bkg'`` column.
+
+    See Also
+    --------
+    make_model_image
+
+    Examples
+    --------
+    .. plot::
+        :include-source:
+
+        import matplotlib.pyplot as plt
+        from photutils.psf import CircularGaussianPRF
+        from photutils.simulation import (SersicSource,
+                                          make_convolved_model_image,
+                                          make_model_params)
+
+        shape = (200, 200)
+        params = make_model_params(shape, 20, min_separation=20,
+                                   border_size=10, flux=(500, 1000),
+                                   r_eff=(1.5, 4), n=(0.5, 4),
+                                   ellip=(0, 0.6), theta=(0, 3.14),
+                                   seed=0)
+        psf_model = CircularGaussianPRF(fwhm=3.0)
+        data = make_convolved_model_image(shape, SersicSource(), params,
+                                          psf_model)
+
+        fig, ax = plt.subplots()
+        ax.imshow(data, origin='lower')
+    """
+    # Import here because a module-level import is circular. The
+    # photutils.psf subpackage imports photutils.simulation.
+    from photutils.psf.utils import _get_psf_model_main_params
+
+    shape = as_pair('shape', shape, lower_bound=(0, 0))
+    n_nodes = validate_n_nodes(n_nodes)
+    if (isinstance(oversample, bool)
+            or not isinstance(oversample, (int, np.integer))
+            or oversample < 1):
+        msg = 'oversample must be a positive integer'
+        raise ValueError(msg)
+
+    _validate_model_and_table(model, params_table)
+    validate_psf_model(psf_model)
+    _get_psf_model_main_params(psf_model)
+    half_y, half_x = psf_half_size(psf_model, oversample)
+
+    params_map = _make_params_map(model, params_table, x_name, y_name,
+                                  params_map)
+    model_shape, variable_shape = _validate_model_shape(model, params_table,
+                                                        model_shape)
+
+    if 'local_bkg' in params_table.colnames:
+        msg = ('make_convolved_model_image does not support a local_bkg '
+               'column')
+        raise ValueError(msg)
+
+    # Copy the input model to leave it unchanged
+    model = model.copy()
+
+    has_units = any(getattr(params_table[column], 'unit', None) is not None
+                    for column in params_map.values())
+    if has_units or _get_output_unit(model, params_table,
+                                     params_map) is not None:
+        msg = 'make_convolved_model_image does not support units'
+        raise ValueError(msg)
+
+    # The number of pixels by which the convolution can extend each
+    # source cutout, used to skip sources that cannot reach the image
+    margins = (ceil((half_y + oversample // 2) / oversample),
+               ceil((half_x + oversample // 2) / oversample))
+
+    image = np.zeros(shape, dtype=float)
+    sources = _iter_sources(model, params_table, params_map, None,
+                            model_shape=model_shape,
+                            variable_shape=variable_shape,
+                            bbox_factor=bbox_factor, x_name=x_name,
+                            y_name=y_name, progress_bar=progress_bar)
+    for _, x0, y0, mod_shape in sources:
+        slices = _source_slices(mod_shape, x0, y0)
+        grown = tuple(slice(slc.start - margin, slc.stop + margin)
+                      for slc, margin in zip(slices, margins, strict=True))
+        if (any(slc.start >= slc.stop for slc in slices)
+                or trim_slices(grown, shape) is None):
+            continue
+
+        out_slices, cutout = render_convolved(model, psf_model, slices, x0,
+                                              y0, oversample=oversample,
+                                              n_nodes=n_nodes)
+        overlap = trim_slices(out_slices, shape)
+        if overlap is None:
+            continue
+        slices_image, slices_cutout = overlap
+        image[slices_image] += cutout[slices_cutout]
+
+    return image
+
+
 def make_psf_model_image(shape, psf_model, n_sources, *, model_shape=None,
                          min_separation=1, border_size=None, seed=0,
                          progress_bar=False, **kwargs):
@@ -335,7 +582,9 @@ def make_psf_model_image(shape, psf_model, n_sources, *, model_shape=None,
         position must be the flux in a pixel centered at that position,
         as for the analytic models whose names end in ``PRF`` and for
         an image-based model made from an ePSF (see
-        :ref:`psf-terminology`).
+        :ref:`psf-terminology`). A model whose name ends in ``PSF``
+        is rejected with a `TypeError`, except for an
+        `~photutils.psf.ImagePSF`.
 
     n_sources : int
         The number of sources to generate. If ``min_separation`` is too
@@ -454,6 +703,7 @@ def make_psf_model_image(shape, psf_model, n_sources, *, model_shape=None,
     # photutils.psf subpackage imports photutils.simulation.
     from photutils.psf.utils import _get_psf_model_main_params
 
+    validate_psf_model(psf_model)
     main_params = _get_psf_model_main_params(psf_model)
 
     if model_shape is not None:
@@ -817,10 +1067,10 @@ def _get_output_unit(model, params_table, params_map):
     Return the units of the model output, if any.
 
     The units are found by evaluating the model with unit scalars
-    derived from the mapped table columns, so that they do not depend
-    on whether any sources are rendered (e.g., a zero-row table or
-    sources that do not overlap the image). Unmapped model parameters
-    keep their values and units.
+    derived from the mapped table columns at (0, 0), so that they do
+    not depend on whether any sources are rendered (e.g., a zero-row
+    table or sources that do not overlap the image). Unmapped model
+    parameters keep their values and units.
 
     Parameters
     ----------
@@ -842,7 +1092,12 @@ def _get_output_unit(model, params_table, params_map):
     for key, param in params_map.items():
         unit = getattr(params_table[param], 'unit', None)
         setattr(model, key, 1 if unit is None else 1 * unit)
-    result = model(0, 0)
+
+    # Only the units are used, so ignore floating-point errors from
+    # parameter values that are invalid for the model (e.g., an
+    # ellipticity of 1)
+    with np.errstate(all='ignore'):
+        result = model(0, 0)
     if isinstance(result, u.Quantity):
         return result.unit
     return None
@@ -944,3 +1199,31 @@ def _iter_sources(model, params_table, params_map, local_bkg, *,
             mod_shape = model_shape
 
         yield i, x0, y0, mod_shape
+
+
+def _source_slices(model_shape, x0, y0):
+    """
+    Return the pixel slices of a source cutout, without trimming them
+    at the image edges.
+
+    The cutout is placed as `~astropy.nddata.overlap_slices` places it.
+
+    Parameters
+    ----------
+    model_shape : 2-tuple of int
+        The (ny, nx) shape of the cutout.
+
+    x0, y0 : float
+        The source center.
+
+    Returns
+    -------
+    slices : tuple of 2 slice
+        The (y, x) pixel slices, which may extend beyond the image,
+        including to negative indices.
+    """
+    slices = []
+    for size, center in zip(model_shape, (y0, x0), strict=True):
+        start = int(np.ceil(center - size / 2.0))
+        slices.append(slice(start, start + int(size)))
+    return tuple(slices)

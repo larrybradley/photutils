@@ -6,13 +6,15 @@ The functions here evaluate a model on a grid of square cells, either
 at the cell centers or as the mean over each cell using Gauss-Legendre
 quadrature. The mean is refined around the source center, where the
 profile of a typical source changes most rapidly, using pieces whose
-boundaries are aligned to the source center.
+boundaries are aligned to the source center. A source can also be
+rendered convolved with a PSF model that is integrated over the pixels.
 """
 
 from functools import lru_cache
-from math import ceil
+from math import ceil, floor
 
 import numpy as np
+from scipy.signal import fftconvolve
 
 __all__ = []
 
@@ -286,3 +288,207 @@ def render_cells(model, x, y, x_0, y_0, *, cell_size=1.0, n_nodes):
     values = evaluate_model(model, xx, yy)
     result[in_core] = np.sum(values * weights, axis=(1, 2))
     return result
+
+
+def validate_psf_model(psf_model):
+    """
+    Validate that a PSF model is integrated over the pixels.
+
+    A model whose class name ends in ``PSF`` is evaluated at points
+    and is rejected, except for `~photutils.psf.ImagePSF` and its
+    subclasses, which are ePSFs.
+
+    Parameters
+    ----------
+    psf_model : 2D `astropy.modeling.Model`
+        The PSF model.
+
+    Raises
+    ------
+    TypeError
+        If the PSF model is not integrated over the pixels.
+    """
+    # Import here because a module-level import is circular. The
+    # photutils.psf subpackage imports photutils.simulation.
+    from photutils.psf import ImagePSF
+
+    name = type(psf_model).__name__
+    if name.endswith('PSF') and not isinstance(psf_model, ImagePSF):
+        msg = (f'{name} is not integrated over the pixels. Use an ePSF '
+               '(ImagePSF or GriddedPSFModel) or a model whose name ends '
+               'in PRF.')
+        raise TypeError(msg)
+
+
+def psf_half_size(psf_model, oversample):
+    """
+    Return the half-size of the bounding box of a PSF model, in units
+    of the grid spacing ``1 / oversample``.
+
+    Parameters
+    ----------
+    psf_model : 2D `astropy.modeling.Model`
+        The PSF model.
+
+    oversample : int
+        The number of grid points per pixel along each axis.
+
+    Returns
+    -------
+    half_y, half_x : int
+        The largest number of grid steps from the PSF center to a point
+        inside its bounding box, along each axis.
+
+    Raises
+    ------
+    ValueError
+        If the PSF model does not have a bounding box.
+    """
+    try:
+        bbox = psf_model.bounding_box.bounding_box()
+    except NotImplementedError as exc:
+        msg = 'psf_model must have a bounding_box attribute'
+        raise ValueError(msg) from exc
+
+    return tuple(floor(0.5 * (upper - lower) * oversample)
+                 for lower, upper in bbox)
+
+
+def render_convolved(model, psf_model, slices, x_0, y_0, *, oversample,
+                     n_nodes):
+    """
+    Render a source convolved with a PSF model.
+
+    The source is integrated over the cells of a grid with spacing
+    ``1 / oversample`` pixels whose points include every pixel center
+    in ``slices`` (see `render_cells`). The grid covers the pixels in
+    ``slices``, extended by up to half a cell at each edge if
+    ``oversample`` is even. The cell integrals are convolved with the
+    PSF model evaluated at the grid offsets inside its bounding box,
+    and the result is kept at the pixel centers. The result equals the
+    source convolved with a box of width ``1 / oversample`` and the
+    PSF model, sampled at the pixel centers, up to the integration and
+    the sum over the grid. A source much smaller than a cell renders
+    as the PSF model at the center of the cell that contains it.
+
+    The PSF model is evaluated around the pixel center nearest to the
+    source center, which gives the local PSF of a model that varies
+    over the image, such as a `~photutils.psf.GriddedPSFModel`.
+
+    Parameters
+    ----------
+    model : 2D `astropy.modeling.Model`
+        The source model, with its parameters set for the source.
+
+    psf_model : 2D `astropy.modeling.Model`
+        The PSF model. It must be integrated over the pixels and have
+        a bounding box.
+
+    slices : tuple of 2 slice
+        The (y, x) pixel slices of the source cutout. They may extend
+        beyond the image, including to negative indices.
+
+    x_0, y_0 : float
+        The source center, in pixels.
+
+    oversample : int
+        The number of grid points per pixel along each axis.
+
+    n_nodes : `None` or int
+        The number of Gauss-Legendre nodes per axis in each cell, or
+        `None` to evaluate the source at the cell centers.
+
+    Returns
+    -------
+    out_slices : tuple of 2 slice
+        The (y, x) pixel slices of the result, which is the source
+        cutout grown on each side by the PSF half-size. They may extend
+        beyond the image, including to negative indices.
+
+    cutout : 2D `~numpy.ndarray`
+        The convolved source on the pixels in ``out_slices``.
+    """
+    # Import here because a module-level import is circular. The
+    # photutils.psf subpackage imports photutils.simulation.
+    from photutils.psf.utils import _get_psf_model_main_params
+
+    # The kernel is the PSF model with unit flux, centered at the pixel
+    # center nearest to the source center and evaluated at the grid
+    # offsets inside its bounding box. Centering it near the source
+    # gives the local PSF of a GriddedPSFModel.
+    x_name, y_name, flux_name = _get_psf_model_main_params(psf_model)
+    kernel_model = psf_model.copy()
+    x_center = floor(x_0 + 0.5)
+    y_center = floor(y_0 + 0.5)
+    setattr(kernel_model, x_name, x_center)
+    setattr(kernel_model, y_name, y_center)
+    setattr(kernel_model, flux_name, 1.0)
+    half_y, half_x = psf_half_size(kernel_model, oversample)
+    jy = np.arange(-half_y, half_y + 1) / oversample
+    jx = np.arange(-half_x, half_x + 1) / oversample
+    yy, xx = np.meshgrid(y_center + jy, x_center + jx, indexing='ij')
+    kernel = evaluate_model(kernel_model, xx, yy)
+
+    # The source grid, in integer grid units. Grid point q is at q /
+    # oversample pixels, so the pixel centers are the multiples of
+    # oversample.
+    edge = oversample // 2
+    starts = []
+    grids = []
+    for slc in slices:
+        start = slc.start * oversample - edge
+        stop = (slc.stop - 1) * oversample + edge + 1
+        starts.append(start)
+        grids.append(np.arange(start, stop) / oversample)
+    yy, xx = np.meshgrid(*grids, indexing='ij')
+    cells = render_cells(model, xx, yy, x_0, y_0,
+                         cell_size=1.0 / oversample, n_nodes=n_nodes)
+    cells = cells / oversample**2
+
+    # Element n of the full convolution along an axis is at grid point
+    # start - half + n. Keep the elements at the pixel centers.
+    result = fftconvolve(cells, kernel, mode='full')
+    keep = []
+    first_pixels = []
+    for start, half in zip(starts, (half_y, half_x), strict=True):
+        first = start - half
+        offset = -first % oversample
+        keep.append(slice(offset, None, oversample))
+        first_pixels.append((first + offset) // oversample)
+    cutout = result[tuple(keep)]
+    out_slices = tuple(slice(pixel, pixel + size)
+                       for pixel, size in zip(first_pixels, cutout.shape,
+                                              strict=True))
+    return out_slices, cutout
+
+
+def trim_slices(slices, shape):
+    """
+    Return the overlap of pixel slices with an image.
+
+    Parameters
+    ----------
+    slices : tuple of 2 slice
+        The (y, x) pixel slices of a cutout, with steps of 1. They may
+        extend beyond the image, including to negative indices.
+
+    shape : tuple of 2 int
+        The shape of the image.
+
+    Returns
+    -------
+    result : `None` or tuple
+        `None` if the cutout does not overlap the image. Otherwise,
+        a tuple ``(slices_image, slices_cutout)`` of the slices of the
+        overlap in the image and in the cutout.
+    """
+    slices_image = []
+    slices_cutout = []
+    for slc, size in zip(slices, shape, strict=True):
+        start = max(slc.start, 0)
+        stop = min(slc.stop, size)
+        if start >= stop:
+            return None
+        slices_image.append(slice(start, stop))
+        slices_cutout.append(slice(start - slc.start, stop - slc.start))
+    return tuple(slices_image), tuple(slices_cutout)

@@ -30,7 +30,7 @@ class SersicSource(Fittable2DModel):
     sample can differ substantially from the flux in a pixel. To
     integrate the model over pixels, render it with
     `~photutils.simulation.make_model_image` using the ``n_nodes``
-    keyword or with ``make_convolved_model_image``.
+    keyword or with `~photutils.simulation.make_convolved_model_image`.
 
     Parameters
     ----------
