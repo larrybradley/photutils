@@ -18,11 +18,11 @@ methods for Photutils.
 Functions that start with ``make_*`` generate simulated data.
 Typically one would need to use a combination of these functions
 to create a simulated image. For example, one might use
-:func:`~photutils.datasets.make_model_params` to create a table of
-source parameters, then use :func:`~photutils.datasets.make_model_image`
+:func:`~photutils.simulation.make_model_params` to create a table of
+source parameters, then use :func:`~photutils.simulation.make_model_image`
 to create an image of the sources, add noise using
-:func:`~photutils.datasets.make_noise_image`, and finally create a world
-coordinate system (WCS) using :func:`~photutils.datasets.make_wcs`. An
+:func:`~photutils.simulation.make_noise_image`, and finally create a world
+coordinate system (WCS) using :func:`~photutils.simulation.make_wcs`. An
 example of this process is shown below.
 
 Functions that start with ``load_*`` download example datasets from a
@@ -39,9 +39,9 @@ constant background with Gaussian noise.
 
 First, we'll create a table of 2D Gaussian source
 parameters with random positions, fluxes, and shapes using
-:func:`~photutils.datasets.make_model_params`::
+:func:`~photutils.simulation.make_model_params`::
 
-    >>> from photutils.datasets import make_model_params
+    >>> from photutils.simulation import make_model_params
     >>> from photutils.psf import GaussianPSF
     >>> model = GaussianPSF()
     >>> shape = (500, 500)
@@ -52,9 +52,9 @@ parameters with random positions, fluxes, and shapes using
     ...                            y_fwhm=(1, 3), theta=(0, 90), seed=123)
 
 Next, we'll create a simulated image of the sources from the table of
-model parameters using :func:`~photutils.datasets.make_model_image`::
+model parameters using :func:`~photutils.simulation.make_model_image`::
 
-    >>> from photutils.datasets import make_model_image
+    >>> from photutils.simulation import make_model_image
     >>> model_shape = (25, 25)
     >>> data = make_model_image(shape, model, params, model_shape=model_shape,
     ...                         x_name='x_0', y_name='y_0')
@@ -62,7 +62,7 @@ model parameters using :func:`~photutils.datasets.make_model_image`::
 Next, let's add a constant background (``mean = 5``) and Gaussian noise
 (``stddev = 2``) to the image::
 
-    >>> from photutils.datasets import make_noise_image
+    >>> from photutils.simulation import make_noise_image
     >>> noise = make_noise_image(shape, distribution='gaussian', mean=5,
     ...                          stddev=2, seed=123)
     >>> data += noise
@@ -74,8 +74,8 @@ Finally, let's plot the simulated image:
 
     import matplotlib.pyplot as plt
     from astropy.visualization import simple_norm
-    from photutils.datasets import (make_model_image, make_model_params,
-                                    make_noise_image)
+    from photutils.simulation import (make_model_image, make_model_params,
+                                      make_noise_image)
     from photutils.psf import GaussianPSF
 
     model = GaussianPSF()
@@ -99,19 +99,19 @@ Finally, let's plot the simulated image:
     ax.set_title('Simulated image')
 
 We can also create a simulated world coordinate system (WCS) for the
-image using :func:`~photutils.datasets.make_wcs`::
+image using :func:`~photutils.simulation.make_wcs`::
 
-    >>> from photutils.datasets import make_wcs
+    >>> from photutils.simulation import make_wcs
     >>> wcs = make_wcs(shape)
     >>> wcs.pixel_to_world(0, 0)
     <SkyCoord (ICRS): (ra, dec) in deg
     (197.8899676, -1.3750039)>
 
-or a generalized WCS using :func:`~photutils.datasets.make_gwcs`:
+or a generalized WCS using :func:`~photutils.simulation.make_gwcs`:
 
 .. doctest-requires:: gwcs
 
-    >>> from photutils.datasets import make_gwcs
+    >>> from photutils.simulation import make_gwcs
     >>> gwcs = make_gwcs(shape)
     >>> gwcs.pixel_to_world(0, 0)
     <SkyCoord (ICRS): (ra, dec) in deg
