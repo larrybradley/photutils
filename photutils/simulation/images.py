@@ -163,14 +163,16 @@ def make_model_image(shape, model, params_table, *, model_shape=None,
         as a PSF model or a galaxy profile, and it takes the role of
         the ``discretize_method`` and ``discretize_oversample``
         keywords of the deprecated
-        ``photutils.datasets.make_model_image``. The 3 x 3 pixels around
-        the pixel that contains the source center are refined by
-        splitting each pixel into 8 x 8 pieces that are each integrated
-        with the same number of nodes. A value of 4 gives about 0.1%
-        accuracy relative to the peak for typical galaxies. A value of
-        8 or more is needed for Sersic indices of 6 or more and for
-        effective radii below 0.5 pixels. The evaluation time scales
-        as ``n_nodes`` squared.
+        ``photutils.datasets.make_model_image``. The pixel that
+        contains the source center and its eight neighbors are refined
+        by splitting each pixel into pieces at most 1/8 pixel wide
+        that are each integrated with the same number of nodes. The
+        piece boundaries are aligned to the source center, so the
+        accuracy does not depend on where the center falls within a
+        pixel. A value of 4 gives about 0.1% accuracy relative to the
+        peak for typical galaxies. A value of 8 or more is needed for
+        Sersic indices of 6 or more and for effective radii below 0.5
+        pixels. The evaluation time scales as ``n_nodes`` squared.
 
     progress_bar : bool, optional
         Whether to display a progress bar while adding the sources
