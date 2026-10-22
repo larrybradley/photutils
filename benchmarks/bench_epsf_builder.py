@@ -24,8 +24,8 @@ from astropy.table import Table
 from bench_helpers import (add_memory_argument, parse_int_list,
                            print_environment, set_memory_mode, time_best)
 
-from photutils.datasets import make_model_image
 from photutils.psf import CircularGaussianPRF, EPSFBuilder, extract_stars
+from photutils.simulation import make_model_image
 
 
 def make_stars(n_stars, *, fwhm=2.8, cutout_size=25, seed=0):

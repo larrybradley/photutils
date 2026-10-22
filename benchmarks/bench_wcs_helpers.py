@@ -26,7 +26,7 @@ from bench_helpers import (add_memory_argument, parse_int_list,
 
 from photutils.aperture import (CircularAperture, EllipticalAperture,
                                 SkyCircularAperture, SkyEllipticalAperture)
-from photutils.datasets import make_gwcs, make_wcs
+from photutils.simulation import make_gwcs, make_wcs
 from photutils.utils import compute_pixel_area_map, compute_pixel_areas
 from photutils.utils._wcs_helpers import (compute_pixel_to_sky_jacobians,
                                           pixel_shape_to_sky_svd,

@@ -57,8 +57,8 @@ from astropy.coordinates import SkyCoord
 from astropy.wcs import WCS
 from bench_helpers import print_environment
 
-from photutils.datasets import make_gwcs
 from photutils.segmentation import SegmentationImage, SourceCatalog
+from photutils.simulation import make_gwcs
 from photutils.utils._optional_deps import HAS_GWCS
 
 ARCSEC_PER_RAD = 3600.0 * np.degrees(1)

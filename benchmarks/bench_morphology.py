@@ -21,8 +21,8 @@ from astropy.stats import gaussian_fwhm_to_sigma
 from bench_helpers import (add_memory_argument, print_environment,
                            set_memory_mode, time_best)
 
-from photutils.datasets import make_wcs
 from photutils.morphology import data_properties, gini
+from photutils.simulation import make_wcs
 
 # The morphological properties accessed by the data_properties
 # benchmark (computing them is lazy, so construction is timed
