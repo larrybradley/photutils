@@ -6,7 +6,7 @@ of a simulated image.
 
 import numpy as np
 
-__all__ = ['match_segments']
+__all__ = ['match_segments', 'match_sources']
 
 
 def match_segments(segment_img, params_table, *, x_name='x_0',
@@ -66,6 +66,10 @@ def match_segments(segment_img, params_table, *, x_name='x_0',
     ValueError
         If ``params_table`` has no ``priority`` column.
 
+    See Also
+    --------
+    match_sources
+
     Examples
     --------
     >>> import numpy as np
@@ -114,6 +118,147 @@ def match_segments(segment_img, params_table, *, x_name='x_0',
     result['blended'] = (labels > 0) & ~detected
     result.meta['unmatched_labels'] = np.setdiff1d(
         np.asarray(segment_img.labels, dtype=int), labels[labels > 0])
+
+    return result
+
+
+def match_sources(x, y, params_table, max_separation, *, x_name='x_0',
+                  y_name='y_0', priority='flux'):
+    """
+    Match a list of detected source positions to the input sources of a
+    simulated image.
+
+    This is the source-list counterpart of `match_segments`, for
+    results such as star-finder or PSF-photometry tables. Input sources
+    are taken in order of decreasing ``priority``, and each claims its
+    nearest unclaimed detection within ``max_separation``. A detection
+    is therefore credited to one input source only, with the same blend
+    rule as `match_segments`, so scores from segmentation images and
+    from source lists are comparable. Ties in ``priority`` go to the
+    earlier row.
+
+    Parameters
+    ----------
+    x, y : 1D array_like
+        The x and y pixel positions of the detected sources.
+
+    params_table : `~astropy.table.Table`
+        The table of input sources, with ``x_name`` and ``y_name``
+        position columns in pixels and a ``priority`` column. Stack the
+        tables of different populations and score them in one call.
+
+    max_separation : float
+        The largest distance in pixels between an input source and the
+        detection it claims.
+
+    x_name : str, optional
+        The name of the x position column of ``params_table``.
+
+    y_name : str, optional
+        The name of the y position column of ``params_table``.
+
+    priority : str, optional
+        The name of the column that decides the order in which input
+        sources claim detections.
+
+    Returns
+    -------
+    result : `~astropy.table.QTable`
+        A copy of ``params_table`` with four added columns:
+
+        * ``'detected'``: whether the source claimed a detection.
+        * ``'blended'``: whether the source had detections within
+          ``max_separation`` but all of them were claimed by sources
+          with a higher priority.
+        * ``'match_index'``: the index into ``x`` and ``y`` of the
+          claimed detection, or -1.
+        * ``'separation'``: the distance in pixels to the claimed
+          detection, or NaN.
+
+        The table ``meta['unmatched_indices']`` is a sorted array of the
+        indices of the detections that no input source claimed.
+
+    Raises
+    ------
+    ValueError
+        If ``params_table`` has no ``priority`` column, if ``x`` and
+        ``y`` have different shapes, or if ``max_separation`` is not
+        positive.
+
+    See Also
+    --------
+    match_segments
+
+    Examples
+    --------
+    >>> from astropy.table import QTable
+    >>> from photutils.simulation import match_sources
+    >>> truth = QTable({'x_0': [10.0, 12.0, 30.0], 'y_0': [10.0, 10.0, 5.0],
+    ...                 'flux': [10.0, 50.0, 20.0]})
+    >>> result = match_sources([11.5, 40.0], [10.0, 40.0], truth, 2.0)
+    >>> print(result['detected', 'blended', 'match_index'])
+    detected blended match_index
+    -------- ------- -----------
+       False    True          -1
+        True   False           0
+       False   False          -1
+    >>> print(result.meta['unmatched_indices'])
+    [1]
+    """
+    from scipy.spatial import KDTree
+
+    if priority not in params_table.colnames:
+        msg = f'params_table has no "{priority}" column'
+        raise ValueError(msg)
+    x = np.atleast_1d(np.asarray(x, dtype=float))
+    y = np.atleast_1d(np.asarray(y, dtype=float))
+    if x.shape != y.shape:
+        msg = 'x and y must have the same shape'
+        raise ValueError(msg)
+    if not max_separation > 0:
+        msg = 'max_separation must be positive'
+        raise ValueError(msg)
+
+    x_in = np.asarray(params_table[x_name], dtype=float)
+    y_in = np.asarray(params_table[y_name], dtype=float)
+    n_inputs = len(params_table)
+
+    match_index = np.full(n_inputs, -1, dtype=int)
+    separation = np.full(n_inputs, np.nan)
+    has_candidates = np.zeros(n_inputs, dtype=bool)
+
+    finite = np.isfinite(x_in) & np.isfinite(y_in)
+    if x.size > 0 and np.any(finite):
+        tree = KDTree(np.column_stack((x, y)))
+        candidates = np.empty(n_inputs, dtype=object)
+        candidates[finite] = tree.query_ball_point(
+            np.column_stack((x_in[finite], y_in[finite])), r=max_separation)
+        claimed = np.zeros(x.size, dtype=bool)
+        order = np.argsort(-np.asarray(params_table[priority], dtype=float),
+                           kind='stable')
+        for idx in order:
+            if not finite[idx] or len(candidates[idx]) == 0:
+                continue
+            has_candidates[idx] = True
+            free = np.sort(np.asarray(candidates[idx], dtype=int))
+            free = free[~claimed[free]]
+            if free.size == 0:
+                continue
+            dist = np.hypot(x[free] - x_in[idx], y[free] - y_in[idx])
+            best = np.argmin(dist)
+            claimed[free[best]] = True
+            match_index[idx] = free[best]
+            separation[idx] = dist[best]
+
+    detected = match_index >= 0
+
+    result = params_table.copy()
+    result['detected'] = detected
+    result['blended'] = has_candidates & ~detected
+    result['match_index'] = match_index
+    result['separation'] = separation
+    result.meta['unmatched_indices'] = np.setdiff1d(
+        np.arange(x.size), match_index[detected])
 
     return result
 

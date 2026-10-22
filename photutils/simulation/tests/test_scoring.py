@@ -6,10 +6,10 @@ Tests for the scoring module.
 import numpy as np
 import pytest
 from astropy.table import QTable
-from numpy.testing import assert_array_equal
+from numpy.testing import assert_allclose, assert_array_equal
 
 from photutils.segmentation import SegmentationImage
-from photutils.simulation import match_segments
+from photutils.simulation import match_segments, match_sources
 
 
 @pytest.fixture(name='segm')
@@ -153,3 +153,122 @@ class TestMatchSegments:
         assert_array_equal(result['label'], [0, 0])
         assert not np.any(result['detected'])
         assert len(result.meta['unmatched_labels']) == 0
+
+
+class TestMatchSources:
+    """
+    Tests for ``match_sources``.
+    """
+
+    def test_blend(self):
+        """
+        Test that one detection between two inputs is claimed by the
+        brighter input and the fainter input is blended.
+        """
+        sources = make_sources([10.0, 12.0], [10.0, 10.0], [10.0, 50.0])
+        result = match_sources([11.0], [10.0], sources, 2.0)
+        assert_array_equal(result['detected'], [False, True])
+        assert_array_equal(result['blended'], [True, False])
+        assert_array_equal(result['match_index'], [-1, 0])
+        assert_allclose(result['separation'][1], 1.0)
+        assert np.isnan(result['separation'][0])
+
+    def test_nearest_unclaimed(self):
+        """
+        Test that the brighter input takes its nearest detection and the
+        fainter input gets the other one if it is within range.
+        """
+        sources = make_sources([10.0, 12.0], [10.0, 10.0], [10.0, 50.0])
+        x_det = [11.8, 10.9]
+        y_det = [10.0, 10.0]
+        result = match_sources(x_det, y_det, sources, 1.5)
+        assert_array_equal(result['detected'], [True, True])
+        assert_array_equal(result['match_index'], [1, 0])
+        assert_allclose(result['separation'], [0.9, 0.2])
+
+        # The remaining detection is out of range of the fainter input
+        result = match_sources(x_det, y_det, sources, 0.5)
+        assert_array_equal(result['detected'], [False, True])
+        assert_array_equal(result['blended'], [False, False])
+
+    def test_no_detection_in_range(self):
+        """
+        Test an input with no detection within ``max_separation``.
+        """
+        sources = make_sources([10.0], [10.0], [10.0])
+        result = match_sources([20.0], [20.0], sources, 3.0)
+        assert_array_equal(result['detected'], [False])
+        assert_array_equal(result['blended'], [False])
+        assert_array_equal(result['match_index'], [-1])
+        assert np.isnan(result['separation'][0])
+
+    def test_unmatched_detection(self):
+        """
+        Test that detections claimed by no input are listed in the table
+        metadata.
+        """
+        sources = make_sources([10.0], [10.0], [10.0])
+        result = match_sources([10.5, 30.0, 50.0], [10.0, 30.0, 50.0],
+                               sources, 2.0)
+        assert_array_equal(result.meta['unmatched_indices'], [1, 2])
+
+    def test_priority_tie(self):
+        """
+        Test that the earlier row wins a tie in priority.
+        """
+        sources = make_sources([10.0, 12.0], [10.0, 10.0], [20.0, 20.0])
+        result = match_sources([11.0], [10.0], sources, 2.0)
+        assert_array_equal(result['detected'], [True, False])
+        assert_array_equal(result['blended'], [False, True])
+
+    def test_zero_detections(self):
+        """
+        Test an empty list of detections.
+        """
+        sources = make_sources([10.0, 12.0], [10.0, 10.0], [20.0, 20.0])
+        result = match_sources([], [], sources, 2.0)
+        assert not np.any(result['detected'])
+        assert not np.any(result['blended'])
+        assert_array_equal(result['match_index'], [-1, -1])
+        assert len(result.meta['unmatched_indices']) == 0
+
+    def test_zero_rows(self):
+        """
+        Test an input table with no rows.
+        """
+        sources = make_sources([], [], [])
+        result = match_sources([1.0, 2.0], [1.0, 2.0], sources, 2.0)
+        assert len(result) == 0
+        assert_array_equal(result.meta['unmatched_indices'], [0, 1])
+
+    def test_errors(self):
+        """
+        Test the input validation of ``match_sources``.
+        """
+        sources = make_sources([10.0], [10.0], [10.0])
+        match = 'params_table has no "snr" column'
+        with pytest.raises(ValueError, match=match):
+            match_sources([1.0], [1.0], sources, 2.0, priority='snr')
+
+        match = 'x and y must have the same shape'
+        with pytest.raises(ValueError, match=match):
+            match_sources([1.0, 2.0], [1.0], sources, 2.0)
+
+        match = 'max_separation must be positive'
+        with pytest.raises(ValueError, match=match):
+            match_sources([1.0], [1.0], sources, 0.0)
+
+    def test_same_as_match_segments(self, segm):
+        """
+        Test that segmentation and source-list scores agree when each
+        segment contains one detection.
+        """
+        sources = make_sources([3.0, 5.2, 12.0, 8.0], [3.0, 4.8, 12.0, 17.0],
+                               [10.0, 50.0, 20.0, 30.0])
+        # One detection at the center of each segment
+        x_det = [4.0, 12.0, 16.5]
+        y_det = [4.0, 12.0, 3.5]
+        by_segment = match_segments(segm, sources)
+        by_source = match_sources(x_det, y_det, sources, 2.0)
+        assert_array_equal(by_source['detected'], by_segment['detected'])
+        assert_array_equal(by_source['blended'], by_segment['blended'])
