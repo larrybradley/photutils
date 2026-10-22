@@ -17,11 +17,12 @@ from astropy.utils.exceptions import AstropyUserWarning
 from numpy.testing import assert_allclose, assert_equal
 
 from photutils.background import LocalBackground, MMMBackground
-from photutils.datasets import make_model_image, make_noise_image
 from photutils.detection import DAOStarFinder
 from photutils.psf import (CircularGaussianPRF, IterativePSFPhotometry,
-                           SourceGrouper, make_psf_model_image)
+                           SourceGrouper)
 from photutils.psf.flags import decode_psf_flags
+from photutils.simulation import (make_model_image, make_noise_image,
+                                  make_psf_model_image)
 from photutils.utils.exceptions import (NoDetectionsWarning,
                                         PhotutilsDeprecationWarning)
 

@@ -15,8 +15,8 @@ from astropy.table import QTable
 from numpy.testing import assert_allclose, assert_equal
 from scipy.interpolate import RectBivariateSpline
 
-from photutils.datasets import make_model_image
 from photutils.psf import CircularGaussianPSF, ImagePSF
+from photutils.simulation import make_model_image
 from photutils.utils.exceptions import PhotutilsDeprecationWarning
 
 

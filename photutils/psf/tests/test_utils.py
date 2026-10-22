@@ -11,11 +11,12 @@ from astropy.table import QTable
 from astropy.utils.exceptions import AstropyUserWarning
 from numpy.testing import assert_allclose
 
-from photutils.psf import CircularGaussianPRF, make_psf_model_image
+from photutils.psf import CircularGaussianPRF
 from photutils.psf.flags import decode_psf_flags
 from photutils.psf.utils import (_get_psf_model_main_params,
                                  _interpolate_missing_data,
                                  _validate_psf_model, fit_2dgaussian, fit_fwhm)
+from photutils.simulation import make_psf_model_image
 
 
 @pytest.fixture(name='test_data')

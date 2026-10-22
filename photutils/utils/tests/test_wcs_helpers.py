@@ -13,7 +13,7 @@ from astropy.wcs import WCS as APWCS
 from astropy.wcs.wcsapi import HighLevelWCSWrapper
 from numpy.testing import assert_allclose
 
-from photutils.datasets import make_gwcs
+from photutils.simulation import make_gwcs
 from photutils.utils._optional_deps import HAS_GWCS
 from photutils.utils._wcs_helpers import (_frame_rotation,
                                           compute_pixel_to_sky_jacobians,

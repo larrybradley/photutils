@@ -8,8 +8,8 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from photutils.datasets import make_wcs
 from photutils.morphology import data_properties
+from photutils.simulation import make_wcs
 
 
 def test_data_properties():

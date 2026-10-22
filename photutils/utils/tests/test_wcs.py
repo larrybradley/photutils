@@ -13,7 +13,7 @@ from astropy.wcs import WCS
 from astropy.wcs.utils import proj_plane_pixel_area
 from numpy.testing import assert_allclose
 
-from photutils.datasets import make_gwcs
+from photutils.simulation import make_gwcs
 from photutils.utils._optional_deps import HAS_GWCS
 from photutils.utils.tests.wcs_test_helpers import (WCS_CDELT_ARCSEC,
                                                     WCS_CENTER, make_sip_wcs)

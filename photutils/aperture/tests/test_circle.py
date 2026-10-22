@@ -14,7 +14,7 @@ from photutils.aperture.circle import (CircularAnnulus, CircularAperture,
                                        SkyCircularAnnulus, SkyCircularAperture)
 from photutils.aperture.tests.test_aperture_common import (
     BaseTestAnnulusMutation, BaseTestAperture, BaseTestPixelAperture)
-from photutils.datasets import make_wcs
+from photutils.simulation import make_wcs
 
 POSITIONS = [(10, 20), (30, 40), (50, 60), (70, 80)]
 RA, DEC = np.transpose(POSITIONS)

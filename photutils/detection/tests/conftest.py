@@ -7,7 +7,8 @@ import numpy as np
 import pytest
 from astropy.modeling.models import Gaussian2D
 
-from photutils.psf import CircularGaussianPRF, make_psf_model_image
+from photutils.psf import CircularGaussianPRF
+from photutils.simulation import make_psf_model_image
 
 
 @pytest.fixture(name='kernel')

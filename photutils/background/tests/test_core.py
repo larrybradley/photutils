@@ -15,7 +15,7 @@ from photutils.background.core import (BiweightLocationBackground,
                                        MedianBackground, MMMBackground,
                                        ModeEstimatorBackground,
                                        SExtractorBackground, StdBackgroundRMS)
-from photutils.datasets import make_noise_image
+from photutils.simulation import make_noise_image
 from photutils.utils._stats import nanmean
 
 # Parametrize lists for background estimator classes
