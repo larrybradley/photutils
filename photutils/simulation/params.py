@@ -17,7 +17,8 @@ __all__ = ['make_model_params', 'make_random_models_table',
 
 
 def make_model_params(shape, n_sources, *, x_name='x_0', y_name='y_0',
-                      min_separation=1, border_size=(0, 0), seed=0, **kwargs):
+                      min_separation=1, border_size=(0, 0), seed=0,
+                      log_params=(), kind=None, **kwargs):
     """
     Make a table of randomly generated model positions and additional
     parameters for simulated sources.
@@ -71,12 +72,25 @@ def make_model_params(shape, n_sources, *, x_name='x_0', y_name='y_0',
         A seed to initialize the `numpy.random.BitGenerator`. If `None`,
         then fresh, unpredictable entropy will be pulled from the OS.
 
+    log_params : tuple of str, optional
+        The names of the keyword parameters (e.g., ``('flux',
+        'r_eff')``) whose values are sampled uniformly in log10 between
+        their lower and upper bounds, instead of uniformly. The bounds of
+        these parameters must be positive.
+
+    kind : str or `None`, optional
+        If not `None`, a ``'kind'`` column filled with this value is
+        added after the parameter columns. It labels the population, so
+        tables of different populations can be stacked with
+        `~astropy.table.vstack` and told apart afterward.
+
     **kwargs
         Keyword arguments are accepted for additional model parameters.
         The values should be 2-tuples of the lower and upper bounds for
         the parameter range. The bounds must be numbers without units.
         The parameter values will be uniformly sampled from the
-        half-open interval ``[lower, upper)``. The names ``id``,
+        half-open interval ``[lower, upper)``, or uniformly in log10 for
+        the parameters named in ``log_params``. The names ``id``,
         ``x_name``, and ``y_name`` cannot be used because they are the
         names of the ID and position columns.
 
@@ -92,8 +106,10 @@ def make_model_params(shape, n_sources, *, x_name='x_0', y_name='y_0',
     ValueError
         If ``n_sources`` is negative, if ``border_size`` leaves no
         room for sources within the given ``shape``, if a keyword
-        argument value is not a 2-tuple, or if a keyword argument is
-        named ``id`` or has the same name as ``x_name`` or ``y_name``.
+        argument value is not a 2-tuple, if a keyword argument is
+        named ``id`` or has the same name as ``x_name`` or ``y_name``,
+        if a ``log_params`` name is not a keyword parameter, or if the
+        bounds of a ``log_params`` parameter are not positive.
 
     Warns
     -----
@@ -159,6 +175,11 @@ def make_model_params(shape, n_sources, *, x_name='x_0', y_name='y_0',
         msg = 'border_size is too large for the given shape'
         raise ValueError(msg)
 
+    for name in log_params:
+        if name not in kwargs:
+            msg = f'log_params name "{name}" is not a keyword parameter'
+            raise ValueError(msg)
+
     rng = np.random.default_rng(seed)
     xycoords = make_random_xycoords(n_sources, xrange, yrange,
                                     min_separation=min_separation,
@@ -179,10 +200,73 @@ def make_model_params(shape, n_sources, *, x_name='x_0', y_name='y_0',
         if np.shape(prange) != (2,):
             msg = f'{param} must be a 2-tuple'
             raise ValueError(msg)
-        vals = rng.uniform(*prange, len(model_params))
-        model_params[param] = vals
+        model_params[param] = sample_param(rng, prange, len(model_params),
+                                           log=param in log_params,
+                                           name=param)
+
+    add_kind_column(model_params, kind)
 
     return model_params
+
+
+def sample_param(rng, bounds, size, *, log=False, name='parameter'):
+    """
+    Sample random values of a parameter.
+
+    Parameters
+    ----------
+    rng : `numpy.random.Generator`
+        The random number generator.
+
+    bounds : float or 2-tuple of float
+        A scalar gives a constant value. A 2-tuple gives the lower and
+        upper bounds of the half-open interval ``[lower, upper)`` from
+        which the values are sampled.
+
+    size : int
+        The number of values.
+
+    log : bool, optional
+        Whether to sample uniformly in log10 instead of uniformly. Used
+        only when ``bounds`` is a 2-tuple, whose values must then be
+        positive.
+
+    name : str, optional
+        The parameter name, used in error messages.
+
+    Returns
+    -------
+    values : `~numpy.ndarray`
+        The sampled values.
+    """
+    if np.ndim(bounds) == 0:
+        return np.full(size, bounds, dtype=float)
+
+    low, high = bounds
+    if not log:
+        return rng.uniform(low, high, size)
+
+    if low <= 0 or high <= 0:
+        msg = f'bounds of log parameter "{name}" must be positive'
+        raise ValueError(msg)
+    return 10.0 ** rng.uniform(np.log10(low), np.log10(high), size)
+
+
+def add_kind_column(table, kind):
+    """
+    Add a ``'kind'`` column to a table in place.
+
+    Parameters
+    ----------
+    table : `~astropy.table.Table`
+        The table.
+
+    kind : str or `None`
+        The value of every row in the ``'kind'`` column. If `None`, no
+        column is added.
+    """
+    if kind is not None:
+        table['kind'] = np.full(len(table), kind)
 
 
 def make_random_models_table(n_sources, param_ranges, *, seed=None):
