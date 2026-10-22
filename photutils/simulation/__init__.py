@@ -8,6 +8,7 @@ can also be used for general data analysis or exploration.
 """
 
 from .images import *  # noqa: F401, F403
+from .models import *  # noqa: F401, F403
 from .noise import *  # noqa: F401, F403
 from .params import *  # noqa: F401, F403
 from .wcs import *  # noqa: F401, F403
