@@ -7,11 +7,13 @@ import astropy.units as u
 import numpy as np
 import pytest
 from astropy.modeling.models import Moffat2D, Polynomial2D
+from astropy.nddata import NDData
 from astropy.table import QTable, Table
 from numpy.testing import assert_allclose, assert_array_equal
 
-from photutils.psf import (CircularGaussianPSF, CircularGaussianSigmaPRF,
-                           GaussianPRF, GaussianPSF, ImagePSF)
+from photutils.psf import (CircularGaussianPRF, CircularGaussianPSF,
+                           CircularGaussianSigmaPRF, GaussianPRF, GaussianPSF,
+                           GriddedPSFModel, ImagePSF)
 from photutils.simulation import make_model_image
 from photutils.simulation.images import _model_shape_from_bbox
 
@@ -497,3 +499,42 @@ def test_make_model_image_n_nodes_invalid(n_nodes):
     with pytest.raises(ValueError, match=match):
         make_model_image((20, 20), Moffat2D(), params, model_shape=7,
                          n_nodes=n_nodes)
+
+
+def test_make_model_image_n_nodes_units():
+    """
+    Test that n_nodes works with a flux column that has units.
+    """
+    params = QTable()
+    params['x_0'] = [10.0, 20.3]
+    params['y_0'] = [10.0, 14.8]
+    params['flux'] = [100.0, 250.0]
+    shape = (30, 40)
+    kwargs = {'model_shape': (15, 15), 'n_nodes': 4}
+    psf = GaussianPSF(x_fwhm=2.5, y_fwhm=2.5)
+    expected = make_model_image(shape, psf, params, **kwargs)
+    params['flux'] <<= u.Jy
+    result = make_model_image(shape, psf, params, **kwargs)
+    assert result.unit == u.Jy
+    assert_allclose(result.value, expected, rtol=1e-14)
+
+
+def test_make_model_image_n_nodes_2d_only_model():
+    """
+    Test n_nodes with a model that accepts only 1D or 2D inputs.
+
+    A GriddedPSFModel with a single ePSF gives the same values as an
+    ImagePSF made from that ePSF, which accepts inputs of any shape.
+    """
+    yy, xx = np.mgrid[0:11, 0:11]
+    data = CircularGaussianPRF(flux=1.0, x_0=5.0, y_0=5.0, fwhm=2.5)(xx, yy)
+    meta = {'grid_xypos': [(0, 0)], 'oversampling': 1}
+    gridded = GriddedPSFModel(NDData(data[np.newaxis], meta=meta))
+    params = QTable()
+    params['x_0'] = [10.3, 22.6]
+    params['y_0'] = [9.7, 15.2]
+    params['flux'] = [100.0, 250.0]
+    shape = (25, 30)
+    result = make_model_image(shape, gridded, params, n_nodes=2)
+    expected = make_model_image(shape, ImagePSF(data), params, n_nodes=2)
+    assert_allclose(result, expected, rtol=1e-14)
