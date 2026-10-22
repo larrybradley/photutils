@@ -564,6 +564,20 @@ def make_gridded_psf():
     return GriddedPSFModel(NDData(np.array(data), meta=meta))
 
 
+def make_varying_gridded_psf():
+    """
+    Make a GriddedPSFModel from a 3 x 3 grid of circular Gaussian ePSFs
+    whose FWHM increases by 0.01 pixel per pixel along x and along y.
+    """
+    yy, xx = np.mgrid[0:25, 0:25]
+    positions = [(x, y) for y in (0, 30, 60) for x in (0, 30, 60)]
+    data = [CircularGaussianPRF(x_0=12, y_0=12,
+                                fwhm=2.0 + 0.01 * (x + y))(xx, yy)
+            for x, y in positions]
+    meta = {'grid_xypos': positions, 'oversampling': 1}
+    return GriddedPSFModel(NDData(np.array(data), meta=meta))
+
+
 def make_sersic_params():
     """
     Make a table with two Sersic sources.
@@ -609,7 +623,7 @@ def test_convolved_psf_model_accepted(psf_model):
 @pytest.mark.parametrize('psf_model', [
     CircularGaussianPRF(fwhm=1.6, bbox_factor=10),
     GaussianPRF(x_fwhm=1.6, y_fwhm=2.6, theta=30.0, bbox_factor=10),
-    make_image_psf()])
+    make_image_psf(), make_varying_gridded_psf()])
 def test_point_source_matches_make_model_image(psf_model):
     """
     Test that a source that fills a single grid cell renders exactly as
@@ -619,8 +633,9 @@ def test_point_source_matches_make_model_image(psf_model):
     image is the flux times the PSF model at the box center. The two
     functions truncate an analytic PSF model on different pixels at the
     edge of its bounding box, so the bounding box is made large enough
-    that the PSF model is negligible there. The ImagePSF is zero beyond
-    its data, which both functions cover.
+    that the PSF model is negligible there. The ImagePSF and the
+    GriddedPSFModel are zero beyond their data, which both functions
+    cover.
     """
     stars = QTable()
     stars['x_0'] = [10.25, 30.5, 51.75]
@@ -845,21 +860,26 @@ def test_convolved_progress_bar():
 
 def test_convolved_gridded_psf_local():
     """
-    Test that a GriddedPSFModel is evaluated at the source position.
+    Test that a GriddedPSFModel whose PSFs vary across the grid is
+    evaluated at the source position.
 
-    A source near a grid point renders as with an ImagePSF made from
-    the ePSF at that grid point.
+    Box stars on the grid of cell centers, some on the grid points of
+    the PSF model and some between them, render as with
+    make_model_image.
     """
-    gridded = make_gridded_psf()
-    params = make_sersic_params()[:1]
-    params['x_0'] = [60.2]
-    params['y_0'] = [59.7]
+    gridded = make_varying_gridded_psf()
+    stars = QTable()
+    stars['x_0'] = [30.0, 0.0, 60.0, 45.25, 14.5, 52.75]
+    stars['y_0'] = [30.0, 60.0, 0.0, 22.5, 47.75, 58.25]
+    stars['flux'] = [100.0, 150.0, 200.0, 250.0, 300.0, 350.0]
+    boxes = stars.copy()
+    boxes['amplitude'] = stars['flux'] * 16
+    del boxes['flux']
     shape = (70, 70)
-    result = make_convolved_model_image(shape, SersicSource(), params,
-                                        gridded)
-    epsf = ImagePSF(gridded.data[3])
-    expected = make_convolved_model_image(shape, SersicSource(), params,
-                                          epsf)
+    source = Box2D(x_width=0.25, y_width=0.25)
+    result = make_convolved_model_image(shape, source, boxes, gridded,
+                                        oversample=4)
+    expected = make_model_image(shape, gridded, stars)
     assert_allclose(result, expected, rtol=0, atol=1e-12 * expected.max())
 
 
