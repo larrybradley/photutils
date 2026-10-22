@@ -24,10 +24,18 @@ New photutils.simulation Subpackage
 ===================================
 
 A new :ref:`photutils.simulation <simulation>` subpackage provides
-tools for making simulated images. It starts with versions of the
-``photutils.datasets`` tools and of
-``photutils.psf.make_psf_model_image`` whose optional arguments are
-keyword-only.
+tools for making simulated images with known sources and for scoring
+source-detection algorithms on them. It renders point sources and
+extended sources such as galaxies convolved with a PSF, makes
+controlled scenes such as close pairs and stars on bright galaxies,
+adds white or correlated noise, assigns each source its optimal
+signal-to-noise ratio, and measures completeness and false detections.
+The :ref:`simulation-completeness` example in the user guide shows the
+whole workflow.
+
+The subpackage replaces the deprecated ``photutils.datasets`` tools and
+``photutils.psf.make_psf_model_image`` with versions whose optional
+arguments are keyword-only.
 
 Scene Generators
 ----------------
