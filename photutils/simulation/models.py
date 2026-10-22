@@ -19,10 +19,14 @@ class SersicSource(Fittable2DModel):
     r"""
     A 2D Sersic profile normalized to a total flux.
 
-    This model is `~astropy.modeling.models.Sersic2D` parameterized by
-    the total ``flux`` instead of the ``amplitude`` at the half-light
-    radius. The total flux is the analytical integral of the profile
-    over the entire 2D plane.
+    This model is `~astropy.modeling.functional_models.Sersic2D`
+    parameterized by the total ``flux`` instead of the ``amplitude`` at
+    the half-light radius. The total flux is the analytical integral of
+    the profile over the entire 2D plane.
+
+    The ``r_eff``, ``n``, ``ellip``, and ``theta`` parameters are fixed
+    by default, as for `~photutils.psf.GaussianPSF`, so a fit varies
+    only ``flux``, ``x_0``, and ``y_0`` unless they are unfixed.
 
     The model is evaluated by sampling the profile at the input
     coordinates (point sampling). There is no pixel-integrated version.
@@ -67,8 +71,9 @@ class SersicSource(Fittable2DModel):
 
     Notes
     -----
-    The amplitude of the underlying `~astropy.modeling.models.Sersic2D`
-    profile (the surface brightness at ``r_eff``) is
+    The amplitude of the underlying
+    `~astropy.modeling.functional_models.Sersic2D` profile (the surface
+    brightness at ``r_eff``) is
 
     .. math::
         I_e = \frac{F}{2 \pi n \Gamma(2n) e^{b_n} b_n^{-2n}
@@ -94,9 +99,10 @@ class SersicSource(Fittable2DModel):
     6    8.0%
     ===  ==================
 
-    Use the ``bbox_factor`` keyword of
-    `~photutils.simulation.make_model_image` or the ``factor`` keyword
-    of ``bounding_box`` to change the cutout size.
+    Use the ``bbox_factor`` keyword, which is accepted by both
+    `~photutils.simulation.make_model_image` and
+    `~photutils.simulation.make_convolved_model_image`, or the
+    ``factor`` keyword of ``bounding_box`` to change the cutout size.
 
     Examples
     --------
