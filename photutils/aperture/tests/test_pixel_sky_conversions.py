@@ -31,7 +31,7 @@ from photutils.aperture import (CircularAnnulus, CircularAperture,
                                 SkyCircularAnnulus, SkyCircularAperture,
                                 SkyEllipticalAnnulus, SkyEllipticalAperture,
                                 SkyRectangularAnnulus, SkyRectangularAperture)
-from photutils.datasets import make_gwcs
+from photutils.simulation import make_gwcs
 from photutils.utils._optional_deps import HAS_GWCS
 from photutils.utils.tests.wcs_test_helpers import CountingWCS
 

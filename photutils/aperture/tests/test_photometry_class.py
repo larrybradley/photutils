@@ -24,8 +24,8 @@ from photutils.aperture.polygon import PolygonAperture
 from photutils.aperture.stats import ApertureStats
 from photutils.aperture.tests.conftest import (NoBatchCircularAperture,
                                                make_scene)
-from photutils.datasets import make_wcs
 from photutils.segmentation import SegmentationImage
+from photutils.simulation import make_wcs
 from photutils.utils._optional_deps import HAS_REGIONS
 
 

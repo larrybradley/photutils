@@ -18,16 +18,16 @@ from numpy.testing import assert_allclose, assert_array_equal
 
 from photutils.centroids import (centroid_1dg, centroid_2dg, centroid_com,
                                  centroid_quadratic, centroid_symmetry)
-from photutils.datasets import make_model_image
 from photutils.psf import (CircularGaussianPRF, EPSFBuilder, EPSFBuildResults,
                            EPSFFitter, EPSFStar, EPSFStars, ImagePSF,
-                           extract_stars, make_psf_model_image)
+                           extract_stars)
 from photutils.psf.epsf_builder import (_alias_filter_band,
                                         _CoordinateTransformer, _EPSFValidator,
                                         _measure_fwhm, _ProgressReporter,
                                         _SmoothingKernel,
                                         _suppress_alias_modes)
 from photutils.psf.epsf_stars import LinkedEPSFStar
+from photutils.simulation import make_model_image, make_psf_model_image
 from photutils.utils._optional_deps import HAS_MATPLOTLIB, HAS_TQDM
 from photutils.utils.exceptions import PhotutilsDeprecationWarning
 

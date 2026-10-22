@@ -29,7 +29,7 @@ from photutils.aperture._batch_photometry import (SHAPE_CIRCLE,
 from photutils.aperture._batch_stats import batch_aperture_gather
 from photutils.aperture.circle import CircularAperture
 from photutils.aperture.stats import ApertureStats
-from photutils.datasets import make_100gaussians_image
+from photutils.simulation import make_100gaussians_image
 
 N_THREADS = 8
 N_CALLS_PER_THREAD = 4

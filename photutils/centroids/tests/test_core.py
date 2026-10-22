@@ -18,8 +18,8 @@ from photutils.centroids.core import (CentroidQuadratic, centroid_com,
                                       centroid_symmetry)
 from photutils.centroids.gaussian import centroid_1dg, centroid_2dg
 from photutils.centroids.tests.helpers import make_gaussian_source
-from photutils.datasets import make_4gaussians_image, make_noise_image
 from photutils.psf import CircularGaussianPRF
+from photutils.simulation import make_4gaussians_image, make_noise_image
 from photutils.utils.exceptions import PhotutilsDeprecationWarning
 
 

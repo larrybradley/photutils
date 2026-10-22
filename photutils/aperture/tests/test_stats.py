@@ -33,9 +33,9 @@ from photutils.aperture.rectangle import (RectangularAnnulus,
 from photutils.aperture.stats import (_BLOCK_MAX_PIXELS, _MAD_STD_SCALE,
                                       ApertureStats)
 from photutils.aperture.tests.conftest import NoBatchCircularAperture
-from photutils.datasets import make_100gaussians_image, make_wcs
 from photutils.segmentation import (SEGMENTATION_FLAGS, SegmentationImage,
                                     SourceCatalog)
+from photutils.simulation import make_100gaussians_image, make_wcs
 from photutils.utils._optional_deps import HAS_REGIONS
 from photutils.utils.exceptions import PhotutilsDeprecationWarning
 

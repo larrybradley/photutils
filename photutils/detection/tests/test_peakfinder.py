@@ -11,8 +11,8 @@ from numpy.testing import assert_array_equal, assert_equal
 from scipy.spatial import cKDTree
 
 from photutils.centroids import centroid_com
-from photutils.datasets import make_gwcs, make_wcs
 from photutils.detection import find_peaks
+from photutils.simulation import make_gwcs, make_wcs
 from photutils.utils._optional_deps import HAS_GWCS
 from photutils.utils.exceptions import NoDetectionsWarning
 

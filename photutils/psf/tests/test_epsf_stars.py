@@ -18,13 +18,13 @@ from astropy.utils.exceptions import AstropyUserWarning
 from astropy.wcs import WCS
 from numpy.testing import assert_allclose, assert_array_equal
 
-from photutils.psf import make_psf_model_image
 from photutils.psf.epsf_stars import (EPSFStar, EPSFStars, LinkedEPSFStar,
                                       _compute_mean_sky_coordinate,
                                       _create_weights_cutout,
                                       _prepare_uncertainty_info, extract_stars)
 from photutils.psf.functional_models import CircularGaussianPRF
 from photutils.psf.image_models import ImagePSF
+from photutils.simulation import make_psf_model_image
 
 
 @pytest.fixture

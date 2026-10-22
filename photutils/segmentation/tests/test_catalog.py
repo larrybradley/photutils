@@ -23,8 +23,6 @@ from photutils.aperture import (BoundingBox, CircularAperture,
                                 EllipticalAperture)
 from photutils.background import Background2D, MedianBackground
 from photutils.centroids import centroid_quadratic
-from photutils.datasets import (make_100gaussians_image, make_gwcs,
-                                make_noise_image, make_wcs)
 from photutils.segmentation import catalog as catalog_module
 from photutils.segmentation.catalog import SourceCatalog
 from photutils.segmentation.core import SegmentationImage
@@ -34,6 +32,8 @@ from photutils.segmentation.finder import SourceFinder
 from photutils.segmentation.flags import SEGMENTATION_FLAGS
 from photutils.segmentation.tests._batch_scene import make_batch_scene
 from photutils.segmentation.utils import make_2dgaussian_kernel
+from photutils.simulation import (make_100gaussians_image, make_gwcs,
+                                  make_noise_image, make_wcs)
 from photutils.utils._optional_deps import HAS_GWCS, HAS_MATPLOTLIB
 from photutils.utils._wcs_helpers import compute_pixel_to_sky_jacobians
 from photutils.utils.cutouts import CutoutImage
