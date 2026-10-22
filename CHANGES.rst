@@ -34,6 +34,11 @@ New Features
     of sources placed around host sources, such as stars on bright
     galaxies. [#XXXX]
 
+  - Added a ``kernel`` keyword to ``photutils.simulation.make_noise_image``
+    to make correlated Gaussian noise with the requested per-pixel
+    standard deviation, and a ``noise_correlation_factor`` function that
+    returns the noise correlation factor a kernel introduces. [#XXXX]
+
 Bug Fixes
 ^^^^^^^^^
 
