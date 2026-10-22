@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 """
-Benchmarks for the photutils.datasets subpackage.
+Benchmarks for the photutils.simulation subpackage.
 
 The benchmarks cover the scaling of ``make_model_image`` with the
-number of sources, the model discretization methods, the scaling of
-``make_model_params`` with the number of sources, the noise
-functions, the WCS factories, and the example-image functions.
+number of sources, the scaling of ``make_model_params`` with the
+number of sources, the noise functions, the WCS factories, and the
+example-image functions.
 
-Run ``python benchmarks/bench_datasets.py --help`` to see the
+Run ``python benchmarks/bench_simulation.py --help`` to see the
 available options.
 """
 
@@ -20,10 +20,10 @@ from astropy.modeling.models import Gaussian2D
 from bench_helpers import (add_memory_argument, print_environment,
                            set_memory_mode, time_best)
 
-from photutils.datasets import (apply_poisson_noise, make_4gaussians_image,
-                                make_100gaussians_image, make_gwcs,
-                                make_model_image, make_model_params,
-                                make_noise_image, make_wcs)
+from photutils.simulation import (apply_poisson_noise, make_4gaussians_image,
+                                  make_100gaussians_image, make_gwcs,
+                                  make_model_image, make_model_params,
+                                  make_noise_image, make_wcs)
 from photutils.utils._optional_deps import HAS_GWCS
 
 MODEL_SHAPE = (25, 25)
@@ -70,7 +70,7 @@ def run_model_image(shape, params, n_iter, **kwargs):
 
     **kwargs : dict, optional
         Additional keyword arguments passed to ``make_model_image``
-        (e.g., ``discretize_method``).
+        (e.g., ``bbox_factor``).
     """
     model = Gaussian2D()
     for _ in range(n_iter):
@@ -109,39 +109,6 @@ def bench_model_image(*, size=500, n_sources_list=(100, 400, 1600),
         t_src = t_call / len(params)
         print(f'{n_sources:>12}{f"{t_call * 1e3:.2f}ms":>12}'
               f'{f"{t_src * 1e6:.1f}us":>14}')
-
-
-def bench_discretize(*, size=300, n_sources=200, n_iter=3, repeats=3):
-    """
-    Benchmark make_model_image for each discretization method.
-
-    The 'integrate' method is omitted because it is extremely slow.
-
-    Parameters
-    ----------
-    size : int, optional
-        The image size; the image is ``(size, size)``.
-
-    n_sources : int, optional
-        The number of sources to render.
-
-    n_iter : int, optional
-        The number of calls per timing; the per-call time is reported.
-
-    repeats : int, optional
-        The number of repeats for each timing (best time is kept).
-    """
-    shape = (size, size)
-    params = make_source_params(shape, n_sources)
-
-    print(f'\n== discretization methods ({size}x{size} image, '
-          f'{len(params)} sources, per-call time) ==')
-    print(f'{"method":>14}{"time":>12}')
-    for method in ('center', 'interp', 'oversample'):
-        bench = partial(run_model_image, shape, params, n_iter,
-                        discretize_method=method)
-        t_call = time_best(bench, repeats=repeats) / n_iter
-        print(f'{method:>14}{f"{t_call * 1e3:.2f}ms":>12}')
 
 
 def run_model_params(shape, n_sources, min_separation, n_iter):
@@ -340,10 +307,10 @@ def parse_int_list(text):
 
 def main():
     """
-    Run the photutils.datasets benchmarks.
+    Run the photutils.simulation benchmarks.
     """
     parser = argparse.ArgumentParser(
-        description='Benchmarks for the photutils.datasets subpackage.')
+        description='Benchmarks for the photutils.simulation subpackage.')
     parser.add_argument('--size', type=int, default=500,
                         help='image size for the model-image and '
                              'model-params benchmarks '
@@ -360,9 +327,8 @@ def main():
                         help='number of repeats per timing; the best '
                              'time is reported (default: %(default)s)')
     parser.add_argument('--which', default='all',
-                        choices=['all', 'model-image', 'discretize',
-                                 'model-params', 'noise', 'wcs',
-                                 'examples'],
+                        choices=['all', 'model-image', 'model-params',
+                                 'noise', 'wcs', 'examples'],
                         help='which benchmark to run '
                              '(default: %(default)s)')
     add_memory_argument(parser)
@@ -375,8 +341,6 @@ def main():
         bench_model_image(size=args.size,
                           n_sources_list=args.n_sources_list,
                           n_iter=args.n_iter, repeats=args.repeats)
-    if args.which in ('all', 'discretize'):
-        bench_discretize(n_iter=args.n_iter, repeats=args.repeats)
     if args.which in ('all', 'model-params'):
         bench_model_params(size=args.size,
                            n_sources_list=args.n_sources_list,

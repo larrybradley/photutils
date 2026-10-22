@@ -52,9 +52,9 @@ from astropy.modeling.models import Gaussian2D
 from astropy.stats import gaussian_fwhm_to_sigma
 
 import photutils
-from photutils.datasets import make_wcs
 from photutils.segmentation import (SourceCatalog, detect_sources,
                                     make_2dgaussian_kernel)
+from photutils.simulation import make_wcs
 
 
 def make_bench_scene(*, n_sources=300, spacing=25, fwhm=4.0, offset=6.0,

@@ -19,7 +19,7 @@ from photutils.aperture import (CircularAnnulus, CircularAperture,
                                 EllipticalAnnulus, EllipticalAperture,
                                 PolygonAperture, RectangularAnnulus,
                                 RectangularAperture)
-from photutils.datasets import make_wcs
+from photutils.simulation import make_wcs
 from photutils.utils._optional_deps import HAS_BOTTLENECK
 
 # Whether time_best also reports the memory of each call (see
