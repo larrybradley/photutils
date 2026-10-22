@@ -9,21 +9,22 @@ and local variables, and ``data_properties`` constructs a new
 ``SourceCatalog`` per call.
 """
 
-from concurrent.futures import ThreadPoolExecutor
-
 import numpy as np
+import pytest
 from numpy.testing import assert_array_equal
 
 from photutils.morphology import data_properties, gini
+from photutils.utils.tests.thread_test_helpers import fail_on_warning
 
-N_THREADS = 8
-N_CALLS_PER_THREAD = 4
+pytestmark = [pytest.mark.force_parallel_threads(8),
+              pytest.mark.iterations(4)]
 
 DATA_PROPERTIES_COLUMNS = ['x_centroid', 'y_centroid', 'semimajor_axis',
                            'semiminor_axis', 'orientation', 'area']
 
 
-def make_shared_inputs():
+@pytest.fixture(name='shared_inputs', scope='module')
+def fixture_shared_inputs():
     """
     Return a shared image, mask, and background for the concurrent
     calls.
@@ -48,78 +49,56 @@ def make_shared_inputs():
     return data, mask, background
 
 
-def run_concurrently(task, expected):
+def _data_properties_values(data, mask, background):
     """
-    Run ``task`` concurrently and check each result against
-    ``expected``.
-
-    Parameters
-    ----------
-    task : callable
-        The zero-argument callable to run in the thread pool.
-
-    expected : tuple
-        The expected result from a serial call.
+    Return the data_properties values that the tests compare.
     """
-    with ThreadPoolExecutor(max_workers=N_THREADS) as executor:
-        futures = [executor.submit(task)
-                   for _ in range(N_THREADS * N_CALLS_PER_THREAD)]
-        for future in futures:
-            assert_array_equal(future.result(), expected)
+    props = data_properties(data, mask=mask, background=background)
+    values = [getattr(props, name).value
+              for name in DATA_PROPERTIES_COLUMNS
+              if name not in ('x_centroid', 'y_centroid')]
+    values += [props.x_centroid, props.y_centroid, props.background_sum]
+    return values
 
 
-def test_concurrent_data_properties():
+def _gini(data, mask, _background):
     """
-    Test that concurrent data_properties calls on shared input arrays
-    return results identical to a serial call.
+    Return the Gini coefficient of the data.
     """
-    data, mask, background = make_shared_inputs()
-
-    def task():
-        props = data_properties(data, mask=mask, background=background)
-        values = [getattr(props, name).value
-                  for name in DATA_PROPERTIES_COLUMNS
-                  if name not in ('x_centroid', 'y_centroid')]
-        values += [props.x_centroid, props.y_centroid,
-                   props.background_sum]
-        return values
-
-    run_concurrently(task, task())
+    return gini(data, mask=mask)
 
 
-def test_concurrent_gini():
+TASKS = (_data_properties_values, _gini)
+
+
+@pytest.fixture(name='expected', scope='module')
+def fixture_expected(shared_inputs):
     """
-    Test that concurrent gini calls on shared input arrays return
-    results identical to a serial call.
+    Return the serial results, keyed by task.
     """
-    data, mask, _ = make_shared_inputs()
-
-    def task():
-        return gini(data, mask=mask)
-
-    run_concurrently(task, task())
+    return {task: task(*shared_inputs) for task in TASKS}
 
 
-def test_mixed_concurrent_calls():
+@pytest.mark.parametrize('task', TASKS, ids=['data_properties', 'gini'])
+def test_concurrent_calls(shared_inputs, expected, task):
     """
-    Test data_properties and gini running interleaved in one thread
-    pool.
+    Test that concurrent data_properties and gini calls on shared input
+    arrays return results identical to a serial call.
     """
-    data, mask, _ = make_shared_inputs()
+    with fail_on_warning():
+        result = task(*shared_inputs)
+    assert_array_equal(result, expected[task])
 
-    def gini_task():
-        return gini(data, mask=mask)
 
-    def props_task():
-        props = data_properties(data, mask=mask)
-        return [props.x_centroid, props.y_centroid, props.area.value]
+def test_mixed_concurrent_calls(shared_inputs, expected, thread_index,
+                                iteration_index):
+    """
+    Test data_properties and gini running interleaved in several
+    threads.
 
-    tasks = {'gini': gini_task, 'data_properties': props_task}
-    expected = {name: task() for name, task in tasks.items()}
-
-    with ThreadPoolExecutor(max_workers=N_THREADS) as executor:
-        futures = [(name, executor.submit(task))
-                   for name, task in tasks.items()
-                   for _ in range(N_THREADS)]
-        for name, future in futures:
-            assert_array_equal(future.result(), expected[name])
+    Each thread changes the function it calls in every iteration.
+    """
+    task = TASKS[(thread_index + iteration_index) % len(TASKS)]
+    with fail_on_warning():
+        result = task(*shared_inputs)
+    assert_array_equal(result, expected[task])
