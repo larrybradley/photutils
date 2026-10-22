@@ -3,15 +3,18 @@
 Tests for the scoring module.
 """
 
+import warnings
+
 import numpy as np
 import pytest
 from astropy.convolution import Gaussian2DKernel
-from astropy.table import QTable
+from astropy.table import QTable, vstack
 from numpy.testing import assert_allclose, assert_array_equal
 
-from photutils.segmentation import SegmentationImage
+from photutils.segmentation import SegmentationImage, detect_sources
 from photutils.simulation import (completeness, false_detection_rate,
                                   match_segments, match_sources)
+from photutils.utils.exceptions import NoDetectionsWarning
 
 
 @pytest.fixture(name='segm')
@@ -186,6 +189,12 @@ class TestMatchSources:
         result = match_sources(x_det, y_det, sources, 1.5)
         assert_array_equal(result['detected'], [True, True])
         assert_array_equal(result['match_index'], [1, 0])
+        assert_allclose(result['separation'], [0.9, 0.2])
+
+        # The nearest candidate of the brighter input has the higher
+        # index
+        result = match_sources(x_det[::-1], y_det, sources, 1.5)
+        assert_array_equal(result['match_index'], [0, 1])
         assert_allclose(result['separation'], [0.9, 0.2])
 
         # The remaining detection is out of range of the fainter input
@@ -464,3 +473,76 @@ class TestFalseDetectionRate:
         match = 'n_trials must be a positive integer'
         with pytest.raises(ValueError, match=match):
             false_detection_rate(lambda _image: None, (10, 10), n_trials=0)
+
+
+def test_masked_columns_from_vstack():
+    """
+    Test that masked values from stacking populations with different
+    columns are treated as missing, not as zeros.
+    """
+    data = np.zeros((20, 20), dtype=int)
+    data[0, 0] = 4
+    data[2:7, 2:7] = 1
+    segm = SegmentationImage(data)
+    stars = make_sources([3.0], [3.0], [10.0], snr=[1.0])
+    others = QTable({'x_mean': [8.0], 'y_mean': [8.0], 'flux': [5.0]})
+    stacked = vstack([stars, others])
+    assert np.ma.is_masked(stacked['x_0'][1])
+
+    result = match_segments(segm, stacked)
+    assert_array_equal(result['label'], [1, 0])
+    assert_array_equal(result.meta['unmatched_labels'], [4])
+
+    result = completeness([True, False], stacked['snr'], [0, 2])
+    assert_array_equal(result['n_sources'], [1])
+
+    # A masked priority ranks below every finite priority
+    sources = make_sources([3.0, 4.0], [3.0, 4.0], [1.0, 1.0])
+    sources['rank'] = np.ma.MaskedArray([0.0, -5.0], mask=[True, False])
+    result = match_segments(segm, sources, priority='rank')
+    assert_array_equal(result['detected'], [False, True])
+
+
+def test_nonfinite_detections():
+    """
+    Test that detections with nonfinite positions are not matched and
+    are listed as unmatched.
+    """
+    sources = make_sources([10.0], [10.0], [10.0])
+    result = match_sources([np.nan, 10.5, 30.0], [10.0, 10.0, np.inf],
+                           sources, 2.0)
+    assert_array_equal(result['match_index'], [1])
+    assert_array_equal(result.meta['unmatched_indices'], [0, 2])
+
+
+@pytest.mark.parametrize('n_tied', [3, 50])
+def test_stable_priority_ties(segm, n_tied):
+    """
+    Test that the earliest row wins a tie in priority for many tied
+    rows, where an unstable sort would reorder them.
+    """
+    rng = np.random.default_rng(0)
+    x = rng.uniform(2.5, 5.5, n_tied)
+    y = rng.uniform(2.5, 5.5, n_tied)
+    sources = make_sources(x, y, np.full(n_tied, 20.0))
+    result = match_segments(segm, sources)
+    assert np.flatnonzero(result['detected']).tolist() == [0]
+
+    result = match_sources([4.0], [4.0], sources, 3.0)
+    assert np.flatnonzero(result['detected']).tolist() == [0]
+
+
+def test_false_detection_rate_no_detections_warning():
+    """
+    Test that a detector's no-detections warning on a clean noise frame
+    is not passed on.
+    """
+    def detect(image):
+        return detect_sources(image, threshold=100.0, n_pixels=5)
+
+    with warnings.catch_warnings(record=True) as records:
+        warnings.simplefilter('always')
+        result = false_detection_rate(detect, (50, 50), n_trials=3, seed=0)
+    assert_array_equal(result['n_detections'], [0, 0, 0])
+    assert not any(issubclass(rec.category, NoDetectionsWarning)
+                   for rec in records)
