@@ -8,7 +8,6 @@ import pytest
 from astropy.io import fits
 from numpy.testing import assert_allclose
 
-from photutils.datasets.load import _get_path
 from photutils.isophote.fitter import CentralEllipseFitter, EllipseFitter
 from photutils.isophote.geometry import EllipseGeometry
 from photutils.isophote.harmonics import fit_first_and_second_harmonics
@@ -16,6 +15,7 @@ from photutils.isophote.integrator import MEAN
 from photutils.isophote.isophote import Isophote
 from photutils.isophote.sample import CentralEllipseSample, EllipseSample
 from photutils.isophote.tests.make_test_data import make_test_image
+from photutils.utils._testing import get_path
 
 DATA = make_test_image(seed=0)
 DEFAULT_POS = 256
@@ -171,8 +171,7 @@ def test_fitting_all():
 @pytest.mark.remote_data
 class TestM51:
     def setup_class(self):
-        path = _get_path('isophote/M51.fits', location='photutils-datasets',
-                         cache=True)
+        path = get_path('isophote/M51.fits')
         hdu = fits.open(path)
         self.data = hdu[0].data
         hdu.close()
