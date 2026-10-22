@@ -8,10 +8,10 @@ import numpy as np
 import pytest
 from astropy.modeling.models import Moffat2D, Polynomial2D
 from astropy.table import QTable, Table
-from numpy.testing import assert_allclose
+from numpy.testing import assert_allclose, assert_array_equal
 
 from photutils.psf import (CircularGaussianPSF, CircularGaussianSigmaPRF,
-                           ImagePSF)
+                           GaussianPRF, GaussianPSF, ImagePSF)
 from photutils.simulation import make_model_image
 from photutils.simulation.images import _model_shape_from_bbox
 
@@ -448,3 +448,52 @@ def test_model_shape_from_bbox_no_bbox():
     match = 'model does not have a bounding_box attribute'
     with pytest.raises(ValueError, match=match):
         _model_shape_from_bbox(model)
+
+
+def test_make_model_image_n_nodes_none_unchanged():
+    """
+    Test that n_nodes=None is the same as the default.
+    """
+    params = QTable()
+    params['x_0'] = [20.3, 45.6, 70.1]
+    params['y_0'] = [30.2, 55.5, 20.8]
+    params['gamma'] = [1.7, 2.32, 1.8]
+    params['alpha'] = [2.9, 5.7, 4.6]
+    model = Moffat2D(amplitude=100)
+    kwargs = {'model_shape': (15, 15)}
+    default = make_model_image((80, 100), model, params, **kwargs)
+    explicit = make_model_image((80, 100), model, params, n_nodes=None,
+                                **kwargs)
+    assert_array_equal(explicit, default)
+
+
+def test_make_model_image_n_nodes_gaussian():
+    """
+    Test that integrating a GaussianPSF matches the pixel-integrated
+    GaussianPRF.
+    """
+    params = QTable()
+    params['x_0'] = [10.0, 20.5, 29.3]
+    params['y_0'] = [10.0, 20.5, 14.8]
+    params['flux'] = [100.0, 250.0, 175.0]
+    shape = (30, 40)
+    kwargs = {'model_shape': (15, 15)}
+    psf = GaussianPSF(x_fwhm=2.5, y_fwhm=2.5)
+    prf = GaussianPRF(x_fwhm=2.5, y_fwhm=2.5)
+    result = make_model_image(shape, psf, params, n_nodes=4, **kwargs)
+    expected = make_model_image(shape, prf, params, **kwargs)
+    assert_allclose(result, expected, rtol=0, atol=1e-6 * expected.max())
+
+
+@pytest.mark.parametrize('n_nodes', [0, -1, 2.5, True])
+def test_make_model_image_n_nodes_invalid(n_nodes):
+    """
+    Test that an invalid n_nodes raises a ValueError.
+    """
+    params = QTable()
+    params['x_0'] = [10.0]
+    params['y_0'] = [10.0]
+    match = 'n_nodes must be None or a positive integer'
+    with pytest.raises(ValueError, match=match):
+        make_model_image((20, 20), Moffat2D(), params, model_shape=7,
+                         n_nodes=n_nodes)

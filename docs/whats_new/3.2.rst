@@ -46,7 +46,10 @@ functions of the same name in :ref:`photutils.simulation <simulation>`
 instead. Their optional arguments are keyword-only, so any optional
 argument must be passed by name. The ``load_*`` functions and
 ``get_path`` have no replacement and keep their existing deprecation.
-Update your code::
+The ``n_nodes`` keyword of
+:func:`~photutils.simulation.make_model_image` replaces the
+``discretize_method`` and ``discretize_oversample`` keywords of the
+deprecated ``photutils.datasets.make_model_image``. Update your code::
 
     # Old (deprecated)
     from photutils.datasets import make_noise_image

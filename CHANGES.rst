@@ -15,6 +15,13 @@ New Features
     ``photutils.psf.make_psf_model_image`` whose optional arguments are
     keyword-only. [#XXXX]
 
+  - Added an ``n_nodes`` keyword to ``photutils.simulation.make_model_image``
+    that integrates each pixel with Gauss-Legendre quadrature, with
+    extra refinement around each source center, for models that are not
+    integrated over the pixels. It replaces the ``discretize_method``
+    and ``discretize_oversample`` keywords of the deprecated
+    ``photutils.datasets.make_model_image``. [#XXXX]
+
 Bug Fixes
 ^^^^^^^^^
 

@@ -4,7 +4,8 @@
 Benchmarks for the photutils.simulation subpackage.
 
 The benchmarks cover the scaling of ``make_model_image`` with the
-number of sources, the scaling of ``make_model_params`` with the
+number of sources, the cost of the ``n_nodes`` pixel integration of
+``make_model_image``, the scaling of ``make_model_params`` with the
 number of sources, the noise functions, the WCS factories, and the
 example-image functions.
 
@@ -109,6 +110,45 @@ def bench_model_image(*, size=500, n_sources_list=(100, 400, 1600),
         t_src = t_call / len(params)
         print(f'{n_sources:>12}{f"{t_call * 1e3:.2f}ms":>12}'
               f'{f"{t_src * 1e6:.1f}us":>14}')
+
+
+def bench_n_nodes(*, size=500, n_sources=400, n_nodes_list=(None, 2, 4, 8),
+                  n_iter=3, repeats=3):
+    """
+    Benchmark the n_nodes pixel integration of make_model_image.
+
+    Parameters
+    ----------
+    size : int, optional
+        The image size; the image is ``(size, size)``.
+
+    n_sources : int, optional
+        The number of sources to render.
+
+    n_nodes_list : tuple of (int or None), optional
+        The ``n_nodes`` values to time. `None` evaluates the model at
+        the pixel centers.
+
+    n_iter : int, optional
+        The number of calls per timing; the per-call time is reported.
+
+    repeats : int, optional
+        The number of repeats for each timing (best time is kept).
+    """
+    shape = (size, size)
+    params = make_source_params(shape, n_sources)
+    print(f'\n== make_model_image n_nodes ({size}x{size} image, '
+          f'{n_sources} sources, per-call time) ==')
+    print(f'{"n_nodes":>12}{"time":>12}{"relative":>12}')
+    t_none = None
+    for n_nodes in n_nodes_list:
+        bench = partial(run_model_image, shape, params, n_iter,
+                        n_nodes=n_nodes)
+        t_call = time_best(bench, repeats=repeats) / n_iter
+        if t_none is None:
+            t_none = t_call
+        print(f'{n_nodes!s:>12}{f"{t_call * 1e3:.2f}ms":>12}'
+              f'{f"{t_call / t_none:.1f}x":>12}')
 
 
 def run_model_params(shape, n_sources, min_separation, n_iter):
@@ -327,8 +367,9 @@ def main():
                         help='number of repeats per timing; the best '
                              'time is reported (default: %(default)s)')
     parser.add_argument('--which', default='all',
-                        choices=['all', 'model-image', 'model-params',
-                                 'noise', 'wcs', 'examples'],
+                        choices=['all', 'model-image', 'n-nodes',
+                                 'model-params', 'noise', 'wcs',
+                                 'examples'],
                         help='which benchmark to run '
                              '(default: %(default)s)')
     add_memory_argument(parser)
@@ -341,6 +382,9 @@ def main():
         bench_model_image(size=args.size,
                           n_sources_list=args.n_sources_list,
                           n_iter=args.n_iter, repeats=args.repeats)
+    if args.which in ('all', 'n-nodes'):
+        bench_n_nodes(size=args.size, n_iter=args.n_iter,
+                      repeats=args.repeats)
     if args.which in ('all', 'model-params'):
         bench_model_params(size=args.size,
                            n_sources_list=args.n_sources_list,
