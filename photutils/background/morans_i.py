@@ -721,7 +721,7 @@ def make_morans_i_mask(data, *, patch_size=21, n_sigma=3.0, percent=None,
     Examples
     --------
     >>> from photutils.background import Background2D, make_morans_i_mask
-    >>> from photutils.datasets import make_100gaussians_image
+    >>> from photutils.simulation import make_100gaussians_image
     >>> data = make_100gaussians_image()
     >>> mask = make_morans_i_mask(data)
     >>> bkg = Background2D(data, (50, 50), mask=mask, filter_size=(3, 3),

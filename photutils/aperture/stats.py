@@ -417,7 +417,7 @@ class ApertureStats:
 
     Examples
     --------
-    >>> from photutils.datasets import make_4gaussians_image
+    >>> from photutils.simulation import make_4gaussians_image
     >>> from photutils.aperture import CircularAperture, ApertureStats
 
     >>> data = make_4gaussians_image()

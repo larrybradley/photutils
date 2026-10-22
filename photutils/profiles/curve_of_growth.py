@@ -230,7 +230,7 @@ class CurveOfGrowth(_CurveOfGrowthBase):
     >>> import numpy as np
     >>> from astropy.modeling.models import Gaussian2D
     >>> from photutils.centroids import centroid_2dg
-    >>> from photutils.datasets import make_noise_image
+    >>> from photutils.simulation import make_noise_image
     >>> from photutils.profiles import CurveOfGrowth
 
     Create an artificial single source. Note that this image does not
@@ -277,7 +277,7 @@ class CurveOfGrowth(_CurveOfGrowthBase):
         from astropy.modeling.models import Gaussian2D
 
         from photutils.centroids import centroid_2dg
-        from photutils.datasets import make_noise_image
+        from photutils.simulation import make_noise_image
         from photutils.profiles import CurveOfGrowth
 
         # Create an artificial single source
@@ -310,7 +310,7 @@ class CurveOfGrowth(_CurveOfGrowthBase):
         from astropy.modeling.models import Gaussian2D
 
         from photutils.centroids import centroid_2dg
-        from photutils.datasets import make_noise_image
+        from photutils.simulation import make_noise_image
         from photutils.profiles import CurveOfGrowth
 
         # Create an artificial single source
@@ -345,7 +345,7 @@ class CurveOfGrowth(_CurveOfGrowthBase):
         from astropy.visualization import simple_norm
 
         from photutils.centroids import centroid_2dg
-        from photutils.datasets import make_noise_image
+        from photutils.simulation import make_noise_image
         from photutils.profiles import CurveOfGrowth
 
         # Create an artificial single source
@@ -577,7 +577,7 @@ class EnsquaredCurveOfGrowth(_CurveOfGrowthBase):
     >>> import numpy as np
     >>> from astropy.modeling.models import Gaussian2D
     >>> from photutils.centroids import centroid_2dg
-    >>> from photutils.datasets import make_noise_image
+    >>> from photutils.simulation import make_noise_image
     >>> from photutils.profiles import EnsquaredCurveOfGrowth
 
     Create an artificial single source. Note that this image does not
@@ -625,7 +625,7 @@ class EnsquaredCurveOfGrowth(_CurveOfGrowthBase):
         from astropy.modeling.models import Gaussian2D
 
         from photutils.centroids import centroid_2dg
-        from photutils.datasets import make_noise_image
+        from photutils.simulation import make_noise_image
         from photutils.profiles import EnsquaredCurveOfGrowth
 
         # Create an artificial single source
@@ -660,7 +660,7 @@ class EnsquaredCurveOfGrowth(_CurveOfGrowthBase):
         from astropy.visualization import simple_norm
 
         from photutils.centroids import centroid_2dg
-        from photutils.datasets import make_noise_image
+        from photutils.simulation import make_noise_image
         from photutils.profiles import EnsquaredCurveOfGrowth
 
         # Create an artificial single source
@@ -932,7 +932,7 @@ class EllipticalCurveOfGrowth(_CurveOfGrowthBase):
     >>> import numpy as np
     >>> from astropy.modeling.models import Gaussian2D
     >>> from photutils.centroids import centroid_2dg
-    >>> from photutils.datasets import make_noise_image
+    >>> from photutils.simulation import make_noise_image
     >>> from photutils.profiles import EllipticalCurveOfGrowth
 
     Create an artificial elliptical source. Note that this image does
@@ -990,7 +990,7 @@ class EllipticalCurveOfGrowth(_CurveOfGrowthBase):
         from astropy.modeling.models import Gaussian2D
 
         from photutils.centroids import centroid_2dg
-        from photutils.datasets import make_noise_image
+        from photutils.simulation import make_noise_image
         from photutils.profiles import EllipticalCurveOfGrowth
 
         # Create an artificial elliptical source
@@ -1026,7 +1026,7 @@ class EllipticalCurveOfGrowth(_CurveOfGrowthBase):
         from astropy.visualization import simple_norm
 
         from photutils.centroids import centroid_2dg
-        from photutils.datasets import make_noise_image
+        from photutils.simulation import make_noise_image
         from photutils.profiles import EllipticalCurveOfGrowth
 
         # Create an artificial elliptical source
