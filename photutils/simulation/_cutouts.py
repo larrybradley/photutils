@@ -5,7 +5,8 @@ Private tools for rendering cutouts of 2D models.
 The functions here evaluate a model on a grid of square cells, either
 at the cell centers or as the mean over each cell using Gauss-Legendre
 quadrature. The mean is refined around the source center, where the
-profile of a typical source changes most rapidly.
+profile of a typical source changes most rapidly, using pieces whose
+boundaries are aligned to the source center.
 """
 
 from functools import lru_cache
@@ -19,9 +20,9 @@ __all__ = []
 # coordinates for which all of the nodes are evaluated in a single call
 _MAX_QUADRATURE_ELEMENTS = 2**20
 
-# The number of pieces per axis into which each whole-pixel core cell is
-# split. The core is the 3 x 3 pixels around the pixel that contains the
-# source center.
+# The number of pieces per pixel along each axis into which the core
+# cells are split. The core is the pixel that contains the source center
+# and its eight neighbors.
 _CORE_SPLIT = 8
 
 
@@ -133,18 +134,80 @@ def integrate_cells(model, x, y, cell_size, n_nodes):
     return result
 
 
+def core_nodes(centers, center, cell_size, n_nodes):
+    """
+    Return the quadrature nodes and weights of the core cells along one
+    axis.
+
+    Each cell is cut at its edges and at every point ``center + k *
+    step`` inside it, so the source center lies on a piece boundary.
+    The ``step`` is ``cell_size / n_split``, where ``n_split`` is
+    ``ceil(8 * cell_size)``. Each piece is integrated with ``n_nodes``
+    Gauss-Legendre nodes over its own width. A cell has
+    ``n_split`` or ``n_split + 1`` pieces. The arrays always hold
+    ``n_split + 1`` pieces per cell, and a cell with ``n_split`` pieces
+    has one extra piece of zero width and zero weight.
+
+    Parameters
+    ----------
+    centers : 1D `~numpy.ndarray`
+        The cell centers along the axis.
+
+    center : float
+        The source center along the axis.
+
+    cell_size : float
+        The side length of each square cell.
+
+    n_nodes : int
+        The number of Gauss-Legendre nodes per piece.
+
+    Returns
+    -------
+    nodes, weights : 2D `~numpy.ndarray`
+        The node coordinates and their weights, with one row per cell.
+        The weights of each row sum to 1.
+    """
+    n_split = max(1, ceil(_CORE_SPLIT * cell_size))
+    step = cell_size / n_split
+    lower = centers[:, None] - 0.5 * cell_size
+    upper = centers[:, None] + 0.5 * cell_size
+
+    # The first point of the center-aligned lattice above the lower edge
+    # of each cell, followed by the next n_split - 1 points. The last
+    # point is beyond the upper edge if the lattice is aligned to the
+    # cell edges, and it is then clipped to give a piece of zero width.
+    first = center + (np.floor((lower - center) / step) + 1) * step
+    cuts = np.clip(first + step * np.arange(n_split), lower, upper)
+    edges = np.concatenate((lower, cuts, upper), axis=1)
+    widths = np.diff(edges, axis=1)[..., None]
+    middles = 0.5 * (edges[:, :-1] + edges[:, 1:])[..., None]
+
+    offsets, weights = pixel_nodes(n_nodes)
+    n_cells = len(centers)
+    nodes = (middles + widths * offsets).reshape(n_cells, -1)
+    weights = (widths * weights / cell_size).reshape(n_cells, -1)
+    return nodes, weights
+
+
 def render_cells(model, x, y, x_0, y_0, *, cell_size=1.0, n_nodes):
     """
     Return the model values on a grid of square cells.
 
     If ``n_nodes`` is `None`, the model is evaluated at the cell
     centers. Otherwise, the mean over each cell is computed with
-    Gauss-Legendre quadrature. The cells whose centers lie in the 3 x 3
-    pixels around the pixel that contains the source center are each
-    split into ``ceil(8 * cell_size)`` pieces per axis, and the mean
-    of the piece means replaces the cell value. This is 8 x 8 pieces
-    per pixel when ``cell_size`` is 1. Core cells that are not in the
-    grid are not refined.
+    Gauss-Legendre quadrature.
+
+    The mean is refined for the core cells, whose centers lie in the
+    pixel that contains the source center and its eight neighbors.
+    Along each axis, each core cell is cut at its edges and at every
+    point ``x_0 + k * step`` (``y_0 + k * step`` along y) inside it,
+    where ``step`` is ``cell_size / ceil(8 * cell_size)``. This puts
+    the source center on a piece boundary at any position. The pieces
+    are at most 1/8 pixel wide and are narrower at the cell edges.
+    Each piece is integrated with ``n_nodes`` x ``n_nodes`` nodes, and
+    the cell mean is the area-weighted sum of the piece means. Core
+    cells that are not in the grid are not refined.
 
     Parameters
     ----------
@@ -175,21 +238,19 @@ def render_cells(model, x, y, x_0, y_0, *, cell_size=1.0, n_nodes):
 
     result = integrate_cells(model, x, y, cell_size, n_nodes)
 
-    # Core cells: the 3 x 3 pixels around the pixel containing the center
+    # Core cells: the pixel that contains the center and its neighbors
     cx = np.floor(x_0 + 0.5)
     cy = np.floor(y_0 + 0.5)
     in_core = (np.abs(x - cx) < 1.5) & (np.abs(y - cy) < 1.5)
     if not in_core.any():
         return result
 
-    # Split each core cell into n_split x n_split pieces, integrate
-    # each piece, and average the pieces
-    n_split = max(1, ceil(_CORE_SPLIT * cell_size))
-    piece_offsets = ((np.arange(n_split) + 0.5) / n_split - 0.5) * cell_size
-    x_pieces = x[in_core][:, None, None] + piece_offsets[None, None, :]
-    y_pieces = y[in_core][:, None, None] + piece_offsets[None, :, None]
-    x_pieces, y_pieces = np.broadcast_arrays(x_pieces, y_pieces)
-    pieces = integrate_cells(model, x_pieces, y_pieces, cell_size / n_split,
-                             n_nodes)
-    result[in_core] = pieces.mean(axis=(1, 2))
+    # The tensor product of the per-axis pieces gives the pieces of each
+    # core cell
+    x_nodes, x_weights = core_nodes(x[in_core], x_0, cell_size, n_nodes)
+    y_nodes, y_weights = core_nodes(y[in_core], y_0, cell_size, n_nodes)
+    xx, yy = np.broadcast_arrays(x_nodes[:, None, :], y_nodes[:, :, None])
+    weights = y_weights[:, :, None] * x_weights[:, None, :]
+    values = model(xx, yy)
+    result[in_core] = np.sum(values * weights, axis=(1, 2))
     return result
