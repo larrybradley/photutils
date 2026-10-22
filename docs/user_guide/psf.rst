@@ -528,12 +528,13 @@ PSF Photometry Examples
 
 Let's start with a simple example using simulated stars whose PSF is
 assumed to be Gaussian. We'll create a synthetic image using tools
-provided by the `photutils.psf` and :ref:`photutils.datasets <datasets>`
+provided by the `photutils.psf` and `photutils.simulation`
 modules::
 
     >>> import numpy as np
-    >>> from photutils.datasets import make_noise_image
-    >>> from photutils.psf import CircularGaussianPRF, make_psf_model_image
+    >>> from photutils.psf import CircularGaussianPRF
+    >>> from photutils.simulation import (make_noise_image,
+    ...                                   make_psf_model_image)
     >>> psf_model = CircularGaussianPRF(flux=1, fwhm=2.7)
     >>> psf_shape = (9, 9)
     >>> n_sources = 10
@@ -551,8 +552,8 @@ Let's plot the image:
 .. plot::
 
     import matplotlib.pyplot as plt
-    from photutils.datasets import make_noise_image
-    from photutils.psf import CircularGaussianPRF, make_psf_model_image
+    from photutils.psf import CircularGaussianPRF
+    from photutils.simulation import make_noise_image, make_psf_model_image
 
     psf_model = CircularGaussianPRF(flux=1, fwhm=2.7)
     psf_shape = (9, 9)
@@ -656,10 +657,9 @@ and plot it:
     import matplotlib.pyplot as plt
     import numpy as np
     from astropy.visualization import simple_norm
-    from photutils.datasets import make_noise_image
     from photutils.detection import DAOStarFinder
-    from photutils.psf import (CircularGaussianPRF, PSFPhotometry,
-                               make_psf_model_image)
+    from photutils.psf import CircularGaussianPRF, PSFPhotometry
+    from photutils.simulation import make_noise_image, make_psf_model_image
 
     psf_model = CircularGaussianPRF(flux=1, fwhm=2.7)
     psf_shape = (9, 9)
@@ -764,10 +764,9 @@ the location of the source that was fit and subtracted.
     from astropy.table import QTable
     from astropy.visualization import simple_norm
     from photutils.aperture import CircularAperture
-    from photutils.datasets import make_noise_image
     from photutils.detection import DAOStarFinder
-    from photutils.psf import (CircularGaussianPRF, PSFPhotometry,
-                               make_psf_model_image)
+    from photutils.psf import CircularGaussianPRF, PSFPhotometry
+    from photutils.simulation import make_noise_image, make_psf_model_image
 
     psf_model = CircularGaussianPRF(flux=1, fwhm=2.7)
     psf_shape = (9, 9)

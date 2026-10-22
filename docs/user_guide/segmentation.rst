@@ -27,9 +27,9 @@ before thresholding to smooth the noise and maximize the detectability
 of objects with a shape similar to the filter kernel.
 
 Let's start by making a synthetic image provided by the
-:ref:`photutils.datasets <datasets>` module::
+`photutils.simulation` module::
 
-    >>> from photutils.datasets import make_100gaussians_image
+    >>> from photutils.simulation import make_100gaussians_image
     >>> data = make_100gaussians_image()
 
 Next, we need to subtract the background from the image. In this
@@ -103,8 +103,8 @@ image showing the detected sources:
     from astropy.convolution import convolve
     from astropy.visualization import simple_norm
     from photutils.background import Background2D, MedianBackground
-    from photutils.datasets import make_100gaussians_image
     from photutils.segmentation import detect_sources, make_2dgaussian_kernel
+    from photutils.simulation import make_100gaussians_image
 
     data = make_100gaussians_image()
 
@@ -192,9 +192,9 @@ deblended segmentation image:
     import matplotlib.pyplot as plt
     from astropy.convolution import convolve
     from photutils.background import Background2D, MedianBackground
-    from photutils.datasets import make_100gaussians_image
     from photutils.segmentation import (deblend_sources, detect_sources,
                                         make_2dgaussian_kernel)
+    from photutils.simulation import make_100gaussians_image
 
     data = make_100gaussians_image()
 
@@ -225,9 +225,9 @@ Let's plot one of the deblended sources:
     import matplotlib.pyplot as plt
     from astropy.convolution import convolve
     from photutils.background import Background2D, MedianBackground
-    from photutils.datasets import make_100gaussians_image
     from photutils.segmentation import (deblend_sources, detect_sources,
                                         make_2dgaussian_kernel)
+    from photutils.simulation import make_100gaussians_image
 
     data = make_100gaussians_image()
 
@@ -403,9 +403,9 @@ segmentation image and the science image:
     from astropy.convolution import convolve
     from astropy.visualization import simple_norm
     from photutils.background import Background2D, MedianBackground
-    from photutils.datasets import make_100gaussians_image
     from photutils.segmentation import (SourceFinder,
                                         make_2dgaussian_kernel)
+    from photutils.simulation import make_100gaussians_image
 
     data = make_100gaussians_image()
 
@@ -583,9 +583,9 @@ of each source) on the data:
     from astropy.convolution import convolve
     from astropy.visualization import simple_norm
     from photutils.background import Background2D, MedianBackground
-    from photutils.datasets import make_100gaussians_image
     from photutils.segmentation import (SourceCatalog, SourceFinder,
                                         make_2dgaussian_kernel)
+    from photutils.simulation import make_100gaussians_image
 
     data = make_100gaussians_image()
 

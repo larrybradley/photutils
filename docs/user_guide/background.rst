@@ -50,7 +50,7 @@ As an example, we load a synthetic image composed of 100 sources with
 a Gaussian-distributed background whose mean is 5 and standard
 deviation is 2::
 
-    >>> from photutils.datasets import make_100gaussians_image
+    >>> from photutils.simulation import make_100gaussians_image
     >>> data = make_100gaussians_image()
 
 Let's plot the image:
@@ -67,7 +67,7 @@ Let's plot the image:
 
     import matplotlib.pyplot as plt
     from astropy.visualization import simple_norm
-    from photutils.datasets import make_100gaussians_image
+    from photutils.simulation import make_100gaussians_image
 
     data = make_100gaussians_image()
     norm = simple_norm(data, 'sqrt', percent=99.5)
@@ -231,7 +231,7 @@ data, the Moran's I map, and the source mask:
     import matplotlib.pyplot as plt
     from astropy.visualization import simple_norm
     from photutils.background import make_morans_i_map, make_morans_i_mask
-    from photutils.datasets import make_100gaussians_image
+    from photutils.simulation import make_100gaussians_image
 
     data = make_100gaussians_image()
     stat = make_morans_i_map(data)
@@ -401,7 +401,7 @@ Let's plot the image:
     import matplotlib.pyplot as plt
     import numpy as np
     from astropy.visualization import simple_norm
-    from photutils.datasets import make_100gaussians_image
+    from photutils.simulation import make_100gaussians_image
 
     data = make_100gaussians_image()
     ny, nx = data.shape
@@ -435,7 +435,7 @@ Let's plot the source mask:
     import matplotlib.pyplot as plt
     import numpy as np
     from photutils.background import make_morans_i_mask
-    from photutils.datasets import make_100gaussians_image
+    from photutils.simulation import make_100gaussians_image
 
     data = make_100gaussians_image()
     ny, nx = data.shape
@@ -502,7 +502,7 @@ Let's plot the background image:
     from astropy.stats import SigmaClip
     from photutils.background import (Background2D, MedianBackground,
                                       make_morans_i_mask)
-    from photutils.datasets import make_100gaussians_image
+    from photutils.simulation import make_100gaussians_image
 
     data = make_100gaussians_image()
     ny, nx = data.shape
@@ -536,7 +536,7 @@ and the background-subtracted image:
     from astropy.visualization import simple_norm
     from photutils.background import (Background2D, MedianBackground,
                                       make_morans_i_mask)
-    from photutils.datasets import make_100gaussians_image
+    from photutils.simulation import make_100gaussians_image
 
     data = make_100gaussians_image()
     ny, nx = data.shape
@@ -652,7 +652,7 @@ plot it:
     import matplotlib.pyplot as plt
     import numpy as np
     from astropy.visualization import simple_norm
-    from photutils.datasets import make_100gaussians_image
+    from photutils.simulation import make_100gaussians_image
     from scipy.ndimage import rotate
 
     data = make_100gaussians_image()
@@ -705,7 +705,7 @@ coverage are set to ``fill_value``:
     import matplotlib.pyplot as plt
     import numpy as np
     from photutils.background import Background2D, make_morans_i_mask
-    from photutils.datasets import make_100gaussians_image
+    from photutils.simulation import make_100gaussians_image
     from scipy.ndimage import rotate
 
     data = make_100gaussians_image()
@@ -738,7 +738,7 @@ Finally, let's subtract the background from the image and plot it:
     import numpy as np
     from astropy.visualization import simple_norm
     from photutils.background import Background2D, make_morans_i_mask
-    from photutils.datasets import make_100gaussians_image
+    from photutils.simulation import make_100gaussians_image
     from scipy.ndimage import rotate
 
     data = make_100gaussians_image()
@@ -791,7 +791,7 @@ masked pixels for ``exclude_percentile``.
     import numpy as np
     from astropy.visualization import simple_norm
     from photutils.background import Background2D, make_morans_i_mask
-    from photutils.datasets import make_100gaussians_image
+    from photutils.simulation import make_100gaussians_image
     from scipy.ndimage import rotate
 
     data = make_100gaussians_image()

@@ -20,7 +20,7 @@ For this example, let's create a simple simulated galaxy image::
 
     >>> import numpy as np
     >>> from astropy.modeling.models import Gaussian2D
-    >>> from photutils.datasets import make_noise_image
+    >>> from photutils.simulation import make_noise_image
 
     >>> g = Gaussian2D(100.0, 75, 75, 20, 12, theta=np.deg2rad(40.0))
     >>> ny = nx = 150
@@ -34,7 +34,7 @@ For this example, let's create a simple simulated galaxy image::
     import matplotlib.pyplot as plt
     import numpy as np
     from astropy.modeling.models import Gaussian2D
-    from photutils.datasets import make_noise_image
+    from photutils.simulation import make_noise_image
 
     g = Gaussian2D(100.0, 75, 75, 20, 12, theta=np.deg2rad(40.0))
     ny = nx = 150
@@ -73,8 +73,8 @@ Let's show this initial ellipse guess:
     import numpy as np
     from astropy.modeling.models import Gaussian2D
     from photutils.aperture import EllipticalAperture
-    from photutils.datasets import make_noise_image
     from photutils.isophote import EllipseGeometry
+    from photutils.simulation import make_noise_image
 
     g = Gaussian2D(100.0, 75, 75, 20, 12, theta=np.deg2rad(40.0))
     ny = nx = 150
@@ -155,8 +155,8 @@ position as a function of the semimajor axis length:
     import matplotlib.pyplot as plt
     import numpy as np
     from astropy.modeling.models import Gaussian2D
-    from photutils.datasets import make_noise_image
     from photutils.isophote import Ellipse, EllipseGeometry
+    from photutils.simulation import make_noise_image
 
     g = Gaussian2D(100.0, 75, 75, 20, 12, theta=np.deg2rad(40.0))
     ny = nx = 150
@@ -209,9 +209,9 @@ the elliptical model image, and the residual image:
     import matplotlib.pyplot as plt
     import numpy as np
     from astropy.modeling.models import Gaussian2D
-    from photutils.datasets import make_noise_image
     from photutils.isophote import (Ellipse, EllipseGeometry,
                                     build_ellipse_model)
+    from photutils.simulation import make_noise_image
 
     g = Gaussian2D(100.0, 75, 75, 20, 12, theta=np.deg2rad(40.0))
     ny = nx = 150
