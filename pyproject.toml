@@ -178,6 +178,7 @@ markers = [
     # Registered here so that the markers work without pytest-run-parallel
     'thread_unsafe: run the test in a single thread with pytest-run-parallel',
     'iterations(n): run the test n times per thread with pytest-run-parallel',
+    'force_parallel_threads(n): run the test in n threads with pytest-run-parallel',
 ]
 asdf_schema_root = 'photutils/asdf/resources/schemas'
 asdf_schema_tests_enabled = true
