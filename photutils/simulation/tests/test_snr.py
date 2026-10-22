@@ -102,8 +102,8 @@ def test_optimal_snr_convolved_matches_image(oversample):
 
 def test_optimal_snr_convolved_default_n_nodes():
     """
-    Test that the default n_nodes of None evaluates the source at the
-    cell centers, as make_convolved_model_image does.
+    Test that the default n_nodes with a PSF model is the default of
+    make_convolved_model_image.
     """
     params = make_sersic_params()[:1]
     shape = (60, 64)
@@ -111,8 +111,7 @@ def test_optimal_snr_convolved_default_n_nodes():
     source = SersicSource()
     psf_model = CircularGaussianPRF(fwhm=3.0)
     result = optimal_snr(source, params, error, psf_model=psf_model)
-    img = make_convolved_model_image(shape, source, params, psf_model,
-                                     n_nodes=None)
+    img = make_convolved_model_image(shape, source, params, psf_model)
     assert_allclose(result[0], np.sqrt(np.sum(img**2 / error**2)),
                     rtol=1e-12)
 
@@ -241,7 +240,7 @@ def test_optimal_snr_bad_error_pixels(kwargs):
     error = np.full(shape, 2.0)
     if kwargs:
         img = make_convolved_model_image(shape, model, params,
-                                         kwargs['psf_model'], n_nodes=None)
+                                         kwargs['psf_model'])
     else:
         img = make_model_image(shape, model, params)
 
@@ -258,9 +257,9 @@ def test_optimal_snr_bad_error_pixels(kwargs):
     assert np.isfinite(result[0])
     assert_allclose(result[0], expected, rtol=1e-12)
 
-    # A source whose pixels are all excluded has no signal to measure
+    # A source whose pixels are all excluded cannot be measured
     error[:] = 0.0
-    assert_array_equal(optimal_snr(model, params, error, **kwargs), 0.0)
+    assert np.all(np.isnan(optimal_snr(model, params, error, **kwargs)))
 
 
 def test_optimal_snr_empty_table():

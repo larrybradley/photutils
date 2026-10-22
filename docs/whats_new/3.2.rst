@@ -109,8 +109,7 @@ same rendering and an image of the pixel errors::
     >>> image = make_convolved_model_image(shape, SersicSource(), params,
     ...                                    psf_model)
     >>> error = np.full(shape, 0.5)
-    >>> snr = optimal_snr(SersicSource(), params, error, psf_model=psf_model,
-    ...                   n_nodes=4)
+    >>> snr = optimal_snr(SersicSource(), params, error, psf_model=psf_model)
 
 
 .. _whatsnew-3.2-api-changes:

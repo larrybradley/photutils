@@ -97,11 +97,14 @@ def optimal_snr(model, params_table, error, *, psf_model=None, n_nodes=None,
     n_nodes : `None` or int, optional
         The number of Gauss-Legendre nodes per axis used to integrate
         each pixel, or each cell if ``psf_model`` is given. If `None`,
-        the source model is evaluated at the center of each pixel or
-        cell. This is not the default of
-        `~photutils.simulation.make_convolved_model_image`, so pass
-        ``n_nodes=4`` to match its default. See
-        `~photutils.simulation.make_model_image`.
+        the default of the function that renders the sources is used.
+        That is point evaluation at the pixel centers if ``psf_model``
+        is `None`, as for `~photutils.simulation.make_model_image`,
+        and 4 nodes if ``psf_model`` is given, as for
+        `~photutils.simulation.make_convolved_model_image`. Point
+        evaluation is not accurate for a source model that is not
+        integrated over the pixels, so pass an integer for such a model
+        without ``psf_model``.
 
     oversample : int, optional
         The number of grid points per pixel along each axis of
@@ -113,11 +116,11 @@ def optimal_snr(model, params_table, error, *, psf_model=None, n_nodes=None,
     snr : 1D `~numpy.ndarray`
         The signal-to-noise ratio of each source, in the order of the
         rows of ``params_table``. The SNR is NaN for a row that has a
-        nonfinite model parameter and for a source that does not
-        overlap the image. As for the image renderers, a source outside
+        nonfinite model parameter, for a source that does not overlap
+        the image, As for the image renderers, a source outside
         the image whose light reaches the image through the ``psf_model``
-        has an SNR. The SNR is 0 for a source whose overlap with the
-        image has no pixel with a positive, finite error.
+        has an SNR. The SNR is also NaN for a source whose overlap with
+        the image has no pixel with a positive, finite error.
 
     Raises
     ------
@@ -171,6 +174,8 @@ def optimal_snr(model, params_table, error, *, psf_model=None, n_nodes=None,
     shape = error.shape
 
     n_nodes = validate_n_nodes(n_nodes)
+    if n_nodes is None and psf_model is not None:
+        n_nodes = 4
     _validate_model_and_table(model, params_table)
     if psf_model is not None:
         validate_oversample(oversample)
@@ -228,6 +233,7 @@ def optimal_snr(model, params_table, error, *, psf_model=None, n_nodes=None,
 
         use = good[slices]
         signal = cutout[slices_cutout][use]
-        snr[i] = np.sqrt(np.sum(signal**2 / error[slices][use]**2))
+        if signal.size > 0:
+            snr[i] = np.sqrt(np.sum(signal**2 / error[slices][use]**2))
 
     return snr
