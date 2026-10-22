@@ -5,8 +5,9 @@ Tests for the params module.
 
 import numpy as np
 import pytest
-from astropy.table import QTable, Table
+from astropy.table import QTable, Table, vstack
 from astropy.utils.exceptions import AstropyUserWarning
+from numpy.testing import assert_allclose
 
 from photutils.psf import CircularGaussianPSF
 from photutils.simulation import (make_model_params, make_random_models_table,
@@ -119,6 +120,73 @@ def test_make_model_params_reserved_names():
     params = make_model_params(shape, 5, x_name='x_mean', y_name='y_mean',
                                x_0=(1, 2))
     assert params.colnames == ['id', 'x_mean', 'y_mean', 'x_0']
+
+
+def test_log_params_distribution():
+    """
+    Test that ``log_params`` samples the named parameters uniformly in
+    log10.
+    """
+    params = make_model_params((10000, 10000), 20000, flux=(1, 1e4),
+                               min_separation=0, log_params=('flux',),
+                               seed=0)
+    flux = params['flux']
+    assert np.all(flux >= 1)
+    assert np.all(flux < 1e4)
+    assert_allclose(np.mean(np.log10(flux)), 2.0, atol=0.03)
+
+
+def test_log_params_unchanged_without():
+    """
+    Test that the output without ``log_params`` matches the docstring
+    example exactly.
+    """
+    params = make_model_params((100, 100), 5, flux=(100, 500),
+                               min_separation=3, border_size=10, seed=0)
+    assert_allclose(params['x_0'], [60.956935, 31.582937, 13.277882,
+                                    11.322211, 75.061619], rtol=1e-7)
+    assert_allclose(params['y_0'], [72.967865, 29.149555, 80.118738,
+                                    14.685443, 36.889365], rtol=1e-7)
+    assert_allclose(params['flux'], [291.99517, 192.94917, 420.75223,
+                                     469.41206, 206.45211], rtol=1e-7)
+
+
+def test_log_params_errors():
+    """
+    Test that invalid ``log_params`` values raise an error.
+    """
+    match = 'log_params name "r_eff" is not a keyword parameter'
+    with pytest.raises(ValueError, match=match):
+        make_model_params((100, 100), 5, flux=(1, 10),
+                          log_params=('r_eff',))
+
+    match = 'bounds of log parameter "flux" must be positive'
+    with pytest.raises(ValueError, match=match):
+        make_model_params((100, 100), 5, flux=(0, 10),
+                          log_params=('flux',))
+    with pytest.raises(ValueError, match=match):
+        make_model_params((100, 100), 5, flux=(-1, 10),
+                          log_params=('flux',))
+
+
+def test_kind_column():
+    """
+    Test that ``kind`` adds a ``kind`` column after the parameter
+    columns, so tables of different populations can be stacked.
+    """
+    stars = make_model_params((100, 100), 3, flux=(1, 10), kind='star',
+                              seed=0)
+    assert stars.colnames == ['id', 'x_0', 'y_0', 'flux', 'kind']
+    assert np.all(stars['kind'] == 'star')
+
+    gals = make_model_params((100, 100), 2, flux=(1, 10), r_eff=(1, 3),
+                             kind='galaxy', seed=1)
+    combined = vstack([stars, gals])
+    assert len(combined) == 5
+    assert list(combined['kind']) == ['star'] * 3 + ['galaxy'] * 2
+
+    params = make_model_params((100, 100), 3, flux=(1, 10), seed=0)
+    assert 'kind' not in params.colnames
 
 
 def test_make_random_models_table():
