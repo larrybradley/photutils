@@ -182,7 +182,7 @@ class AperturePhotometry:
     Examples
     --------
     >>> import numpy as np
-    >>> from photutils.datasets import make_4gaussians_image
+    >>> from photutils.simulation import make_4gaussians_image
     >>> from photutils.aperture import AperturePhotometry, CircularAperture
     >>> data = make_4gaussians_image()
     >>> error = 0.1 * np.ones(data.shape)  # simple background-only error

@@ -157,7 +157,7 @@ class SourceFinder:
         from astropy.convolution import convolve
         from astropy.visualization import simple_norm
         from photutils.background import Background2D, MedianBackground
-        from photutils.datasets import make_100gaussians_image
+        from photutils.simulation import make_100gaussians_image
         from photutils.segmentation import (SourceFinder,
                                             make_2dgaussian_kernel)
 

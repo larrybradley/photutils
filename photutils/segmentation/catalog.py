@@ -1481,7 +1481,7 @@ class SourceCatalog:
 
         Examples
         --------
-        >>> from photutils.datasets import make_4gaussians_image
+        >>> from photutils.simulation import make_4gaussians_image
         >>> from photutils.segmentation import (SourceCatalog,
         ...                                     detect_sources)
         >>> data = make_4gaussians_image().astype('float32')

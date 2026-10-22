@@ -83,7 +83,7 @@ def centroid_com(data, mask=None):
     Examples
     --------
     >>> import numpy as np
-    >>> from photutils.datasets import make_4gaussians_image
+    >>> from photutils.simulation import make_4gaussians_image
     >>> from photutils.centroids import centroid_com
     >>> data = make_4gaussians_image()
     >>> data -= np.median(data[0:30, 0:125])
@@ -97,7 +97,7 @@ def centroid_com(data, mask=None):
         import matplotlib.pyplot as plt
         import numpy as np
         from photutils.centroids import centroid_com
-        from photutils.datasets import make_4gaussians_image
+        from photutils.simulation import make_4gaussians_image
 
         data = make_4gaussians_image()
         data -= np.median(data[0:30, 0:125])
@@ -265,7 +265,7 @@ def centroid_symmetry(data, *, mask=None, radius=None):
     --------
     >>> import numpy as np
     >>> from photutils.centroids import centroid_symmetry
-    >>> from photutils.datasets import make_4gaussians_image
+    >>> from photutils.simulation import make_4gaussians_image
     >>> data = make_4gaussians_image()
     >>> data -= np.median(data[0:30, 0:125])
     >>> data = data[40:80, 70:110]
@@ -278,7 +278,7 @@ def centroid_symmetry(data, *, mask=None, radius=None):
         import matplotlib.pyplot as plt
         import numpy as np
         from photutils.centroids import centroid_symmetry
-        from photutils.datasets import make_4gaussians_image
+        from photutils.simulation import make_4gaussians_image
 
         data = make_4gaussians_image()
         data -= np.median(data[0:30, 0:125])
@@ -697,7 +697,7 @@ def centroid_quadratic(data, mask=None, fit_boxsize=5, xpeak=None,
     Examples
     --------
     >>> import numpy as np
-    >>> from photutils.datasets import make_4gaussians_image
+    >>> from photutils.simulation import make_4gaussians_image
     >>> from photutils.centroids import centroid_quadratic
     >>> data = make_4gaussians_image()
     >>> data -= np.median(data[0:30, 0:125])
@@ -711,7 +711,7 @@ def centroid_quadratic(data, mask=None, fit_boxsize=5, xpeak=None,
         import matplotlib.pyplot as plt
         import numpy as np
         from photutils.centroids import centroid_quadratic
-        from photutils.datasets import make_4gaussians_image
+        from photutils.simulation import make_4gaussians_image
 
         data = make_4gaussians_image()
         data -= np.median(data[0:30, 0:125])
@@ -890,7 +890,7 @@ class CentroidQuadratic:
     Examples
     --------
     >>> import numpy as np
-    >>> from photutils.datasets import make_4gaussians_image
+    >>> from photutils.simulation import make_4gaussians_image
     >>> from photutils.centroids import CentroidQuadratic
     >>> data = make_4gaussians_image()
     >>> data -= np.median(data[0:30, 0:125])
@@ -1062,7 +1062,7 @@ def centroid_sources(data, xpos, ypos, box_size=11, footprint=None,
     --------
     >>> import numpy as np
     >>> from photutils.centroids import centroid_2dg, centroid_sources
-    >>> from photutils.datasets import make_4gaussians_image
+    >>> from photutils.simulation import make_4gaussians_image
 
     >>> data = make_4gaussians_image()
     >>> data -= np.median(data[0:30, 0:125])
@@ -1080,7 +1080,7 @@ def centroid_sources(data, xpos, ypos, box_size=11, footprint=None,
         import matplotlib.pyplot as plt
         import numpy as np
         from photutils.centroids import centroid_2dg, centroid_sources
-        from photutils.datasets import make_4gaussians_image
+        from photutils.simulation import make_4gaussians_image
 
         data = make_4gaussians_image()
         data -= np.median(data[0:30, 0:125])

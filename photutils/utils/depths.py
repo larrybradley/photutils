@@ -180,7 +180,7 @@ class ImageDepth:
     --------
     >>> import numpy as np
     >>> from astropy.convolution import convolve
-    >>> from photutils.datasets import make_100gaussians_image
+    >>> from photutils.simulation import make_100gaussians_image
     >>> from photutils.segmentation import SourceFinder, make_2dgaussian_kernel
     >>> from photutils.utils import ImageDepth
     >>> bkg = 5.0
@@ -209,7 +209,7 @@ class ImageDepth:
         import matplotlib.pyplot as plt
         from astropy.convolution import convolve
         from astropy.visualization import simple_norm
-        from photutils.datasets import make_100gaussians_image
+        from photutils.simulation import make_100gaussians_image
         from photutils.segmentation import SourceFinder, make_2dgaussian_kernel
         from photutils.utils import ImageDepth
 

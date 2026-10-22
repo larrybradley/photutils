@@ -69,7 +69,7 @@ def centroid_1dg(data, error=None, mask=None):
     Examples
     --------
     >>> import numpy as np
-    >>> from photutils.datasets import make_4gaussians_image
+    >>> from photutils.simulation import make_4gaussians_image
     >>> from photutils.centroids import centroid_1dg
     >>> data = make_4gaussians_image()
     >>> data -= np.median(data[0:30, 0:125])
@@ -83,7 +83,7 @@ def centroid_1dg(data, error=None, mask=None):
         import matplotlib.pyplot as plt
         import numpy as np
         from photutils.centroids import centroid_1dg
-        from photutils.datasets import make_4gaussians_image
+        from photutils.simulation import make_4gaussians_image
 
         data = make_4gaussians_image()
         data -= np.median(data[0:30, 0:125])
@@ -181,7 +181,7 @@ def centroid_2dg(data, error=None, mask=None):
     Examples
     --------
     >>> import numpy as np
-    >>> from photutils.datasets import make_4gaussians_image
+    >>> from photutils.simulation import make_4gaussians_image
     >>> from photutils.centroids import centroid_2dg
     >>> data = make_4gaussians_image()
     >>> data -= np.median(data[0:30, 0:125])
@@ -195,7 +195,7 @@ def centroid_2dg(data, error=None, mask=None):
         import matplotlib.pyplot as plt
         import numpy as np
         from photutils.centroids import centroid_2dg
-        from photutils.datasets import make_4gaussians_image
+        from photutils.simulation import make_4gaussians_image
 
         data = make_4gaussians_image()
         data -= np.median(data[0:30, 0:125])

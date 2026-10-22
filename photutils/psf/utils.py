@@ -260,8 +260,8 @@ def fit_2dgaussian(data, *, xypos=None, fwhm=None, fix_fwhm=True,
     Fit a 2D Gaussian model to multiple sources in an image:
 
     >>> import numpy as np
-    >>> from photutils.psf import (CircularGaussianPRF, fit_2dgaussian,
-    ...                            make_psf_model_image)
+    >>> from photutils.psf import CircularGaussianPRF, fit_2dgaussian
+    >>> from photutils.simulation import make_psf_model_image
     >>> model = CircularGaussianPRF()
     >>> data, sources = make_psf_model_image((100, 100), model, 5,
     ...                                      min_separation=25,
@@ -501,8 +501,8 @@ def fit_fwhm(data, *, xypos=None, fwhm=None, fit_shape=None, mask=None,
     Fit the FWHMs of multiple sources in an image:
 
     >>> import numpy as np
-    >>> from photutils.psf import (CircularGaussianPRF, fit_fwhm,
-    ...                            make_psf_model_image)
+    >>> from photutils.psf import CircularGaussianPRF, fit_fwhm
+    >>> from photutils.simulation import make_psf_model_image
     >>> model = CircularGaussianPRF()
     >>> data, sources = make_psf_model_image((100, 100), model, 5,
     ...                                      min_separation=25,
