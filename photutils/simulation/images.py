@@ -172,7 +172,8 @@ def make_model_image(shape, model, params_table, *, model_shape=None,
         pixel. A value of 4 gives about 0.1% accuracy relative to the
         peak for typical galaxies. A value of 8 or more is needed for
         Sersic indices of 6 or more and for effective radii below 0.5
-        pixels. The evaluation time scales as ``n_nodes`` squared.
+        pixels. The number of model evaluations scales as ``n_nodes``
+        squared.
 
     progress_bar : bool, optional
         Whether to display a progress bar while adding the sources
