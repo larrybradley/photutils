@@ -235,10 +235,8 @@ def optimal_snr(model, params_table, error, *, psf_model=None, n_nodes=None,
                                                   x0, y0,
                                                   oversample=oversample,
                                                   n_nodes=n_nodes)
-            overlap = trim_slices(out_slices, shape)
-            if overlap is None:
-                continue
-            slices, slices_cutout = overlap
+            # The reach check and the trim guarantee an overlap
+            slices, slices_cutout = trim_slices(out_slices, shape)
 
         use = good[slices]
         signal = cutout[slices_cutout][use]

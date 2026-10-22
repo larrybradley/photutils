@@ -532,10 +532,8 @@ def make_convolved_model_image(shape, model, params_table, psf_model, *,
         out_slices, cutout = render_convolved(model, psf_model, slices, x0,
                                               y0, oversample=oversample,
                                               n_nodes=n_nodes)
-        overlap = trim_slices(out_slices, shape)
-        if overlap is None:
-            continue
-        slices_image, slices_cutout = overlap
+        # The reach check and the trim guarantee an overlap
+        slices_image, slices_cutout = trim_slices(out_slices, shape)
         image[slices_image] += cutout[slices_cutout]
 
     return image
