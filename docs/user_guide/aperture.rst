@@ -154,7 +154,7 @@ method. The following example shows how to convert a
 :class:`~photutils.aperture.SkyCircularAperture` using a sample
 :class:`~astropy.wcs.WCS` object::
 
-    >>> from photutils.datasets import make_wcs
+    >>> from photutils.simulation import make_wcs
     >>> wcs = make_wcs((100, 100))
     >>> aperture = CircularAperture((12.3, 18.7), r=4.0)
     >>> sky_aperture = aperture.to_sky(wcs)
@@ -930,7 +930,7 @@ background as the sigma-clipped median value::
 
     >>> from astropy.stats import sigma_clipped_stats
     >>> from photutils.aperture import ApertureStats, CircularAperture
-    >>> from photutils.datasets import make_4gaussians_image
+    >>> from photutils.simulation import make_4gaussians_image
 
     >>> data = make_4gaussians_image()
     >>> _, median, _ = sigma_clipped_stats(data, sigma=3.0)
@@ -1014,7 +1014,7 @@ are shown below.
 
 We begin by generating a more realistic example dataset::
 
-    >>> from photutils.datasets import make_100gaussians_image
+    >>> from photutils.simulation import make_100gaussians_image
     >>> data = make_100gaussians_image()
     >>> error = 0.1 * np.ones(data.shape)  # simple background-only error
 
@@ -1040,7 +1040,7 @@ annuli (red) overlaid on a cutout containing the three sources:
     import matplotlib.pyplot as plt
     from astropy.visualization import simple_norm
     from photutils.aperture import CircularAnnulus, CircularAperture
-    from photutils.datasets import make_100gaussians_image
+    from photutils.simulation import make_100gaussians_image
 
     data = make_100gaussians_image()
     positions = [(145.1, 168.3), (84.5, 224.1), (48.3, 200.3)]
@@ -1174,7 +1174,7 @@ defines where the mask should be applied to an image.
 We begin by creating a circular annulus aperture::
 
     >>> from photutils.aperture import CircularAnnulus
-    >>> from photutils.datasets import make_100gaussians_image
+    >>> from photutils.simulation import make_100gaussians_image
     >>> data = make_100gaussians_image()
     >>> positions = [(145.1, 168.3), (84.5, 224.1), (48.3, 200.3)]
     >>> aperture = CircularAnnulus(positions, r_in=10, r_out=15)
@@ -1198,7 +1198,7 @@ The following figure shows the first aperture mask:
 
     import matplotlib.pyplot as plt
     from photutils.aperture import CircularAnnulus, CircularAperture
-    from photutils.datasets import make_100gaussians_image
+    from photutils.simulation import make_100gaussians_image
 
     data = make_100gaussians_image()
     positions = [(145.1, 168.3), (84.5, 224.1), (48.3, 200.3)]
@@ -1221,7 +1221,7 @@ result:
 
     import matplotlib.pyplot as plt
     from photutils.aperture import CircularAnnulus, CircularAperture
-    from photutils.datasets import make_100gaussians_image
+    from photutils.simulation import make_100gaussians_image
 
     data = make_100gaussians_image()
     positions = [(145.1, 168.3), (84.5, 224.1), (48.3, 200.3)]
@@ -1250,7 +1250,7 @@ method:
 
     import matplotlib.pyplot as plt
     from photutils.aperture import CircularAnnulus, CircularAperture
-    from photutils.datasets import make_100gaussians_image
+    from photutils.simulation import make_100gaussians_image
 
     data = make_100gaussians_image()
     positions = [(145.1, 168.3), (84.5, 224.1), (48.3, 200.3)]

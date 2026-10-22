@@ -53,10 +53,11 @@ within a sample image.
 
 The first step is to generate a simulated astronomical image that
 contains sources modeled as 2D Gaussians, which we will accomplish using
-the `~photutils.psf.make_psf_model_image` function::
+the `~photutils.simulation.make_psf_model_image` function::
 
-    >>> from photutils.datasets import make_noise_image
-    >>> from photutils.psf import CircularGaussianPRF, make_psf_model_image
+    >>> from photutils.psf import CircularGaussianPRF
+    >>> from photutils.simulation import (make_noise_image,
+    ...                                   make_psf_model_image)
     >>> shape = (256, 256)
     >>> fwhm = 4.7
     >>> psf_model = CircularGaussianPRF(fwhm=fwhm)
@@ -71,11 +72,11 @@ the `~photutils.psf.make_psf_model_image` function::
     >>> noise = make_noise_image(shape, mean=0, stddev=2, seed=123)
     >>> data += noise
 
-The `~photutils.psf.make_psf_model_image` function provides two outputs:
-the image itself, which we call ``data``, and a table containing the
-positions and fluxes of the stars, which we call ``stars``. The x and y
-coordinates of the stars are located in the ``x_0`` and ``y_0`` columns
-of this table.
+The `~photutils.simulation.make_psf_model_image` function provides two
+outputs: the image itself, which we call ``data``, and a table
+containing the positions and fluxes of the stars, which we call
+``stars``. The x and y coordinates of the stars are located in the
+``x_0`` and ``y_0`` columns of this table.
 
 Let's display the image:
 
@@ -88,8 +89,8 @@ Let's display the image:
 .. plot::
 
     import matplotlib.pyplot as plt
-    from photutils.datasets import make_noise_image
-    from photutils.psf import CircularGaussianPRF, make_psf_model_image
+    from photutils.psf import CircularGaussianPRF
+    from photutils.simulation import make_noise_image, make_psf_model_image
 
     shape = (256, 256)
     fwhm = 4.7
@@ -227,9 +228,8 @@ circles around each star to show which stars have been grouped together:
 
     import matplotlib.pyplot as plt
     import numpy as np
-    from photutils.datasets import make_noise_image
-    from photutils.psf import (CircularGaussianPRF, SourceGrouper,
-                               make_psf_model_image)
+    from photutils.psf import CircularGaussianPRF, SourceGrouper
+    from photutils.simulation import make_noise_image, make_psf_model_image
 
     shape = (256, 256)
     psf_shape = (11, 11)
@@ -271,9 +271,8 @@ keyword:
 
     import matplotlib.pyplot as plt
     import numpy as np
-    from photutils.datasets import make_noise_image
-    from photutils.psf import (CircularGaussianPRF, SourceGrouper,
-                               make_psf_model_image)
+    from photutils.psf import CircularGaussianPRF, SourceGrouper
+    from photutils.simulation import make_noise_image, make_psf_model_image
 
     shape = (256, 256)
     psf_shape = (11, 11)

@@ -71,7 +71,7 @@ sigma-clipped statistics::
     >>> import numpy as np
     >>> from astropy.io import fits
     >>> from astropy.stats import sigma_clipped_stats
-    >>> from photutils.datasets import make_noise_image
+    >>> from photutils.simulation import make_noise_image
     >>> url = ('https://github.com/astropy/photutils-datasets/raw/main/'
     ...        'data/hst_wfc3ir_f160w_simulated_starfield.fits')
     >>> data = fits.getdata(url)  # doctest: +REMOTE_DATA
@@ -138,8 +138,8 @@ Let's plot the image and mark the location of detected sources:
     from astropy.stats import sigma_clipped_stats
     from astropy.visualization import simple_norm
     from photutils.aperture import CircularAperture
-    from photutils.datasets import make_noise_image
     from photutils.detection import DAOStarFinder
+    from photutils.simulation import make_noise_image
 
     url = ('https://github.com/astropy/photutils-datasets/raw/main/'
            'data/hst_wfc3ir_f160w_simulated_starfield.fits')
@@ -185,8 +185,8 @@ rectangular regions. No sources will be detected in the masked regions:
     from astropy.stats import sigma_clipped_stats
     from astropy.visualization import simple_norm
     from photutils.aperture import CircularAperture, RectangularAperture
-    from photutils.datasets import make_noise_image
     from photutils.detection import DAOStarFinder
+    from photutils.simulation import make_noise_image
 
     url = ('https://github.com/astropy/photutils-datasets/raw/main/'
            'data/hst_wfc3ir_f160w_simulated_starfield.fits')
@@ -268,8 +268,8 @@ Let's plot the location of the detected peaks in the image:
     from astropy.stats import sigma_clipped_stats
     from astropy.visualization import simple_norm
     from photutils.aperture import CircularAperture
-    from photutils.datasets import make_noise_image
     from photutils.detection import find_peaks
+    from photutils.simulation import make_noise_image
 
     url = ('https://github.com/astropy/photutils-datasets/raw/main/'
            'data/hst_wfc3ir_f160w_simulated_starfield.fits')

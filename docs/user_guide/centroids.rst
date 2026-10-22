@@ -50,16 +50,16 @@ Let's extract a single object from a synthetic dataset and find its
 centroid with each of these methods. First, let's create the data::
 
     >>> import numpy as np
-    >>> from photutils.datasets import make_4gaussians_image
     >>> from photutils.centroids import (centroid_1dg, centroid_2dg,
     ...                                  centroid_com, centroid_quadratic,
     ...                                  centroid_symmetry)
+    >>> from photutils.simulation import make_4gaussians_image
     >>> data = make_4gaussians_image()
 
 .. plot::
 
     import matplotlib.pyplot as plt
-    from photutils.datasets import make_4gaussians_image
+    from photutils.simulation import make_4gaussians_image
 
     data = make_4gaussians_image()
     fig, ax = plt.subplots(figsize=(8, 4))
@@ -126,7 +126,7 @@ near the centroids:
     from photutils.centroids import (centroid_1dg, centroid_2dg,
                                      centroid_com, centroid_quadratic,
                                      centroid_symmetry)
-    from photutils.datasets import make_4gaussians_image
+    from photutils.simulation import make_4gaussians_image
 
     data = make_4gaussians_image()
     data -= np.median(data[0:30, 0:125])
@@ -185,7 +185,7 @@ are then calculated within their cutout images::
 
     >>> import numpy as np
     >>> from photutils.centroids import centroid_2dg, centroid_sources
-    >>> from photutils.datasets import make_4gaussians_image
+    >>> from photutils.simulation import make_4gaussians_image
     >>> data = make_4gaussians_image()
     >>> data -= np.median(data[0:30, 0:125])
     >>> x_init = (25, 91, 151, 160)
@@ -208,7 +208,7 @@ Let's plot the results:
     import matplotlib.pyplot as plt
     import numpy as np
     from photutils.centroids import centroid_2dg, centroid_sources
-    from photutils.datasets import make_4gaussians_image
+    from photutils.simulation import make_4gaussians_image
 
     data = make_4gaussians_image()
     data -= np.median(data[0:30, 0:125])

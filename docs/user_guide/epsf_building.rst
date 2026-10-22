@@ -66,7 +66,7 @@ Let's start by loading a simulated HST/WFC3 image in the F160W band::
 The simulated image does not contain any background or noise, so let's
 add those to the image::
 
-    >>> from photutils.datasets import make_noise_image
+    >>> from photutils.simulation import make_noise_image
     >>> data += make_noise_image(data.shape, distribution='gaussian',
     ...                          mean=10.0, stddev=5.0, seed=0)  # doctest: +REMOTE_DATA
 
@@ -77,7 +77,7 @@ Let's show the image:
     import matplotlib.pyplot as plt
     from astropy.io import fits
     from astropy.visualization import simple_norm
-    from photutils.datasets import make_noise_image
+    from photutils.simulation import make_noise_image
 
     url = ('https://github.com/astropy/photutils-datasets/raw/main/'
            'data/hst_wfc3ir_f160w_simulated_starfield.fits')
@@ -122,8 +122,8 @@ Let's show the detected stars overlaid on the image:
     import matplotlib.pyplot as plt
     from astropy.io import fits
     from astropy.visualization import simple_norm
-    from photutils.datasets import make_noise_image
     from photutils.detection import DAOStarFinder
+    from photutils.simulation import make_noise_image
 
     url = ('https://github.com/astropy/photutils-datasets/raw/main/'
            'data/hst_wfc3ir_f160w_simulated_starfield.fits')
@@ -254,9 +254,9 @@ show the first 25 of them:
     from astropy.stats import sigma_clipped_stats
     from astropy.table import Table
     from astropy.visualization import simple_norm
-    from photutils.datasets import make_noise_image
     from photutils.detection import DAOStarFinder
     from photutils.psf import extract_stars
+    from photutils.simulation import make_noise_image
     from photutils.utils import circular_footprint
     from scipy.ndimage import binary_dilation
 
@@ -395,9 +395,9 @@ Finally, let's show the constructed ePSF:
     from astropy.stats import sigma_clipped_stats
     from astropy.table import Table
     from astropy.visualization import simple_norm
-    from photutils.datasets import make_noise_image
     from photutils.detection import DAOStarFinder
     from photutils.psf import EPSFBuilder, extract_stars
+    from photutils.simulation import make_noise_image
     from photutils.utils import circular_footprint
     from scipy.ndimage import binary_dilation
 

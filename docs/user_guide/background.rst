@@ -50,7 +50,7 @@ As an example, we load a synthetic image comprised of 100 sources with
 a Gaussian-distributed background whose mean is 5 and standard
 deviation is 2::
 
-    >>> from photutils.datasets import make_100gaussians_image
+    >>> from photutils.simulation import make_100gaussians_image
     >>> data = make_100gaussians_image()
 
 Let's plot the image:
@@ -67,7 +67,7 @@ Let's plot the image:
 
     import matplotlib.pyplot as plt
     from astropy.visualization import simple_norm
-    from photutils.datasets import make_100gaussians_image
+    from photutils.simulation import make_100gaussians_image
 
     data = make_100gaussians_image()
     norm = simple_norm(data, 'sqrt', percent=99.5)
@@ -249,7 +249,7 @@ background gradient to the image defined above::
     import matplotlib.pyplot as plt
     import numpy as np
     from astropy.visualization import simple_norm
-    from photutils.datasets import make_100gaussians_image
+    from photutils.simulation import make_100gaussians_image
 
     data = make_100gaussians_image()
     ny, nx = data.shape
@@ -300,7 +300,7 @@ Let's plot the background image:
     import numpy as np
     from astropy.stats import SigmaClip
     from photutils.background import Background2D, MedianBackground
-    from photutils.datasets import make_100gaussians_image
+    from photutils.simulation import make_100gaussians_image
 
     data = make_100gaussians_image()
     ny, nx = data.shape
@@ -331,7 +331,7 @@ and the background-subtracted image:
     from astropy.stats import SigmaClip
     from astropy.visualization import simple_norm
     from photutils.background import Background2D, MedianBackground
-    from photutils.datasets import make_100gaussians_image
+    from photutils.simulation import make_100gaussians_image
 
     data = make_100gaussians_image()
     ny, nx = data.shape
@@ -381,7 +381,7 @@ Let's create a rotated image that has blank areas and plot it:
     import matplotlib.pyplot as plt
     import numpy as np
     from astropy.visualization import simple_norm
-    from photutils.datasets import make_100gaussians_image
+    from photutils.simulation import make_100gaussians_image
     from scipy.ndimage import rotate
 
     data = make_100gaussians_image()
@@ -425,7 +425,7 @@ image (values assigned to ``fill_value``):
     import numpy as np
     from astropy.visualization import simple_norm
     from photutils.background import Background2D
-    from photutils.datasets import make_100gaussians_image
+    from photutils.simulation import make_100gaussians_image
     from scipy.ndimage import rotate
 
     data = make_100gaussians_image()
@@ -459,7 +459,7 @@ Finally, let's subtract the background from the image and plot it:
     import numpy as np
     from astropy.visualization import simple_norm
     from photutils.background import Background2D
-    from photutils.datasets import make_100gaussians_image
+    from photutils.simulation import make_100gaussians_image
     from scipy.ndimage import rotate
 
     data = make_100gaussians_image()
@@ -553,7 +553,7 @@ Meshes without a center marker were excluded.
     import numpy as np
     from astropy.visualization import simple_norm
     from photutils.background import Background2D
-    from photutils.datasets import make_100gaussians_image
+    from photutils.simulation import make_100gaussians_image
     from scipy.ndimage import rotate
 
     data = make_100gaussians_image()

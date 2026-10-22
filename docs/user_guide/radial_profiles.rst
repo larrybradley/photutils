@@ -22,7 +22,7 @@ data before creating a radial profile or curve of growth::
 
     >>> import numpy as np
     >>> from astropy.modeling.models import Gaussian2D
-    >>> from photutils.datasets import make_noise_image
+    >>> from photutils.simulation import make_noise_image
     >>> gmodel = Gaussian2D(42.1, 47.8, 52.4, 4.7, 4.7, 0)
     >>> yy, xx = np.mgrid[0:100, 0:100]
     >>> data = gmodel(xx, yy)
@@ -37,7 +37,7 @@ data before creating a radial profile or curve of growth::
     import numpy as np
     from astropy.modeling.models import Gaussian2D
     from astropy.visualization import simple_norm
-    from photutils.datasets import make_noise_image
+    from photutils.simulation import make_noise_image
 
     # Create an artificial single source
     gmodel = Gaussian2D(42.1, 47.8, 52.4, 4.7, 4.7, 0)
@@ -131,8 +131,8 @@ error bars:
     from astropy.modeling.models import Gaussian2D
 
     from photutils.centroids import centroid_2dg
-    from photutils.datasets import make_noise_image
     from photutils.profiles import RadialProfile
+    from photutils.simulation import make_noise_image
 
     # Create an artificial single source
     gmodel = Gaussian2D(42.1, 47.8, 52.4, 4.7, 4.7, 0)
@@ -192,8 +192,8 @@ to set the plot label.
     import numpy as np
     from astropy.modeling.models import Gaussian2D
     from photutils.centroids import centroid_2dg
-    from photutils.datasets import make_noise_image
     from photutils.profiles import RadialProfile
+    from photutils.simulation import make_noise_image
 
     # Create an artificial single source
     gmodel = Gaussian2D(42.1, 47.8, 52.4, 4.7, 4.7, 0)
@@ -229,8 +229,8 @@ instance on the data:
     from astropy.modeling.models import Gaussian2D
     from astropy.visualization import simple_norm
     from photutils.centroids import centroid_2dg
-    from photutils.datasets import make_noise_image
     from photutils.profiles import RadialProfile
+    from photutils.simulation import make_noise_image
 
     # Create an artificial single source
     gmodel = Gaussian2D(42.1, 47.8, 52.4, 4.7, 4.7, 0)
@@ -296,8 +296,8 @@ plot both fitted models on the radial profile:
     import numpy as np
     from astropy.modeling.models import Gaussian2D
     from photutils.centroids import centroid_2dg
-    from photutils.datasets import make_noise_image
     from photutils.profiles import RadialProfile
+    from photutils.simulation import make_noise_image
 
     # Create an artificial single source
     gmodel = Gaussian2D(42.1, 47.8, 52.4, 4.7, 4.7, 0)
