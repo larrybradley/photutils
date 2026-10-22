@@ -3,7 +3,27 @@
 Configuration file for the pytest test suite.
 """
 
+from importlib.util import find_spec
+
 import pytest
+
+# Tests that run in several threads with pytest-run-parallel use its
+# thread_index and iteration_index fixtures. Without the plugin, these
+# tests run once in a single thread, so both indices are zero.
+if find_spec('pytest_run_parallel') is None:
+    @pytest.fixture
+    def thread_index():
+        """
+        Return the index of the thread that runs the test.
+        """
+        return 0
+
+    @pytest.fixture
+    def iteration_index():
+        """
+        Return the index of the test iteration in its thread.
+        """
+        return 0
 
 
 def pytest_collection_modifyitems(items):
