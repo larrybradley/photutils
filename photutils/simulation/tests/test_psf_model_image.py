@@ -6,10 +6,13 @@ Tests for make_psf_model_image.
 import numpy as np
 import pytest
 from astropy.modeling.models import Const2D, Gaussian2D
+from astropy.nddata import NDData
 from astropy.table import Table
 from numpy.testing import assert_equal
 
-from photutils.psf import CircularGaussianPRF
+from photutils.psf import (AiryDiskPSF, CircularGaussianPRF,
+                           CircularGaussianPSF, GaussianPSF, GriddedPSFModel,
+                           ImagePSF, MoffatPRF, MoffatPSF)
 from photutils.simulation import make_psf_model_image
 
 
@@ -109,3 +112,30 @@ def test_make_psf_model_image_inputs():
     model = Gaussian2D()
     with pytest.raises(ValueError, match=match):
         make_psf_model_image(shape, model, 2)
+
+
+@pytest.mark.parametrize('psf_model', [GaussianPSF(), CircularGaussianPSF(),
+                                       MoffatPSF(), AiryDiskPSF()])
+def test_psf_model_rejected(psf_model):
+    """
+    Test that a PSF model that is not integrated over the pixels is
+    rejected.
+    """
+    match = 'not integrated over the pixels'
+    with pytest.raises(TypeError, match=match):
+        make_psf_model_image((50, 50), psf_model, 2)
+
+
+def test_psf_model_accepted():
+    """
+    Test that ePSF and PRF models are accepted.
+    """
+    yy, xx = np.mgrid[0:25, 0:25]
+    data = CircularGaussianPRF(x_0=12, y_0=12, fwhm=2.5)(xx, yy)
+    meta = {'grid_xypos': [(0, 0)], 'oversampling': 1}
+    gridded = GriddedPSFModel(NDData(data[np.newaxis], meta=meta))
+    for psf_model in (ImagePSF(data, x_0=12, y_0=12), gridded,
+                      CircularGaussianPRF(fwhm=2.5), MoffatPRF(alpha=3.0)):
+        image, _ = make_psf_model_image((50, 50), psf_model, 2,
+                                        model_shape=11)
+        assert image.sum() > 0

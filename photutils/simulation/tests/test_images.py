@@ -6,15 +6,17 @@ Tests for the images module.
 import astropy.units as u
 import numpy as np
 import pytest
-from astropy.modeling.models import Moffat2D, Polynomial2D
+from astropy.modeling.models import Box2D, Moffat2D, Polynomial2D
 from astropy.nddata import NDData
 from astropy.table import QTable, Table
 from numpy.testing import assert_allclose, assert_array_equal
 
-from photutils.psf import (CircularGaussianPRF, CircularGaussianPSF,
-                           CircularGaussianSigmaPRF, GaussianPRF, GaussianPSF,
-                           GriddedPSFModel, ImagePSF)
-from photutils.simulation import make_model_image
+from photutils.psf import (AiryDiskPSF, CircularGaussianPRF,
+                           CircularGaussianPSF, CircularGaussianSigmaPRF,
+                           GaussianPRF, GaussianPSF, GriddedPSFModel, ImagePSF,
+                           MoffatPRF, MoffatPSF, make_epsf_from_psf)
+from photutils.simulation import (SersicSource, make_convolved_model_image,
+                                  make_model_image)
 from photutils.simulation.images import _model_shape_from_bbox
 
 
@@ -538,3 +540,304 @@ def test_make_model_image_n_nodes_2d_only_model():
     result = make_model_image(shape, gridded, params, n_nodes=2)
     expected = make_model_image(shape, ImagePSF(data), params, n_nodes=2)
     assert_allclose(result, expected, rtol=1e-14)
+
+
+def make_image_psf():
+    """
+    Make an ImagePSF, oversampled by 4, from a circular Gaussian PSF
+    with a FWHM of 1.6 pixels.
+    """
+    yy, xx = np.mgrid[-48:49, -48:49] / 4
+    data = CircularGaussianPSF(fwhm=1.6)(xx, yy)
+    return ImagePSF(make_epsf_from_psf(data, oversampling=4), oversampling=4)
+
+
+def make_gridded_psf():
+    """
+    Make a GriddedPSFModel from four circular Gaussian ePSFs.
+    """
+    yy, xx = np.mgrid[0:25, 0:25]
+    data = [CircularGaussianPRF(x_0=12, y_0=12, fwhm=fwhm)(xx, yy)
+            for fwhm in (2.0, 2.2, 2.4, 2.6)]
+    meta = {'grid_xypos': [(0, 0), (60, 0), (0, 60), (60, 60)],
+            'oversampling': 1}
+    return GriddedPSFModel(NDData(np.array(data), meta=meta))
+
+
+def make_sersic_params():
+    """
+    Make a table with two Sersic sources.
+    """
+    params = QTable()
+    params['x_0'] = [20.3, 41.6]
+    params['y_0'] = [25.8, 34.2]
+    params['flux'] = [100.0, 250.0]
+    params['r_eff'] = [1.5, 2.5]
+    params['n'] = [1.0, 2.5]
+    params['ellip'] = [0.2, 0.4]
+    params['theta'] = [0.3, 1.2]
+    return params
+
+
+@pytest.mark.parametrize('psf_model', [GaussianPSF(), CircularGaussianPSF(),
+                                       MoffatPSF(), AiryDiskPSF()])
+def test_convolved_psf_model_rejected(psf_model):
+    """
+    Test that a PSF model that is not integrated over the pixels is
+    rejected.
+    """
+    match = 'not integrated over the pixels'
+    with pytest.raises(TypeError, match=match):
+        make_convolved_model_image((60, 60), SersicSource(),
+                                   make_sersic_params(), psf_model)
+
+
+@pytest.mark.parametrize('psf_model', [make_image_psf(), make_gridded_psf(),
+                                       CircularGaussianPRF(fwhm=2.5),
+                                       MoffatPRF(alpha=3.0)])
+def test_convolved_psf_model_accepted(psf_model):
+    """
+    Test that ePSF and PRF models are accepted.
+    """
+    params = make_sersic_params()
+    image = make_convolved_model_image((60, 60), SersicSource(), params,
+                                       psf_model)
+    assert np.all(np.isfinite(image))
+    assert 0.9 * params['flux'].sum() < image.sum() < params['flux'].sum()
+
+
+@pytest.mark.parametrize('psf_model', [
+    CircularGaussianPRF(fwhm=1.6, bbox_factor=10),
+    GaussianPRF(x_fwhm=1.6, y_fwhm=2.6, theta=30.0, bbox_factor=10),
+    make_image_psf()])
+def test_point_source_matches_make_model_image(psf_model):
+    """
+    Test that a source that fills a single grid cell renders exactly as
+    the PSF model does with make_model_image.
+
+    The cell integral of the box source is its flux, so the convolved
+    image is the flux times the PSF model at the box center. The two
+    functions truncate an analytic PSF model on different pixels at the
+    edge of its bounding box, so the bounding box is made large enough
+    that the PSF model is negligible there. The ImagePSF is zero beyond
+    its data, which both functions cover.
+    """
+    stars = QTable()
+    stars['x_0'] = [10.25, 30.5, 51.75]
+    stars['y_0'] = [12.5, 40.75, 25.0]
+    stars['flux'] = [100.0, 200.0, 300.0]
+    boxes = stars.copy()
+    boxes['amplitude'] = stars['flux'] * 16
+    del boxes['flux']
+    shape = (60, 64)
+    source = Box2D(x_width=0.25, y_width=0.25)
+    result = make_convolved_model_image(shape, source, boxes, psf_model,
+                                        oversample=4)
+    expected = make_model_image(shape, psf_model, stars)
+    assert_allclose(result, expected, rtol=0, atol=1e-12 * expected.max())
+
+
+def render_gaussian_identity(oversample, box_term):
+    """
+    Render a Gaussian source convolved with a Gaussian PRF, and the
+    Gaussian PRF of the summed variances that the result is expected to
+    match.
+    """
+    params = QTable()
+    params['x_0'] = [20.0, 41.37]
+    params['y_0'] = [22.5, 30.81]
+    params['flux'] = [100.0, 250.0]
+    shape = (50, 64)
+    source = GaussianPSF(x_fwhm=3.5, y_fwhm=3.5)
+    psf_model = CircularGaussianPRF(fwhm=3.0)
+    result = make_convolved_model_image(shape, source, params, psf_model,
+                                        oversample=oversample, n_nodes=4,
+                                        model_shape=35)
+    fwhm_to_sigma = 1.0 / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+    variance = (3.5**2 + 3.0**2) * fwhm_to_sigma**2
+    if box_term:
+        variance += 1.0 / (12 * oversample**2)
+    model = CircularGaussianSigmaPRF(sigma=np.sqrt(variance))
+    expected = make_model_image(shape, model, params, model_shape=35)
+    return result, expected
+
+
+@pytest.mark.parametrize('oversample', [3, 4])
+def test_gaussian_source_identity(oversample):
+    """
+    Test that a Gaussian source convolved with a Gaussian PRF is the
+    Gaussian PRF of the summed variances, including the variance of the
+    box of width 1 / oversample.
+    """
+    result, expected = render_gaussian_identity(oversample, box_term=True)
+    assert_allclose(result, expected, rtol=0, atol=1e-4 * expected.max())
+
+
+def test_gaussian_identity_needs_box_term():
+    """
+    Test that the Gaussian identity fails the tolerance without the
+    variance of the box of width 1 / oversample.
+    """
+    result, expected = render_gaussian_identity(4, box_term=False)
+    error = np.max(np.abs(result - expected))
+    assert error > 1e-4 * expected.max()
+
+
+def test_convolved_flux_conserved():
+    """
+    Test that the convolved image keeps the flux inside the source
+    cutout.
+    """
+    params = QTable()
+    params['x_0'] = [64.3]
+    params['y_0'] = [63.6]
+    params['flux'] = [100.0]
+    params['r_eff'] = [2.0]
+    params['n'] = [1.0]
+    shape = (128, 128)
+    source = SersicSource()
+    psf_model = CircularGaussianPRF(fwhm=3.0)
+    image = make_convolved_model_image(shape, source, params, psf_model)
+    cutout_flux = make_model_image(shape, source, params, n_nodes=4).sum()
+    assert_allclose(image.sum(), cutout_flux, rtol=1e-3)
+
+
+def test_convolved_off_image():
+    """
+    Test sources that are partly or entirely outside the image.
+    """
+    params = QTable()
+    params['x_0'] = [-100.0]
+    params['y_0'] = [20.0]
+    params['flux'] = [100.0]
+    shape = (40, 50)
+    source = GaussianPSF(x_fwhm=1.0, y_fwhm=1.0)
+    psf_model = CircularGaussianPRF(fwhm=2.5)
+    kwargs = {'model_shape': 5}
+    image = make_convolved_model_image(shape, source, params, psf_model,
+                                       **kwargs)
+    assert image.shape == shape
+    assert_array_equal(image, 0)
+
+    # A source whose cutout is outside the image, but whose light
+    # reaches the image through the PSF
+    params['x_0'] = [-4.0]
+    image = make_convolved_model_image(shape, source, params, psf_model,
+                                       **kwargs)
+    assert 0 < image.sum() < 1
+    assert_array_equal(image[:, 5:], 0)
+
+    # A source centered on the image edge is trimmed to half its flux
+    params['x_0'] = [-0.5]
+    image = make_convolved_model_image(shape, source, params, psf_model,
+                                       **kwargs)
+    assert_allclose(image.sum(), 50.0, rtol=1e-3)
+
+
+def test_convolved_nonfinite_skipped():
+    """
+    Test that rows with a nonfinite parameter are skipped.
+    """
+    params = make_sersic_params()
+    expected = make_convolved_model_image((60, 60), SersicSource(),
+                                          params[:1], CircularGaussianPRF())
+    params['flux'][1] = np.nan
+    result = make_convolved_model_image((60, 60), SersicSource(), params,
+                                        CircularGaussianPRF())
+    assert_array_equal(result, expected)
+
+
+def test_convolved_units_error():
+    """
+    Test that a params_table column with units raises an error.
+    """
+    params = make_sersic_params()
+    params['flux'] <<= u.Jy
+    match = 'make_convolved_model_image does not support units'
+    with pytest.raises(ValueError, match=match):
+        make_convolved_model_image((60, 60), SersicSource(), params,
+                                   CircularGaussianPRF())
+
+
+def test_convolved_local_bkg_error():
+    """
+    Test that a local_bkg column raises an error.
+    """
+    params = make_sersic_params()
+    params['local_bkg'] = [1.0, 2.0]
+    match = 'make_convolved_model_image does not support a local_bkg'
+    with pytest.raises(ValueError, match=match):
+        make_convolved_model_image((60, 60), SersicSource(), params,
+                                   CircularGaussianPRF())
+
+
+@pytest.mark.parametrize('oversample', [0, -2, 2.5, True])
+def test_convolved_oversample_invalid(oversample):
+    """
+    Test that an invalid oversample raises a ValueError.
+    """
+    match = 'oversample must be a positive integer'
+    with pytest.raises(ValueError, match=match):
+        make_convolved_model_image((60, 60), SersicSource(),
+                                   make_sersic_params(),
+                                   CircularGaussianPRF(),
+                                   oversample=oversample)
+
+
+def test_convolved_psf_model_no_bbox():
+    """
+    Test that a PSF model without a bounding box raises an error.
+    """
+    psf_model = CircularGaussianPRF()
+    psf_model.bounding_box = None
+    match = 'psf_model must have a bounding_box attribute'
+    with pytest.raises(ValueError, match=match):
+        make_convolved_model_image((60, 60), SersicSource(),
+                                   make_sersic_params(), psf_model)
+
+
+def test_convolved_progress_bar():
+    """
+    Test make_convolved_model_image with progress_bar=True.
+    """
+    pytest.importorskip('tqdm')
+    params = make_sersic_params()
+    expected = make_convolved_model_image((60, 60), SersicSource(), params,
+                                          CircularGaussianPRF())
+    result = make_convolved_model_image((60, 60), SersicSource(), params,
+                                        CircularGaussianPRF(),
+                                        progress_bar=True)
+    assert_array_equal(result, expected)
+
+
+def test_convolved_gridded_psf_local():
+    """
+    Test that a GriddedPSFModel is evaluated at the source position.
+
+    A source near a grid point renders as with an ImagePSF made from
+    the ePSF at that grid point.
+    """
+    gridded = make_gridded_psf()
+    params = make_sersic_params()[:1]
+    params['x_0'] = [60.2]
+    params['y_0'] = [59.7]
+    shape = (70, 70)
+    result = make_convolved_model_image(shape, SersicSource(), params,
+                                        gridded)
+    epsf = ImagePSF(gridded.data[3])
+    expected = make_convolved_model_image(shape, SersicSource(), params,
+                                          epsf)
+    assert_allclose(result, expected, rtol=0, atol=1e-12 * expected.max())
+
+
+def test_make_model_image_ellip_no_warning():
+    """
+    Test that make_model_image does not warn for a SersicSource whose
+    ellipticity is in params_table.
+
+    The output units are found by evaluating the model with parameter
+    values of 1, which is an invalid ellipticity.
+    """
+    params = make_sersic_params()
+    image = make_model_image((60, 60), SersicSource(), params, n_nodes=4)
+    assert np.all(np.isfinite(image))
