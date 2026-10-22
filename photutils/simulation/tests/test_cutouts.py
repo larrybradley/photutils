@@ -13,39 +13,65 @@ from photutils.simulation._cutouts import (integrate_cells, pixel_nodes,
                                            render_cells, validate_n_nodes)
 
 
-def brute_force_render(model, shape, x_0, y_0, n_nodes=24, n_core=64):
+def cusp_nodes(lower, upper, center):
     """
-    Render a model with a brute-force integration.
+    Return the nodes and weights for the mean over an interval, with
+    the interval split at the source center and graded toward it.
 
-    This reference is independent of the module under test. Every
-    pixel is integrated with ``n_nodes`` Gauss-Legendre nodes per axis.
-    The 3 x 3 pixels around the pixel containing the center are then
-    split ``n_core`` x ``n_core`` and integrated again.
+    The interval is split into 16 equal pieces per unit length and at
+    ``center`` and ``center +/- 2**-j`` for j from 0 to 30. Each piece
+    is integrated with 8 Gauss-Legendre nodes.
     """
-    nodes, weights = np.polynomial.legendre.leggauss(n_nodes)
-    offsets = 0.5 * nodes
+    n_uniform = max(1, int(np.ceil(16 * (upper - lower))))
+    grade = 2.0 ** -np.arange(31)
+    cuts = np.concatenate((
+        lower + (upper - lower) * np.arange(n_uniform + 1) / n_uniform,
+        [center], center - grade, center + grade))
+    cuts = np.unique(np.clip(cuts, lower, upper))
+    nodes, weights = np.polynomial.legendre.leggauss(8)
+    half = 0.5 * np.diff(cuts)[:, None]
+    middle = 0.5 * (cuts[:-1] + cuts[1:])[:, None]
+    return ((middle + half * nodes).ravel(),
+            (half * weights).ravel() / (upper - lower))
+
+
+def reference_render(model, x, y, x_0, y_0, cell_size=1.0):
+    """
+    Render a model with a converged reference integration.
+
+    This reference is independent of the module under test. Every cell
+    is integrated with 24 Gauss-Legendre nodes per axis. The cells
+    whose centers are within 2.5 pixels of the source center along
+    both axes are then integrated again with pieces that are split at
+    the source center and graded toward it, which resolves the cusp
+    of a Sersic profile at any position.
+    """
+    nodes, weights = np.polynomial.legendre.leggauss(24)
+    offsets = 0.5 * cell_size * nodes
     weights = 0.5 * weights
+    xs = x[..., None, None] + offsets[None, :]
+    ys = y[..., None, None] + offsets[:, None]
+    values = model(xs, ys) * (weights[:, None] * weights[None, :])
+    result = values.sum(axis=(-2, -1))
 
-    def mean(xc, yc, size):
-        xs = xc[..., None, None] + size * offsets[None, :]
-        ys = yc[..., None, None] + size * offsets[:, None]
-        values = model(xs, ys) * (weights[:, None] * weights[None, :])
-        return values.sum(axis=(-2, -1))
-
-    yy, xx = np.mgrid[0:shape[0], 0:shape[1]].astype(float)
-    result = mean(xx, yy, 1.0)
-
-    cx = int(np.floor(x_0 + 0.5))
-    cy = int(np.floor(y_0 + 0.5))
-    sub = (np.arange(n_core) + 0.5) / n_core - 0.5
-    for jy in range(cy - 1, cy + 2):
-        for jx in range(cx - 1, cx + 2):
-            if not (0 <= jy < shape[0] and 0 <= jx < shape[1]):
-                continue
-            xs = jx + sub[None, :] + np.zeros((n_core, 1))
-            ys = jy + sub[:, None] + np.zeros((1, n_core))
-            result[jy, jx] = mean(xs, ys, 1.0 / n_core).mean()
+    half = 0.5 * cell_size
+    near = (np.abs(x - x_0) < 2.5) & (np.abs(y - y_0) < 2.5)
+    for idx in zip(*np.nonzero(near), strict=True):
+        x_nodes, x_weights = cusp_nodes(x[idx] - half, x[idx] + half, x_0)
+        y_nodes, y_weights = cusp_nodes(y[idx] - half, y[idx] + half, y_0)
+        xx, yy = np.meshgrid(x_nodes, y_nodes)
+        result[idx] = np.sum(model(xx, yy) * np.outer(y_weights, x_weights))
     return result
+
+
+def max_error(model, x_0, y_0, n_nodes, shape=(41, 41)):
+    """
+    Return the largest error of the rendered model relative to the peak.
+    """
+    x, y = make_grid(shape)
+    result = render_cells(model, x, y, x_0, y_0, n_nodes=n_nodes)
+    reference = reference_render(model, x, y, x_0, y_0)
+    return np.abs(result - reference).max() / reference.max()
 
 
 def make_grid(shape):
@@ -148,12 +174,7 @@ def test_core_refinement_accuracy(center):
     x_0, y_0 = center
     model = Sersic2D(amplitude=1.0, r_eff=3.0, n=4, x_0=x_0, y_0=y_0,
                      ellip=0.3, theta=0.5)
-    shape = (41, 41)
-    x, y = make_grid(shape)
-    result = render_cells(model, x, y, x_0, y_0, n_nodes=4)
-    reference = brute_force_render(model, shape, x_0, y_0)
-    error = np.abs(result - reference).max() / reference.max()
-    assert error < 1e-3
+    assert max_error(model, x_0, y_0, 4) < 1e-3
 
 
 def test_core_refinement_extreme():
@@ -163,28 +184,40 @@ def test_core_refinement_extreme():
     x_0, y_0 = 20.5, 20.5
     model = Sersic2D(amplitude=1.0, r_eff=0.2, n=4, x_0=x_0, y_0=y_0,
                      ellip=0.3, theta=0.5)
-    shape = (41, 41)
-    x, y = make_grid(shape)
-    result = render_cells(model, x, y, x_0, y_0, n_nodes=8)
-    reference = brute_force_render(model, shape, x_0, y_0)
-    error = np.abs(result - reference).max() / reference.max()
-    assert error < 2e-3
+    assert max_error(model, x_0, y_0, 8) < 2e-3
 
 
-def test_core_refinement_sub_pixel_cells():
+@pytest.mark.parametrize('center', [(20.3, 19.8), (19.63, 20.17)])
+@pytest.mark.parametrize(('r_eff', 'n_nodes', 'threshold'),
+                         [(3.0, 4, 1e-3), (0.2, 8, 2e-3)])
+def test_core_refinement_off_grid(center, r_eff, n_nodes, threshold):
     """
-    Test that cells smaller than a pixel are refined and conserve flux.
+    Test the accuracy for Sersic profiles centered away from the pixel
+    centers, edges, and corners.
     """
-    x_0, y_0 = 10.5, 10.5
+    x_0, y_0 = center
+    model = Sersic2D(amplitude=1.0, r_eff=r_eff, n=4, x_0=x_0, y_0=y_0,
+                     ellip=0.3, theta=0.5)
+    assert max_error(model, x_0, y_0, n_nodes) < threshold
+
+
+@pytest.mark.parametrize('center', [(10.5, 10.5), (10.37, 10.81)])
+def test_core_refinement_sub_pixel_cells(center):
+    """
+    Test the accuracy for cells smaller than a pixel, with the source
+    centered on a pixel corner and away from the pixel grid.
+    """
+    x_0, y_0 = center
     model = Sersic2D(amplitude=1.0, r_eff=1.0, n=4, x_0=x_0, y_0=y_0)
     size = 0.25
     edge = (np.arange(80) + 0.5) * size - 0.5
     x, y = np.meshgrid(edge, edge)
     result = render_cells(model, x, y, x_0, y_0, cell_size=size, n_nodes=4)
-    reference = integrate_cells(model, x, y, size, 24)
+    reference = reference_render(model, x, y, x_0, y_0, cell_size=size)
     assert np.abs(result - reference).max() / reference.max() < 1e-3
     # Refinement leaves cells outside the core unchanged
-    outside = (np.abs(x - 11) >= 1.5) | (np.abs(y - 11) >= 1.5)
+    outside = ((np.abs(x - np.floor(x_0 + 0.5)) >= 1.5)
+               | (np.abs(y - np.floor(y_0 + 0.5)) >= 1.5))
     assert_array_equal(result[outside],
                        integrate_cells(model, x, y, size, 4)[outside])
 
