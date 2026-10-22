@@ -17,6 +17,7 @@ from astropy.utils.data import get_pkg_data_path
 from photutils.simulation._cutouts import (psf_half_size, render_cells,
                                            render_convolved, trim_slices,
                                            validate_n_nodes,
+                                           validate_oversample,
                                            validate_psf_model)
 from photutils.simulation.params import make_model_params
 from photutils.utils._overlap import overlap_slices
@@ -494,11 +495,7 @@ def make_convolved_model_image(shape, model, params_table, psf_model, *,
 
     shape = as_pair('shape', shape, lower_bound=(0, 0))
     n_nodes = validate_n_nodes(n_nodes)
-    if (isinstance(oversample, bool)
-            or not isinstance(oversample, (int, np.integer))
-            or oversample < 1):
-        msg = 'oversample must be a positive integer'
-        raise ValueError(msg)
+    validate_oversample(oversample)
 
     _validate_model_and_table(model, params_table)
     validate_psf_model(psf_model)
@@ -510,25 +507,12 @@ def make_convolved_model_image(shape, model, params_table, psf_model, *,
     model_shape, variable_shape = _validate_model_shape(model, params_table,
                                                         model_shape)
 
-    if 'local_bkg' in params_table.colnames:
-        msg = ('make_convolved_model_image does not support a local_bkg '
-               'column')
-        raise ValueError(msg)
-
     # Copy the input model to leave it unchanged
     model = model.copy()
+    _reject_units_and_local_bkg('make_convolved_model_image', model,
+                                params_table, params_map)
 
-    has_units = any(getattr(params_table[column], 'unit', None) is not None
-                    for column in params_map.values())
-    if has_units or _get_output_unit(model, params_table,
-                                     params_map) is not None:
-        msg = 'make_convolved_model_image does not support units'
-        raise ValueError(msg)
-
-    # The number of pixels by which the convolution can extend each
-    # source cutout, used to skip sources that cannot reach the image
-    margins = (ceil((half_y + oversample // 2) / oversample),
-               ceil((half_x + oversample // 2) / oversample))
+    margins = _convolution_margins(half_y, half_x, oversample)
 
     image = np.zeros(shape, dtype=float)
     sources = _iter_sources(model, params_table, params_map, None,
@@ -538,10 +522,7 @@ def make_convolved_model_image(shape, model, params_table, psf_model, *,
                             y_name=y_name, progress_bar=progress_bar)
     for _, x0, y0, mod_shape in sources:
         slices = _source_slices(mod_shape, x0, y0)
-        grown = tuple(slice(slc.start - margin, slc.stop + margin)
-                      for slc, margin in zip(slices, margins, strict=True))
-        if (any(slc.start >= slc.stop for slc in slices)
-                or trim_slices(grown, shape) is None):
+        if not _can_reach_image(slices, margins, shape):
             continue
 
         out_slices, cutout = render_convolved(model, psf_model, slices, x0,
@@ -1227,3 +1208,90 @@ def _source_slices(model_shape, x0, y0):
         start = int(np.ceil(center - size / 2.0))
         slices.append(slice(start, start + int(size)))
     return tuple(slices)
+
+
+def _reject_units_and_local_bkg(caller, model, params_table, params_map):
+    """
+    Raise an error if the sources have units or a local background.
+
+    Parameters
+    ----------
+    caller : str
+        The name of the calling function, used in the error message.
+
+    model : 2D `astropy.modeling.Model`
+        A copy of the model used to render the sources. Its mapped
+        parameters are changed.
+
+    params_table : `~astropy.table.Table`
+        The table of model parameters for each source.
+
+    params_map : dict
+        The mapping from model parameter names to column names.
+
+    Raises
+    ------
+    ValueError
+        If ``params_table`` has a ``'local_bkg'`` column, if a mapped
+        column has units, or if the model output has units.
+    """
+    if 'local_bkg' in params_table.colnames:
+        msg = f'{caller} does not support a local_bkg column'
+        raise ValueError(msg)
+
+    has_units = any(getattr(params_table[column], 'unit', None) is not None
+                    for column in params_map.values())
+    if has_units or _get_output_unit(model, params_table,
+                                     params_map) is not None:
+        msg = f'{caller} does not support units'
+        raise ValueError(msg)
+
+
+def _convolution_margins(half_y, half_x, oversample):
+    """
+    Return the number of pixels by which a convolution can extend a
+    source cutout along each axis.
+
+    Parameters
+    ----------
+    half_y, half_x : int
+        The half-size of the PSF model bounding box, in units of the
+        grid spacing ``1 / oversample``.
+
+    oversample : int
+        The number of grid points per pixel along each axis.
+
+    Returns
+    -------
+    margins : 2-tuple of int
+        The (y, x) margins, in pixels.
+    """
+    return (ceil((half_y + oversample // 2) / oversample),
+            ceil((half_x + oversample // 2) / oversample))
+
+
+def _can_reach_image(slices, margins, shape):
+    """
+    Return whether a convolved source can reach the image.
+
+    Parameters
+    ----------
+    slices : tuple of 2 slice
+        The (y, x) pixel slices of the source cutout before convolution.
+
+    margins : 2-tuple of int
+        The (y, x) margins returned by `_convolution_margins`.
+
+    shape : 2-tuple of int
+        The shape of the image.
+
+    Returns
+    -------
+    result : bool
+        `False` if the cutout is empty or if its margin does not
+        overlap the image.
+    """
+    grown = tuple(slice(slc.start - margin, slc.stop + margin)
+                  for slc, margin in zip(slices, margins, strict=True))
+    return (all(slc.start < slc.stop for slc in slices)
+            and trim_slices(grown, shape) is not None)

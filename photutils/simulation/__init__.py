@@ -11,4 +11,5 @@ from .images import *  # noqa: F403
 from .models import *  # noqa: F403
 from .noise import *  # noqa: F403
 from .params import *  # noqa: F403
+from .snr import *  # noqa: F403
 from .wcs import *  # noqa: F403
