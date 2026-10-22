@@ -34,6 +34,7 @@ from photutils.background import (Background2D, BiweightLocationBackground,
                                   MedianBackground, MMMBackground,
                                   ModeEstimatorBackground,
                                   SExtractorBackground, StdBackgroundRMS)
+from photutils.utils.tests.thread_test_helpers import fail_on_warning
 
 N_THREADS = 8
 N_CALLS = 10
@@ -135,30 +136,48 @@ def test_concurrent_background2d_construction(n_threads, image_data):
     assert_equal(data, data_orig)
 
 
-def test_concurrent_background2d_shared_instance(image_data):
+def _make_shared_bkg2d(data, mask):
+    """
+    Return the Background2D instance for the shared-instance test.
+    """
+    return Background2D(data, (30, 30), mask=mask, exclude_percentile=50.0)
+
+
+@pytest.fixture(name='shared_bkg2d')
+def fixture_shared_bkg2d(image_data):
+    """
+    Return one new Background2D instance per test iteration and the
+    serial property values.
+
+    Each iteration reads a new instance so that every iteration
+    exercises the cold first accesses of the cached properties.
+    """
+    reference = _make_shared_bkg2d(*image_data)
+    expected = (reference.background, reference.background_rms,
+                reference.background_median,
+                reference.background_rms_median,
+                reference.n_pixels_map)
+    bkgs = [_make_shared_bkg2d(*image_data) for _ in range(N_CALLS)]
+    return bkgs, expected
+
+
+@pytest.mark.force_parallel_threads(N_THREADS)
+@pytest.mark.iterations(N_CALLS)
+def test_concurrent_background2d_shared_instance(shared_bkg2d,
+                                                 iteration_index):
     """
     Test that concurrent property reads on a shared Background2D
     instance, including the cold first accesses of the cached median
     properties, return results identical to serial reads.
     """
-    data, mask = image_data
-    bkg = Background2D(data, (30, 30), mask=mask,
-                       exclude_percentile=50.0)
-    reference = Background2D(data, (30, 30), mask=mask,
-                             exclude_percentile=50.0)
-    expected = (reference.background, reference.background_rms,
-                reference.background_median,
-                reference.background_rms_median,
-                reference.n_pixels_map)
-
-    def task():
-        return (bkg.background, bkg.background_rms,
-                bkg.background_median, bkg.background_rms_median,
-                bkg.n_pixels_map)
-
-    for result in run_concurrently(task):
-        for value, expect in zip(result, expected, strict=True):
-            assert_equal(value, expect)
+    bkgs, expected = shared_bkg2d
+    bkg = bkgs[iteration_index]
+    with fail_on_warning():
+        result = (bkg.background, bkg.background_rms,
+                  bkg.background_median, bkg.background_rms_median,
+                  bkg.n_pixels_map)
+    for value, expect in zip(result, expected, strict=True):
+        assert_equal(value, expect)
 
 
 def test_concurrent_local_background(image_data):
