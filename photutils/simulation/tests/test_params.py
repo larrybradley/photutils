@@ -12,6 +12,7 @@ from numpy.testing import assert_allclose, assert_array_equal
 from photutils.psf import CircularGaussianPSF
 from photutils.simulation import (make_model_params, make_pair_params,
                                   make_random_models_table,
+                                  make_satellite_params,
                                   params_table_to_models)
 
 
@@ -397,3 +398,107 @@ def test_pair_errors():
         match = f'{name} cannot be used as a keyword argument'
         with pytest.raises(ValueError, match=match):
             make_pair_params((100, 100), 5, 3.0, **{name: (1, 2)})
+
+
+def make_hosts(with_id=True):
+    """
+    Make a small table of host galaxies.
+    """
+    hosts = QTable()
+    if with_id:
+        hosts['id'] = [7, 9, 12]
+    hosts['x_0'] = [100.0, 300.0, 500.0]
+    hosts['y_0'] = [200.0, 250.0, 120.0]
+    hosts['r_eff'] = [5.0, 10.0, 20.0]
+    return hosts
+
+
+def satellite_distances(satellites, hosts, host_index):
+    """
+    Return the distance of each satellite to its host.
+    """
+    x_host = np.asarray(hosts['x_0'])[host_index]
+    y_host = np.asarray(hosts['y_0'])[host_index]
+    return np.hypot(satellites['x_0'] - x_host, satellites['y_0'] - y_host)
+
+
+def test_satellite_columns():
+    """
+    Test the columns and row count of ``make_satellite_params``.
+    """
+    hosts = make_hosts()
+    satellites = make_satellite_params(hosts, 4, (2, 5), flux=(1, 10),
+                                       kind='star_on_gal', seed=0)
+    assert satellites.colnames == ['id', 'x_0', 'y_0', 'host_id', 'flux',
+                                   'kind']
+    assert len(satellites) == 12
+    assert_array_equal(satellites['id'], np.arange(1, 13))
+    assert np.all(satellites['kind'] == 'star_on_gal')
+
+
+def test_satellite_radius_pixel():
+    """
+    Test that satellite distances in pixels are within the radius range.
+    """
+    hosts = make_hosts()
+    satellites = make_satellite_params(hosts, 200, (2, 5), seed=0)
+    distances = satellite_distances(satellites, hosts,
+                                    np.repeat(np.arange(3), 200))
+    assert np.all(distances >= 2 - 1e-12)
+    assert np.all(distances < 5)
+    assert distances.min() < 2.2
+    assert distances.max() > 4.8
+
+
+def test_satellite_radius_r_eff():
+    """
+    Test that the radius range is in units of each host's ``r_eff``.
+    """
+    hosts = make_hosts()
+    satellites = make_satellite_params(hosts, 200, (0.5, 2.5),
+                                       radius_unit='r_eff', seed=0)
+    host_index = np.repeat(np.arange(3), 200)
+    scaled = (satellite_distances(satellites, hosts, host_index)
+              / np.asarray(hosts['r_eff'])[host_index])
+    assert np.all(scaled >= 0.5 - 1e-12)
+    assert np.all(scaled < 2.5)
+
+    hosts.rename_column('r_eff', 'size')
+    satellites = make_satellite_params(hosts, 5, 1.0, radius_unit='r_eff',
+                                       r_eff_name='size', seed=0)
+    distances = satellite_distances(satellites, hosts,
+                                    np.repeat(np.arange(3), 5))
+    assert_allclose(distances, np.repeat([5.0, 10.0, 20.0], 5))
+
+
+def test_satellite_host_id():
+    """
+    Test that ``host_id`` is the host's ``id`` value, or its 1-based row
+    number when the host table has no ``id`` column.
+    """
+    satellites = make_satellite_params(make_hosts(), 2, 3.0, seed=0)
+    assert_array_equal(satellites['host_id'], [7, 7, 9, 9, 12, 12])
+
+    satellites = make_satellite_params(make_hosts(with_id=False), 2, 3.0,
+                                       seed=0)
+    assert_array_equal(satellites['host_id'], [1, 1, 2, 2, 3, 3])
+
+
+def test_satellite_errors():
+    """
+    Test the input validation of ``make_satellite_params``.
+    """
+    hosts = make_hosts()
+    match = "radius_unit must be 'pixel' or 'r_eff'"
+    with pytest.raises(ValueError, match=match):
+        make_satellite_params(hosts, 2, 3.0, radius_unit='arcsec')
+
+    match = 'host_params has no "size" column'
+    with pytest.raises(ValueError, match=match):
+        make_satellite_params(hosts, 2, 3.0, radius_unit='r_eff',
+                              r_eff_name='size')
+
+    for name in ('id', 'x_0', 'y_0', 'host_id'):
+        match = f'{name} cannot be used as a keyword argument'
+        with pytest.raises(ValueError, match=match):
+            make_satellite_params(hosts, 2, 3.0, **{name: (1, 2)})
