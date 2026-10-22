@@ -108,7 +108,7 @@ class RadialProfile(ProfileBase):
     >>> import numpy as np
     >>> from astropy.modeling.models import Gaussian2D
     >>> from photutils.centroids import centroid_2dg
-    >>> from photutils.datasets import make_noise_image
+    >>> from photutils.simulation import make_noise_image
     >>> from photutils.profiles import RadialProfile
 
     Create an artificial single source. Note that this image does not
@@ -155,7 +155,7 @@ class RadialProfile(ProfileBase):
         from astropy.modeling.models import Gaussian2D
 
         from photutils.centroids import centroid_2dg
-        from photutils.datasets import make_noise_image
+        from photutils.simulation import make_noise_image
         from photutils.profiles import RadialProfile
 
         # Create an artificial single source
@@ -189,7 +189,7 @@ class RadialProfile(ProfileBase):
         from astropy.modeling.models import Gaussian2D
 
         from photutils.centroids import centroid_2dg
-        from photutils.datasets import make_noise_image
+        from photutils.simulation import make_noise_image
         from photutils.profiles import RadialProfile
 
         # Create an artificial single source
@@ -224,7 +224,7 @@ class RadialProfile(ProfileBase):
         from astropy.visualization import simple_norm
 
         from photutils.centroids import centroid_2dg
-        from photutils.datasets import make_noise_image
+        from photutils.simulation import make_noise_image
         from photutils.profiles import RadialProfile
 
         # Create an artificial single source
@@ -271,7 +271,7 @@ class RadialProfile(ProfileBase):
         from astropy.modeling.models import Gaussian2D
 
         from photutils.centroids import centroid_2dg
-        from photutils.datasets import make_noise_image
+        from photutils.simulation import make_noise_image
         from photutils.profiles import RadialProfile
 
         # Create an artificial single source

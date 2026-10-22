@@ -63,7 +63,7 @@ def compute_pixel_areas(wcs, x, y):
     Examples
     --------
     >>> import numpy as np
-    >>> from photutils.datasets import make_wcs
+    >>> from photutils.simulation import make_wcs
     >>> from photutils.utils import compute_pixel_areas
     >>> wcs = make_wcs((100, 100))
     >>> areas = compute_pixel_areas(wcs, [10.0, 50.0], [20.0, 50.0])
@@ -195,7 +195,7 @@ def compute_pixel_area_map(wcs, shape, *, interpolate=True, step=None):
     Examples
     --------
     >>> import numpy as np
-    >>> from photutils.datasets import make_wcs
+    >>> from photutils.simulation import make_wcs
     >>> from photutils.utils import compute_pixel_area_map
     >>> shape = (100, 100)
     >>> wcs = make_wcs(shape)
