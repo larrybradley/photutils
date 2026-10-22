@@ -3,8 +3,6 @@
 Tests for the AperturePhotometry class.
 """
 
-from concurrent.futures import ThreadPoolExecutor
-
 import astropy.units as u
 import numpy as np
 import pytest
@@ -26,7 +24,8 @@ from photutils.aperture.tests.conftest import (NoBatchCircularAperture,
 from photutils.datasets import make_wcs
 from photutils.segmentation import SegmentationImage
 from photutils.utils._optional_deps import HAS_REGIONS
-from photutils.utils.tests.thread_test_helpers import check_concurrent_deepcopy
+from photutils.utils.tests.thread_test_helpers import (
+    check_concurrent_deepcopy, fail_on_warning)
 
 
 class TestAperturePhotometryParity:
@@ -1064,7 +1063,30 @@ class TestReprAndImmutability:
                       'flux_err', 'area', 'flags', 'isscalar'}
         assert new_keys.issubset(lazy_names)
 
-    def test_concurrent_access(self, data):
+    N_ACCESS_ITERATIONS = 4
+    ACCESS_ATTRS = ('flux', 'flux_err', 'flags', 'id')
+
+    @pytest.fixture(name='shared_phots')
+    def fixture_shared_phots(self, data):
+        """
+        Return one new AperturePhotometry instance per test iteration
+        and the serial attribute values.
+
+        Each iteration reads a new instance so that every iteration
+        fills the cached-property caches under contention.
+        """
+        aper = CircularAperture(((150, 25), (90, 60)), 8)
+        error = np.ones_like(data)
+        reference = AperturePhotometry(data, aper, error=error)
+        expected = {attr: np.asarray(getattr(reference, attr))
+                    for attr in self.ACCESS_ATTRS}
+        phots = [AperturePhotometry(data, aper, error=error)
+                 for _ in range(self.N_ACCESS_ITERATIONS)]
+        return phots, expected
+
+    @pytest.mark.force_parallel_threads(4)
+    @pytest.mark.iterations(N_ACCESS_ITERATIONS)
+    def test_concurrent_access(self, shared_phots, iteration_index):
         """
         Test that a single shared AperturePhotometry instance can be
         read concurrently.
@@ -1072,18 +1094,13 @@ class TestReprAndImmutability:
         The cached-property caches fill under contention and every
         thread sees identical values.
         """
-        aper = CircularAperture(((150, 25), (90, 60)), 8)
-        phot = AperturePhotometry(data, aper, error=np.ones_like(data))
-
-        def read(_):
-            return {attr: np.asarray(getattr(phot, attr))
-                    for attr in ('flux', 'flux_err', 'flags', 'id')}
-
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            results = list(executor.map(read, range(16)))
-        for result in results:
-            for attr, values in result.items():
-                assert_allclose(values, results[0][attr])
+        phots, expected = shared_phots
+        phot = phots[iteration_index]
+        with fail_on_warning():
+            result = {attr: np.asarray(getattr(phot, attr))
+                      for attr in self.ACCESS_ATTRS}
+        for attr, values in result.items():
+            assert_allclose(values, expected[attr])
 
 
 @pytest.mark.skipif(not HAS_REGIONS, reason='regions is required')
