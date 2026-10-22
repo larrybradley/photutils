@@ -83,6 +83,27 @@ def validate_n_nodes(n_nodes):
     return int(n_nodes)
 
 
+def validate_oversample(oversample):
+    """
+    Validate the ``oversample`` keyword.
+
+    Parameters
+    ----------
+    oversample : int
+        The number of grid points per pixel along each axis.
+
+    Raises
+    ------
+    ValueError
+        If ``oversample`` is not a positive integer.
+    """
+    if (isinstance(oversample, bool)
+            or not isinstance(oversample, (int, np.integer))
+            or oversample < 1):
+        msg = 'oversample must be a positive integer'
+        raise ValueError(msg)
+
+
 def evaluate_model(model, x, y):
     """
     Evaluate a model on coordinate arrays of any number of dimensions.

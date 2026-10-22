@@ -39,6 +39,21 @@ New Features
     standard deviation, and a ``noise_correlation_factor`` function that
     returns the noise correlation factor a kernel introduces. [#XXXX]
 
+  - Added ``photutils.simulation.SersicSource``, a Sersic profile
+    parameterized by its total flux, and
+    ``photutils.simulation.make_convolved_model_image`` to render
+    sources, such as galaxies, convolved with a PSF model that is
+    integrated over the pixels. [#XXXX]
+
+  - Added ``photutils.simulation.optimal_snr`` to calculate the
+    matched-filter signal-to-noise ratio of sources rendered as they
+    would be in an image. [#XXXX]
+
+  - ``photutils.simulation.make_psf_model_image`` raises a ``TypeError``
+    for PSF models whose names end in ``PSF``, except for ``ImagePSF``
+    and its subclasses, because they are not integrated over the
+    pixels. [#XXXX]
+
 Bug Fixes
 ^^^^^^^^^
 

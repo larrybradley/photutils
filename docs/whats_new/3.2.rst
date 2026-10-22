@@ -83,6 +83,35 @@ kernel::
     ...                          kernel=kernel, seed=0)
     >>> factor = noise_correlation_factor(kernel)
 
+Sersic Sources and Convolved Rendering
+--------------------------------------
+
+The new :class:`~photutils.simulation.SersicSource` model is a Sersic
+profile parameterized by its total flux, and
+:func:`~photutils.simulation.make_convolved_model_image` renders sources
+such as galaxies convolved with a PSF model that is integrated over the
+pixels, such as an ePSF or a model whose name ends in ``PRF``. The new
+:func:`~photutils.simulation.optimal_snr` function returns the
+matched-filter signal-to-noise ratio of each source, calculated from the
+same rendering and an image of the pixel errors::
+
+    >>> import numpy as np
+    >>> from photutils.psf import CircularGaussianPRF
+    >>> from photutils.simulation import (SersicSource,
+    ...                                   make_convolved_model_image,
+    ...                                   make_model_params, optimal_snr)
+    >>> shape = (200, 200)
+    >>> params = make_model_params(shape, 20, min_separation=20,
+    ...                            border_size=10, flux=(500, 1000),
+    ...                            r_eff=(1.5, 4), n=(0.5, 4),
+    ...                            ellip=(0, 0.6), theta=(0, 3.14), seed=0)
+    >>> psf_model = CircularGaussianPRF(fwhm=3.0)
+    >>> image = make_convolved_model_image(shape, SersicSource(), params,
+    ...                                    psf_model)
+    >>> error = np.full(shape, 0.5)
+    >>> snr = optimal_snr(SersicSource(), params, error, psf_model=psf_model,
+    ...                   n_nodes=4)
+
 
 .. _whatsnew-3.2-api-changes:
 
@@ -128,6 +157,11 @@ will be removed in version 4.0. Use
     from photutils.simulation import make_psf_model_image
     data, params = make_psf_model_image((100, 100), psf_model, 10,
                                         min_separation=5, seed=123)
+
+The new function raises a ``TypeError`` for a PSF model whose name ends in
+``PSF``, such as ``GaussianPSF``, except for an ``ImagePSF``, because
+the model is not integrated over the pixels. Use a model whose name ends
+in ``PRF`` or an ePSF instead.
 
 
 .. _whatsnew-3.2-breaking-changes:
