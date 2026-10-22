@@ -1,0 +1,362 @@
+# Licensed under a 3-clause BSD style license - see LICENSE.rst
+"""
+Tools for making tables of model parameters or making models from a
+table of model parameters.
+"""
+
+import numpy as np
+from astropy.modeling import Model
+from astropy.table import QTable
+
+from photutils.utils._coords import make_random_xycoords
+from photutils.utils._misc import _get_meta
+from photutils.utils._parameters import as_pair
+
+__all__ = ['make_model_params', 'make_random_models_table',
+           'params_table_to_models']
+
+
+def make_model_params(shape, n_sources, *, x_name='x_0', y_name='y_0',
+                      min_separation=1, border_size=(0, 0), seed=0, **kwargs):
+    """
+    Make a table of randomly generated model positions and additional
+    parameters for simulated sources.
+
+    By default, the output table contains only the source ``id`` and
+    the ``x_0`` and ``y_0`` positions. Additional parameters can be
+    specified as keyword arguments with their lower and upper bounds
+    as 2-tuples. They are added as columns in the order given. The
+    parameter values will be uniformly sampled from the half-open
+    interval ``[lower, upper)``.
+
+    Parameters
+    ----------
+    shape : 2-tuple of int or int
+        The (ny, nx) shape of the image in which the sources will be
+        placed. If a single integer is provided, it is used for both
+        dimensions.
+
+    n_sources : int
+        The number of sources to generate. If ``min_separation`` is too
+        large, the requested number of sources may not fit within the
+        given ``shape``. In that case, fewer than ``n_sources`` sources
+        are generated and an
+        `~astropy.utils.exceptions.AstropyUserWarning` is issued.
+
+    x_name : str, optional
+        The name of the model parameter that corresponds to the x
+        position of the sources. This will be the column name in the
+        output table.
+
+    y_name : str, optional
+        The name of the model parameter that corresponds to the y
+        position of the sources. This will be the column name in the
+        output table.
+
+    min_separation : float, optional
+        The minimum separation in pixels between the centers of two
+        sources. If the minimum separation is too large, fewer than
+        ``n_sources`` sources are generated and a warning is issued.
+
+    border_size : tuple of 2 int or int, optional
+        The (ny, nx) size of the border around the image where no
+        sources will be generated (i.e., the source center will not be
+        located within the border). If a single integer is provided, it
+        will be used for both dimensions. The x positions are uniformly
+        sampled from the half-open interval ``[nx_border, shape[1] -
+        nx_border)`` and the y positions from ``[ny_border, shape[0] -
+        ny_border)``.
+
+    seed : int, optional
+        A seed to initialize the `numpy.random.BitGenerator`. If `None`,
+        then fresh, unpredictable entropy will be pulled from the OS.
+
+    **kwargs
+        Keyword arguments are accepted for additional model parameters.
+        The values should be 2-tuples of the lower and upper bounds for
+        the parameter range. The bounds must be numbers without units.
+        The parameter values will be uniformly sampled from the
+        half-open interval ``[lower, upper)``. The names ``id``,
+        ``x_name``, and ``y_name`` cannot be used because they are the
+        names of the ID and position columns.
+
+    Returns
+    -------
+    table : `~astropy.table.QTable`
+        A table containing the model parameters of the generated
+        sources. The table will also contain an ``'id'`` column with
+        unique source IDs.
+
+    Raises
+    ------
+    ValueError
+        If ``n_sources`` is negative, if ``border_size`` leaves no
+        room for sources within the given ``shape``, if a keyword
+        argument value is not a 2-tuple, or if a keyword argument is
+        named ``id`` or has the same name as ``x_name`` or ``y_name``.
+
+    Warns
+    -----
+    `~astropy.utils.exceptions.AstropyUserWarning`
+        If fewer than ``n_sources`` sources could be generated with
+        the given ``shape`` and ``min_separation``.
+
+    Examples
+    --------
+    >>> from photutils.simulation import make_model_params
+    >>> params = make_model_params((100, 100), 5, flux=(100, 500),
+    ...                            min_separation=3, border_size=10, seed=0)
+    >>> for col in params.colnames:
+    ...     params[col].info.format = '%.8g'  # for consistent table output
+    >>> print(params)
+     id    x_0       y_0       flux
+    --- --------- --------- ---------
+      1 60.956935 72.967865 291.99517
+      2 31.582937 29.149555 192.94917
+      3 13.277882 80.118738 420.75223
+      4 11.322211 14.685443 469.41206
+      5 75.061619 36.889365 206.45211
+
+    >>> params = make_model_params((100, 100), 5, flux=(100, 500),
+    ...                            x_name='x_mean', y_name='y_mean',
+    ...                            min_separation=3, border_size=10, seed=0)
+    >>> for col in params.colnames:
+    ...     params[col].info.format = '%.8g'  # for consistent table output
+    >>> print(params)
+     id   x_mean    y_mean     flux
+    --- --------- --------- ---------
+      1 60.956935 72.967865 291.99517
+      2 31.582937 29.149555 192.94917
+      3 13.277882 80.118738 420.75223
+      4 11.322211 14.685443 469.41206
+      5 75.061619 36.889365 206.45211
+
+    >>> params = make_model_params((100, 100), 5, flux=(100, 500),
+    ...                            sigma=(1, 2), alpha=(0, 1),
+    ...                            min_separation=3, border_size=10, seed=0)
+    >>> for col in params.colnames:
+    ...     params[col].info.format = '%.5g'  # for consistent table output
+    >>> print(params)
+     id  x_0    y_0    flux  sigma   alpha
+    --- ------ ------ ------ ------ --------
+      1 60.957 72.968    292 1.5389  0.61437
+      2 31.583  29.15 192.95 1.4428 0.028365
+      3 13.278 80.119 420.75  1.931  0.71922
+      4 11.322 14.685 469.41 1.0405 0.015992
+      5 75.062 36.889 206.45  1.732  0.75795
+    """
+    shape = as_pair('shape', shape, lower_bound=(0, 0))
+    border_size = as_pair('border_size', border_size, lower_bound=(0, 1))
+
+    if n_sources < 0:
+        msg = 'n_sources must be >= 0'
+        raise ValueError(msg)
+
+    xrange = (border_size[1], shape[1] - border_size[1])
+    yrange = (border_size[0], shape[0] - border_size[0])
+
+    if xrange[0] >= xrange[1] or yrange[0] >= yrange[1]:
+        msg = 'border_size is too large for the given shape'
+        raise ValueError(msg)
+
+    rng = np.random.default_rng(seed)
+    xycoords = make_random_xycoords(n_sources, xrange, yrange,
+                                    min_separation=min_separation,
+                                    seed=rng)
+    x, y = np.transpose(xycoords)
+
+    model_params = QTable()
+    model_params.meta.update(_get_meta())  # keep model_params.meta type
+    model_params['id'] = np.arange(len(x)) + 1
+    model_params[x_name] = x
+    model_params[y_name] = y
+
+    for param, prange in kwargs.items():
+        if param in ('id', x_name, y_name):
+            msg = (f'{param} cannot be used as a keyword argument because '
+                   'it is the name of the ID or a position column')
+            raise ValueError(msg)
+        if np.shape(prange) != (2,):
+            msg = f'{param} must be a 2-tuple'
+            raise ValueError(msg)
+        vals = rng.uniform(*prange, len(model_params))
+        model_params[param] = vals
+
+    return model_params
+
+
+def make_random_models_table(n_sources, param_ranges, *, seed=None):
+    """
+    Make a `~astropy.table.QTable` containing randomly generated
+    parameters for an Astropy model to simulate a set of sources.
+
+    Each row of the table corresponds to a source whose parameters
+    are defined by the column names. The parameters are uniformly
+    sampled from the half-open intervals ``[lower, upper)`` given by the
+    specified input ranges.
+
+    The output table can be input into :func:`make_model_image` to
+    create an image containing the model sources.
+
+    Parameters
+    ----------
+    n_sources : int
+        The number of random model sources to generate.
+
+    param_ranges : dict
+        The lower and upper boundaries for each of the model parameters
+        as a dictionary mapping the parameter name to its ``(lower,
+        upper)`` bounds. The bounds must be numbers without units. The
+        parameter values will be uniformly sampled from the half-open
+        interval ``[lower, upper)``. The key ``'id'`` cannot be used
+        because it is the name of the source ID column.
+
+    seed : int, optional
+        A seed to initialize the `numpy.random.BitGenerator`. If `None`,
+        then fresh, unpredictable entropy will be pulled from the OS.
+
+    Returns
+    -------
+    table : `~astropy.table.QTable`
+        A table of parameters for the randomly generated sources. Each
+        row of the table corresponds to a source whose model parameters
+        are defined by the column names. The column names will be the
+        keys of the dictionary ``param_ranges``. The table will also
+        contain an ``'id'`` column with unique source IDs.
+
+    Raises
+    ------
+    ValueError
+        If ``n_sources`` is negative, if a ``param_ranges`` value is
+        not a 2-tuple, or if ``param_ranges`` contains an ``'id'`` key.
+
+    Notes
+    -----
+    To generate identical parameter values from separate function
+    calls, ``n_sources``, the ``seed`` (which must not be `None`),
+    and the parameter ranges in ``param_ranges``, including the order
+    of its keys, must all be the same.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from photutils.simulation import make_random_models_table
+    >>> n_sources = 5
+    >>> param_ranges = {'amplitude': [500, 1000],
+    ...                 'x_mean': [0, 500],
+    ...                 'y_mean': [0, 300],
+    ...                 'x_stddev': [1, 5],
+    ...                 'y_stddev': [1, 5],
+    ...                 'theta': [0, np.pi]}
+    >>> params = make_random_models_table(n_sources, param_ranges, seed=0)
+    >>> for col in params.colnames:
+    ...     params[col].info.format = '%.8g'  # for consistent table output
+    >>> print(params)
+     id amplitude   x_mean    y_mean    x_stddev  y_stddev   theta
+    --- --------- --------- ---------- --------- --------- ---------
+      1 818.48084 456.37779  244.75607 1.7026225 1.1132787 1.2053586
+      2 634.89336 303.31789 0.82155005 4.4527157 1.4971331 3.1328274
+      3 520.48676 364.74828  257.22128 3.1658449 3.6824977 3.0813851
+      4 508.26382  271.8125  10.075673 2.1988476  3.588758 2.1536937
+      5 906.63512 467.53621  218.89663 2.6907489 3.4615404 2.0434781
+    """
+    if n_sources < 0:
+        msg = 'n_sources must be >= 0'
+        raise ValueError(msg)
+
+    if 'id' in param_ranges:
+        msg = ("param_ranges cannot contain an 'id' key because it is the "
+               'name of the source ID column')
+        raise ValueError(msg)
+
+    rng = np.random.default_rng(seed)
+
+    sources = QTable()
+    sources.meta.update(_get_meta())  # keep sources.meta type
+    sources['id'] = np.arange(n_sources) + 1
+    for param_name, prange in param_ranges.items():
+        if np.shape(prange) != (2,):
+            msg = f'{param_name} must be a 2-tuple'
+            raise ValueError(msg)
+        # Generate a column for every item in param_ranges, even if it
+        # is not in the model (e.g., flux).
+        sources[param_name] = rng.uniform(prange[0], prange[1], n_sources)
+
+    return sources
+
+
+def params_table_to_models(params_table, model):
+    """
+    Create a list of models from a table of model parameters.
+
+    Parameters
+    ----------
+    params_table : `~astropy.table.Table`
+        A table containing the model parameters for each source.
+        Each row of the table corresponds to a different model whose
+        parameters are defined by the column names. Model parameters
+        not defined in the table keep the values of the input
+        ``model``. Columns whose names do not match a model parameter
+        name are ignored. At least one column name must match a
+        parameter name of ``model``. To attach units to model
+        parameters, ``params_table`` must be input as a
+        `~astropy.table.QTable`. A column named ``'name'`` can also be
+        included in the table to assign a name to each model.
+
+    model : `astropy.modeling.Model` instance
+        The model to copy for each row of ``params_table``. The
+        parameters of each copy are set from the table. The input
+        ``model`` is not modified.
+
+    Returns
+    -------
+    models : list of `astropy.modeling.Model`
+        A list of models created from the input table of model
+        parameters.
+
+    Raises
+    ------
+    TypeError
+        If ``model`` is not an `astropy.modeling.Model` instance.
+
+    ValueError
+        If no column name in ``params_table`` matches a parameter name
+        of ``model``.
+
+    Examples
+    --------
+    >>> from astropy.table import QTable
+    >>> from photutils.simulation import params_table_to_models
+    >>> from photutils.psf import CircularGaussianPSF
+    >>> tbl = QTable()
+    >>> tbl['x_0'] = [1, 2, 3]
+    >>> tbl['y_0'] = [4, 5, 6]
+    >>> tbl['flux'] = [100, 200, 300]
+    >>> model = CircularGaussianPSF()
+    >>> models = params_table_to_models(tbl, model)
+    >>> models
+    [<CircularGaussianPSF(flux=100., x_0=1., y_0=4., fwhm=1.)>,
+     <CircularGaussianPSF(flux=200., x_0=2., y_0=5., fwhm=1.)>,
+     <CircularGaussianPSF(flux=300., x_0=3., y_0=6., fwhm=1.)>]
+    """
+    if not isinstance(model, Model):
+        msg = 'model must be a Model instance'
+        raise TypeError(msg)
+
+    param_names = set(model.param_names)
+    colnames = set(params_table.colnames)
+    if param_names.isdisjoint(colnames):
+        msg = 'No matching model parameter names found in params_table'
+        raise ValueError(msg)
+
+    param_names = [*sorted(param_names), 'name']
+    models = []
+    for row in params_table:
+        new_model = model.copy()
+        for param_name in param_names:
+            if param_name not in colnames:
+                continue
+            setattr(new_model, param_name, row[param_name])
+        models.append(new_model)
+
+    return models

@@ -20,7 +20,7 @@ from astropy.table import QTable, Table, hstack, join
 from astropy.utils.exceptions import AstropyUserWarning
 
 from photutils.aperture import AperturePhotometry, CircularAperture
-from photutils.datasets import make_model_image as _make_model_image
+from photutils.simulation import make_model_image as _make_model_image
 from photutils.utils._deprecation import (DeprecatedColumnQTable,
                                           deprecated_renamed_argument)
 from photutils.utils._flags import update_flag_docstring
