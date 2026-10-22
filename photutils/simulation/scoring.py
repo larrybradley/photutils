@@ -5,8 +5,9 @@ of a simulated image.
 """
 
 import numpy as np
+from astropy.table import QTable
 
-__all__ = ['match_segments', 'match_sources']
+__all__ = ['completeness', 'match_segments', 'match_sources']
 
 
 def match_segments(segment_img, params_table, *, x_name='x_0',
@@ -260,6 +261,112 @@ def match_sources(x, y, params_table, max_separation, *, x_name='x_0',
     result.meta['unmatched_indices'] = np.setdiff1d(
         np.arange(x.size), match_index[detected])
 
+    return result
+
+
+def completeness(detected, values, bins, *, confidence=0.683):
+    """
+    Calculate the detection completeness in bins of a source property.
+
+    The completeness of a bin is the fraction of the input sources in
+    the bin that were detected. Its lower and upper bounds are Wilson
+    score intervals, which stay honest for small bins and for
+    completeness near 0 or 1.
+
+    Parameters
+    ----------
+    detected : 1D array_like of bool
+        Whether each input source was detected, for example the
+        ``'detected'`` column returned by `match_segments` or
+        `match_sources`.
+
+    values : 1D array_like
+        The value of each input source used for binning, usually its
+        optimal signal-to-noise ratio (see `optimal_snr`). Sources with
+        NaN values are not counted.
+
+    bins : int or 1D array_like
+        The bins, as for `numpy.histogram`. A sequence gives the bin
+        edges, including the rightmost edge. The last bin includes its
+        right edge, and the others do not.
+
+    confidence : float, optional
+        The confidence level of the bounds. The default, 0.683, gives
+        the equivalent of one-sigma bounds.
+
+    Returns
+    -------
+    result : `~astropy.table.QTable`
+        A table with one row per bin and the columns ``'bin_min'``,
+        ``'bin_max'``, ``'n_sources'``, ``'n_detected'``,
+        ``'completeness'``, ``'lower'``, and ``'upper'``. The last three
+        are NaN for an empty bin.
+
+    Raises
+    ------
+    ValueError
+        If ``detected`` and ``values`` have different shapes, or if
+        ``confidence`` is not between 0 and 1.
+
+    See Also
+    --------
+    match_segments, match_sources
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from photutils.simulation import completeness
+    >>> rng = np.random.default_rng(0)
+    >>> snr = rng.uniform(1, 20, 500)
+    >>> detected = rng.uniform(size=500) < snr / 10
+    >>> result = completeness(detected, snr, [1, 3, 5, 10, 20])
+    >>> for col in ('completeness', 'lower', 'upper'):
+    ...     result[col].info.format = '.3f'
+    >>> print(result)
+    bin_min bin_max n_sources n_detected completeness lower upper
+    ------- ------- --------- ---------- ------------ ----- -----
+        1.0     3.0        47          5        0.106 0.069 0.160
+        3.0     5.0        50         21        0.420 0.352 0.491
+        5.0    10.0       110         80        0.727 0.683 0.768
+       10.0    20.0       293        293        1.000 0.997 1.000
+    """
+    from astropy.stats import binom_conf_interval
+
+    detected = np.asarray(detected, dtype=bool)
+    values = np.asarray(values, dtype=float)
+    if detected.shape != values.shape:
+        msg = 'detected and values must have the same shape'
+        raise ValueError(msg)
+    if not 0 < confidence < 1:
+        msg = 'confidence must be between 0 and 1'
+        raise ValueError(msg)
+
+    finite = np.isfinite(values)
+    n_sources, edges = np.histogram(values[finite], bins=bins)
+    edges = edges.astype(float)
+    n_detected, _ = np.histogram(values[finite & detected], bins=edges)
+
+    fraction = np.full(len(n_sources), np.nan)
+    lower = np.full(len(n_sources), np.nan)
+    upper = np.full(len(n_sources), np.nan)
+    nonempty = n_sources > 0
+    if np.any(nonempty):
+        fraction[nonempty] = n_detected[nonempty] / n_sources[nonempty]
+        bounds = binom_conf_interval(n_detected[nonempty],
+                                     n_sources[nonempty],
+                                     confidence_level=confidence,
+                                     interval='wilson')
+        lower[nonempty] = bounds[0]
+        upper[nonempty] = bounds[1]
+
+    result = QTable()
+    result['bin_min'] = edges[:-1]
+    result['bin_max'] = edges[1:]
+    result['n_sources'] = n_sources
+    result['n_detected'] = n_detected
+    result['completeness'] = fraction
+    result['lower'] = lower
+    result['upper'] = upper
     return result
 
 
