@@ -734,6 +734,39 @@ def test_convolved_off_image():
     assert_allclose(image.sum(), 50.0, rtol=1e-3)
 
 
+def test_convolved_large_source_matches_padded_image():
+    """
+    Test that a source much larger than the image, which straddles the
+    image edge, renders as in a larger image that is cropped.
+
+    The padded image is large enough to hold the whole source cutout, so
+    its render is not trimmed.
+    """
+    shape = (40, 50)
+    pad = 30
+    params = QTable()
+    params['x_0'] = [2.3, 47.6]
+    params['y_0'] = [12.7, 38.1]
+    params['flux'] = [100.0, 250.0]
+    params['r_eff'] = [6.0, 4.0]
+    params['n'] = [1.0, 2.0]
+    params['ellip'] = [0.2, 0.4]
+    params['theta'] = [0.3, 1.2]
+    source = SersicSource()
+    psf_model = CircularGaussianPRF(fwhm=2.5)
+    result = make_convolved_model_image(shape, source, params, psf_model)
+
+    padded = params.copy()
+    padded['x_0'] += pad
+    padded['y_0'] += pad
+    padded_shape = (shape[0] + 2 * pad, shape[1] + 2 * pad)
+    expected = make_convolved_model_image(padded_shape, source, padded,
+                                          psf_model)
+    expected = expected[pad:pad + shape[0], pad:pad + shape[1]]
+    assert result.sum() > 0.5 * params['flux'].sum()
+    assert_allclose(result, expected, rtol=0, atol=1e-12 * expected.max())
+
+
 def test_convolved_nonfinite_skipped():
     """
     Test that rows with a nonfinite parameter are skipped.
