@@ -273,6 +273,8 @@ python benchmarks/bench_psf_matching.py --which size-scaling --sizes 101,201,401
 Benchmarks for the `photutils.simulation` subpackage:
 
 - the scaling of `make_model_image` with the number of sources
+- the cost of the `n_nodes` pixel integration of `make_model_image`
+  (`n_nodes=None, 2, 4, 8`, relative to the pixel-center evaluation)
 - the scaling of `make_model_params` with the number of sources,
   including the minimum-separation (KDTree) filtering
 - the noise functions (`make_noise_image` for each distribution and

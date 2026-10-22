@@ -13,6 +13,7 @@ from astropy.nddata import NoOverlapError
 from astropy.table import QTable, Table
 from astropy.utils.data import get_pkg_data_path
 
+from photutils.simulation._cutouts import render_cells, validate_n_nodes
 from photutils.simulation.params import make_model_params
 from photutils.utils._overlap import overlap_slices
 from photutils.utils._parameters import as_pair
@@ -31,7 +32,7 @@ _DATA_DIR = pathlib.Path(get_pkg_data_path('simulation', 'data',
 
 def make_model_image(shape, model, params_table, *, model_shape=None,
                      bbox_factor=None, x_name='x_0', y_name='y_0',
-                     params_map=None, progress_bar=False):
+                     params_map=None, n_nodes=None, progress_bar=False):
     """
     Make a 2D image containing sources generated from a user-specified
     astropy 2D model.
@@ -43,12 +44,14 @@ def make_model_image(shape, model, params_table, *, model_shape=None,
     mapping between model parameter names and column names using the
     ``params_map`` keyword.
 
-    Each source is rendered by evaluating the model at the center of
-    each pixel. To simulate the pixelated image of a source, the value
-    of the model at a position must be the flux in a pixel centered at
-    that position, as for the analytic models whose names end in
-    ``PRF`` and for an image-based model made from an ePSF (see
-    :ref:`psf-terminology`).
+    By default, each source is rendered by evaluating the model at
+    the center of each pixel. To simulate the pixelated image of a
+    source, the value of the model at a position must then be the
+    flux in a pixel centered at that position, as for the analytic
+    models whose names end in ``PRF`` and for an image-based model
+    made from an ePSF (see :ref:`psf-terminology`). For models that
+    are not integrated over pixels, use the ``n_nodes`` keyword to
+    integrate each pixel.
 
     Parameters
     ----------
@@ -151,6 +154,24 @@ def make_model_image(shape, model, params_table, *, model_shape=None,
         those keys are not in the dictionary, the ``x_name`` and
         ``y_name`` columns are used.
 
+    n_nodes : `None` or int, optional
+        If `None`, the model is evaluated at the center of each pixel.
+        This is correct for models that give the flux in a pixel, such
+        as an ePSF or a PRF model. If an integer, each pixel is instead
+        integrated with ``n_nodes`` x ``n_nodes`` Gauss-Legendre nodes.
+        This is for models that are not integrated over pixels, such
+        as a PSF model or a galaxy profile, and it takes the role of
+        the ``discretize_method`` and ``discretize_oversample``
+        keywords of the deprecated
+        ``photutils.datasets.make_model_image``. The 3 x 3 pixels around
+        the pixel that contains the source center are refined by
+        splitting each pixel into 8 x 8 pieces that are each integrated
+        with the same number of nodes. A value of 4 gives about 0.1%
+        accuracy relative to the peak for typical galaxies. A value of
+        8 or more is needed for Sersic indices of 6 or more and for
+        effective radii below 0.5 pixels. The evaluation time scales
+        as ``n_nodes`` squared.
+
     progress_bar : bool, optional
         Whether to display a progress bar while adding the sources
         to the image. The progress bar requires that the `tqdm
@@ -171,7 +192,8 @@ def make_model_image(shape, model, params_table, *, model_shape=None,
         ``params_table`` is not an `~astropy.table.Table`.
 
     ValueError
-        If ``model`` does not have 2 inputs and 1 output, if a
+        If ``model`` does not have 2 inputs and 1 output, if
+        ``n_nodes`` is not `None` or a positive integer, if a
         ``params_map`` key is not a model parameter name, if a required
         column is not in ``params_table``, if the model has no
         ``bounding_box`` attribute and no model shape is specified, if
@@ -240,6 +262,7 @@ def make_model_image(shape, model, params_table, *, model_shape=None,
         fig.tight_layout()
     """
     shape = as_pair('shape', shape, lower_bound=(0, 0))
+    n_nodes = validate_n_nodes(n_nodes)
 
     if not isinstance(model, Model):
         msg = 'model must be a Model instance'
@@ -356,7 +379,7 @@ def make_model_image(shape, model, params_table, *, model_shape=None,
             continue
 
         yy, xx = np.mgrid[slc_lg]
-        subimg = model(xx, yy)
+        subimg = render_cells(model, xx, yy, x0, y0, n_nodes=n_nodes)
 
         try:
             image[slc_lg] += subimg + local_bkg[i]
@@ -585,7 +608,7 @@ def _make_gaussians_image(filename, shape, noise, noise_stddev,
     model = Gaussian2D()
     params = QTable.read(_DATA_DIR / filename, format='ascii.ecsv')
     data = make_model_image(shape, model, params, x_name='x_mean',
-                            y_name='y_mean', **kwargs)
+                            y_name='y_mean', n_nodes=None, **kwargs)
     data += 5.0  # background
 
     if noise:
