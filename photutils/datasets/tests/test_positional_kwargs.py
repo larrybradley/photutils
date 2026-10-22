@@ -13,6 +13,11 @@ from photutils.datasets.wcs import make_gwcs, make_wcs
 from photutils.utils._optional_deps import HAS_GWCS
 from photutils.utils.exceptions import PhotutilsDeprecationWarning
 
+# These tests cover the deprecated functions, so the deprecation
+# warning is ignored
+pytestmark = pytest.mark.filterwarnings(
+    'ignore:This function was deprecated in version 3.2')
+
 
 class TestMakeRandomModelsTablePositionalKwargs:
     """
