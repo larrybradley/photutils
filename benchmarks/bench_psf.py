@@ -32,8 +32,8 @@ from photutils.psf import (AiryDiskPSF, CircularGaussianPRF,
                            EPSFBuilder, GaussianPRF, GaussianPSF,
                            GriddedPSFModel, ImagePSF, IterativePSFPhotometry,
                            MoffatPSF, PSFPhotometry, SourceGrouper,
-                           extract_stars, fit_2dgaussian, fit_fwhm,
-                           make_psf_model_image)
+                           extract_stars, fit_2dgaussian, fit_fwhm)
+from photutils.simulation import make_psf_model_image
 
 # The FWHM (pixels) used for all of the PSF models
 FWHM = 2.8

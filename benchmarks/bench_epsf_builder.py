@@ -24,10 +24,10 @@ from astropy.table import Table
 from bench_helpers import (add_memory_argument, parse_int_list,
                            print_environment, set_memory_mode, time_best)
 
-from photutils.datasets import make_model_image
 from photutils.psf import CircularGaussianPRF, EPSFBuilder, extract_stars
 from photutils.psf.epsf_builder import _suppress_alias_modes
 from photutils.psf.image_models import ImagePSF
+from photutils.simulation import make_model_image
 from photutils.utils._stats import nanmedian
 
 

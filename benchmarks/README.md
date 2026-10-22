@@ -268,13 +268,11 @@ python benchmarks/bench_psf_matching.py
 python benchmarks/bench_psf_matching.py --which size-scaling --sizes 101,201,401
 ```
 
-## Datasets (`bench_datasets.py`)
+## Simulation (`bench_simulation.py`)
 
-Benchmarks for the `photutils.datasets` subpackage:
+Benchmarks for the `photutils.simulation` subpackage:
 
 - the scaling of `make_model_image` with the number of sources
-- `make_model_image` for each discretization method (`center`,
-  `interp`, and `oversample`)
 - the scaling of `make_model_params` with the number of sources,
   including the minimum-separation (KDTree) filtering
 - the noise functions (`make_noise_image` for each distribution and
@@ -284,8 +282,8 @@ Benchmarks for the `photutils.datasets` subpackage:
   `make_100gaussians_image`)
 
 ```bash
-python benchmarks/bench_datasets.py
-python benchmarks/bench_datasets.py --which model-image --n-sources-list 500,2000
+python benchmarks/bench_simulation.py
+python benchmarks/bench_simulation.py --which model-image --n-sources-list 500,2000
 ```
 
 ## Detection (`bench_detection.py`)
