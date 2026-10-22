@@ -94,28 +94,23 @@ fall outside the image.
 Rendering Images
 ----------------
 
-Every PSF in this subpackage must be integrated over the detector
-pixels: an ePSF (`~photutils.psf.ImagePSF` or
-`~photutils.psf.GriddedPSFModel`, for example made with
+Every PSF model passed to this subpackage must be integrated over the
+detector pixels: an ePSF (`~photutils.psf.ImagePSF` or
+`~photutils.psf.GriddedPSFModel`, for example an
+`~photutils.psf.ImagePSF` of an image made with
 `~photutils.psf.make_epsf_from_psf`) or an analytic model whose name
 ends in ``PRF``, such as `~photutils.psf.CircularGaussianPRF`. Models
-whose names end in ``PSF`` are evaluated at a point and would miss the
-pixel response, so the functions that take a ``psf_model`` reject them
-(see :ref:`psf-terminology`).
+whose names end in ``PSF`` (other than `~photutils.psf.ImagePSF`) are
+evaluated at a point and would miss the pixel response, so the
+functions that take a ``psf_model`` reject them (see
+:ref:`psf-terminology`).
 
 Point Sources and Pixel-Integrated Models
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 :func:`~photutils.simulation.make_model_image` renders one model per
 source. By default, the model is evaluated at the pixel centers, which
-is correct for ePSFs and PRFs. For a model that is not integrated over
-the pixels, such as `~photutils.psf.GaussianPSF` used as a Gaussian
-galaxy, set ``n_nodes`` to integrate each pixel with ``n_nodes`` x
-``n_nodes`` Gauss-Legendre nodes. The 3 x 3 pixels around each source
-center are refined further, because most of the integration error of a
-cuspy profile comes from its center. The default of 4 nodes gives about
-0.1% for typical galaxies. Use 8 or more for Sersic profiles with n >= 6
-or an effective radius below 0.5 pixels:
+is correct for ePSFs and PRFs.
 
 .. plot::
     :include-source:
@@ -139,34 +134,40 @@ or an effective radius below 0.5 pixels:
     ax.imshow(data, norm=norm, origin='lower')
     ax.set_title('Point sources')
 
+For a model that is not integrated over the pixels, such as
+`~photutils.psf.GaussianPSF` used as a Gaussian galaxy, set ``n_nodes``
+to integrate each pixel with ``n_nodes`` x ``n_nodes`` Gauss-Legendre
+nodes. The 3 x 3 pixels around each source center are refined further,
+because most of the integration error of a cuspy profile comes from
+its center. ``n_nodes=4`` gives an accuracy of about 0.1% of the peak
+pixel for typical galaxies. Use 8 or more for Sersic profiles with
+n >= 6 or an effective radius below 0.5 pixels::
+
+    >>> from photutils.psf import GaussianPSF
+    >>> from photutils.simulation import make_model_image
+    >>> galaxies = make_model_params((100, 100), 5, flux=(100, 1000),
+    ...                              x_fwhm=(2, 5), y_fwhm=(2, 5),
+    ...                              theta=(0, 180), border_size=10,
+    ...                              min_separation=20, seed=5)
+    >>> data = make_model_image((100, 100), GaussianPSF(), galaxies,
+    ...                         n_nodes=4)
+
 Extended Sources Convolved With a PSF
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 :func:`~photutils.simulation.make_convolved_model_image` renders sources
 such as galaxies convolved with an ePSF or PRF. Each source is
-integrated over a grid of cells ``1 / oversample`` pixels wide, with the
-same ``n_nodes`` rule and core refinement as above, then convolved with
-the PSF model evaluated at the same grid offsets, and sampled at the
-pixel centers. Because the PSF model already includes the pixel
-response, no further averaging over pixels is needed.
+integrated over a grid of cells ``1 / oversample`` pixels wide, whose
+points include every pixel center, with the same ``n_nodes`` rule and
+core refinement as above. It is then convolved with the PSF model
+evaluated at the same grid offsets and sampled at the pixel centers.
+Because the PSF model already includes the pixel response, no further
+averaging over pixels is needed.
 
-`~photutils.simulation.SersicSource` is a Sersic profile set by its total
-flux instead of its surface brightness. Its default bounding box is a
-square of half-width ``10 * r_eff``, and flux beyond the cutout around
-each source is lost:
-
-======== ========================================
-Sersic n Flux lost at the default bounding box
-======== ========================================
-1        0.0%
-2        0.3%
-4        3.9%
-6        8.0%
-======== ========================================
-
-Set ``model_shape`` or ``bbox_factor`` to render a larger cutout. For a
-Gaussian galaxy, use `~photutils.psf.GaussianPSF`, which is also a
-flux-normalized model evaluated at a point:
+`~photutils.simulation.SersicSource` is a Sersic profile set by its
+total flux instead of its surface brightness. For a Gaussian galaxy,
+use `~photutils.psf.GaussianPSF`, which is also a flux-normalized model
+evaluated at a point:
 
 .. plot::
     :include-source:
@@ -194,13 +195,32 @@ flux-normalized model evaluated at a point:
     ax.imshow(data, norm=norm, origin='lower')
     ax.set_title('Exponential galaxies convolved with a PRF')
 
-The result is exact up to the integration over the cells, with one
-caveat. A source much smaller than a cell lands in a single cell and
+The default bounding box of `~photutils.simulation.SersicSource` is a
+square of half-width ``10 * r_eff``, and flux beyond the cutout around
+each source is lost. At most this is the fraction outside the circle
+inscribed in the square, for a circular profile:
+
+======== ===================================
+Sersic n Flux lost at the default (at most)
+======== ===================================
+1        0.0%
+2        0.3%
+4        3.9%
+6        8.0%
+======== ===================================
+
+Add a ``'model_shape'`` column to the source table, or set
+``model_shape`` or ``bbox_factor``, to render a larger cutout.
+
+The result is exact up to the integration over the cells, except that
+convolving on a grid of cells adds a box of width ``1 / oversample`` to
+the profile, which is negligible for most sources. It matters for a
+source much smaller than a cell, which lands in a single cell and
 renders as the PSF model at that cell's center, so it is displaced by
-up to half a cell. Averaged over positions, this broadens such a source
-by a box of width ``1 / oversample``. Render point sources with
+up to half a cell. Render point sources with
 :func:`~photutils.simulation.make_model_image` instead. A point source
-centered on a grid point renders identically with both functions.
+centered on a grid point renders the same with both functions, to
+within the integration accuracy.
 
 Example Images
 ^^^^^^^^^^^^^^
@@ -273,9 +293,10 @@ Measuring Detection Completeness
 This example measures the completeness of a simple detection algorithm
 on a scene of stars, exponential galaxies, and close pairs of stars.
 
-First, make the source tables and render the image. The stars and pairs
-are rendered with :func:`~photutils.simulation.make_model_image`, and the
-galaxies with :func:`~photutils.simulation.make_convolved_model_image`::
+First, make the source tables and render the image. The stars and
+pairs are rendered with :func:`~photutils.simulation.make_model_image`,
+and the galaxies with
+:func:`~photutils.simulation.make_convolved_model_image`::
 
     >>> import numpy as np
     >>> from astropy.table import vstack
@@ -312,8 +333,13 @@ Next, assign each source its optimal signal-to-noise ratio with
 :func:`~photutils.simulation.optimal_snr`. This is the matched-filter
 signal-to-noise ratio of the source rendered alone, the best that any
 linear detector can reach for white noise, and the right quantity to
-bin completeness by. The galaxies are rendered with the same PSF as in
-the image. The tables are then stacked into one table of input sources::
+bin completeness by. :func:`~photutils.simulation.optimal_snr` must
+render each source the way the image does, so give it the same
+``psf_model``, ``oversample``, and ``n_nodes`` as the renderer (here the
+defaults). It has no ``model_shape`` or ``bbox_factor`` keyword, so to
+render larger cutouts add a ``'model_shape'`` column to the source
+table, which both functions honor. The tables are then stacked into one
+table of input sources::
 
     >>> from photutils.simulation import optimal_snr
     >>> stars['snr'] = optimal_snr(psf_model, stars, error)
@@ -340,7 +366,8 @@ the noise of the smoothed image::
 :func:`~photutils.simulation.match_segments` reads the segment label
 under each input position and credits each segment to one source only,
 the brightest one it covers. A source that lies in a segment credited to
-another source is marked as blended::
+another source is marked as blended. Only the credited source counts as
+detected, so a blended source counts as missed::
 
     >>> from photutils.simulation import match_segments
     >>> result = match_segments(segm, truth)
@@ -375,16 +402,20 @@ intervals that stay honest for small bins::
        50.0  1000.0        37         36         0.97  0.93  0.99
 
 Finally, :func:`~photutils.simulation.false_detection_rate` runs the
-same algorithm on pure-noise images, where every detection is false::
+same algorithm on pure-noise images with the same noise level as the
+image, where every detection is false::
 
     >>> from photutils.simulation import false_detection_rate
-    >>> fdr = false_detection_rate(detect, shape, n_trials=5, seed=5)
+    >>> fdr = false_detection_rate(detect, shape, n_trials=5, stddev=1.0,
+    ...                            seed=5)
     >>> print(fdr['n_detections'].tolist())
     [3, 5, 5, 4, 6]
 
 The completeness curves show that close pairs are detected far less
-often than isolated stars of the same signal-to-noise ratio, because a
-pair that is not deblended is detected as one source:
+often than single stars of the same signal-to-noise ratio, because a
+pair that is not deblended is detected as one source. Completeness
+stays below 1 even at high signal-to-noise ratio, because some sources
+fall in the segment of a brighter neighbor from another population:
 
 .. plot::
 

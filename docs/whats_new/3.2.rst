@@ -33,9 +33,9 @@ signal-to-noise ratio, and measures completeness and false detections.
 The :ref:`simulation-completeness` example in the user guide shows the
 whole workflow.
 
-The subpackage replaces the deprecated ``photutils.datasets`` tools and
-``photutils.psf.make_psf_model_image`` with versions whose optional
-arguments are keyword-only.
+The subpackage replaces the deprecated ``photutils.datasets`` tools
+and ``photutils.psf.make_psf_model_image`` (see
+:ref:`whatsnew-3.2-deprecations`).
 
 Scene Generators
 ----------------
@@ -133,12 +133,8 @@ its sources.
 :func:`~photutils.simulation.completeness` gives the fraction detected
 in bins of a source property with Wilson score intervals, and
 :func:`~photutils.simulation.false_detection_rate` counts detections on
-pure-noise images::
-
-    >>> from photutils.simulation import completeness, match_segments
-    >>> result = match_segments(segm, truth)  # doctest: +SKIP
-    >>> table = completeness(result['detected'], result['snr'],
-    ...                      [3, 5, 7, 10, 15, 25])  # doctest: +SKIP
+pure-noise images. The :ref:`simulation-completeness` example in the
+user guide uses all four.
 
 
 .. _whatsnew-3.2-api-changes:
@@ -186,10 +182,10 @@ will be removed in version 4.0. Use
     data, params = make_psf_model_image((100, 100), psf_model, 10,
                                         min_separation=5, seed=123)
 
-The new function raises a ``TypeError`` for a PSF model whose name ends in
-``PSF``, such as ``GaussianPSF``, except for an ``ImagePSF``, because
-the model is not integrated over the pixels. Use a model whose name ends
-in ``PRF`` or an ePSF instead.
+The new function raises a ``TypeError`` for a PSF model whose name
+ends in ``PSF``, such as ``GaussianPSF``, except for an ``ImagePSF``,
+because the model is not integrated over the pixels. Use a model whose
+name ends in ``PRF`` or an ePSF instead.
 
 
 .. _whatsnew-3.2-breaking-changes:
