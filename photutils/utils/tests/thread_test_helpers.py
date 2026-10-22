@@ -9,9 +9,29 @@ plugin.
 
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from copy import deepcopy
 
+import pytest
+
 from photutils.utils._misc import get_cached_property_names
+
+
+@contextmanager
+def fail_on_warning():
+    """
+    Fail the test if the enclosed code raises a warning as an error.
+
+    pytest-run-parallel ignores `Warning` exceptions raised in the
+    body of a test that it runs in several threads. Without this
+    context manager, a warning that the ``filterwarnings`` setting
+    turns into an error would stop the test body without failing the
+    test.
+    """
+    try:
+        yield
+    except Warning as exc:
+        pytest.fail(f'Unexpected warning: {exc!r}')
 
 
 def check_concurrent_deepcopy(make_obj, *, names=None, n_threads=8,
