@@ -130,9 +130,11 @@ def test_kernel_stddev():
     assert_allclose(np.std(image), 3.0, rtol=0.01)
     assert_allclose(np.mean(image), 1.0, atol=0.1)
 
-    edge = np.ones(image.shape, dtype=bool)
-    edge[20:-20, 20:-20] = False
-    assert_allclose(np.std(image[edge]), np.std(image[~edge]), rtol=0.05)
+    # The outermost two-pixel ring keeps the full standard deviation,
+    # which fails if the edges are convolved with zero padding
+    ring = np.ones(image.shape, dtype=bool)
+    ring[2:-2, 2:-2] = False
+    assert_allclose(np.std(image[ring]), 3.0, rtol=0.08)
 
 
 def test_kernel_smoothed_variance():
