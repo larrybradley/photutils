@@ -392,9 +392,9 @@ def render_convolved(model, psf_model, slices, x_0, y_0, *, oversample,
     the sum over the grid. A source much smaller than a cell renders
     as the PSF model at the center of the cell that contains it.
 
-    The PSF model is evaluated around the pixel center nearest to the
-    source center, which gives the local PSF of a model that varies
-    over the image, such as a `~photutils.psf.GriddedPSFModel`.
+    The PSF model is centered at the source center, which gives the
+    local PSF of a model that varies over the image, such as a
+    `~photutils.psf.GriddedPSFModel`.
 
     Parameters
     ----------
@@ -433,21 +433,18 @@ def render_convolved(model, psf_model, slices, x_0, y_0, *, oversample,
     # photutils.psf subpackage imports photutils.simulation.
     from photutils.psf.utils import _get_psf_model_main_params
 
-    # The kernel is the PSF model with unit flux, centered at the pixel
-    # center nearest to the source center and evaluated at the grid
-    # offsets inside its bounding box. Centering it near the source
-    # gives the local PSF of a GriddedPSFModel.
+    # The kernel is the PSF model with unit flux, centered at the source
+    # and evaluated at the grid offsets inside its bounding box. This
+    # gives the local PSF of a GriddedPSFModel, as in make_model_image.
     x_name, y_name, flux_name = _get_psf_model_main_params(psf_model)
     kernel_model = psf_model.copy()
-    x_center = floor(x_0 + 0.5)
-    y_center = floor(y_0 + 0.5)
-    setattr(kernel_model, x_name, x_center)
-    setattr(kernel_model, y_name, y_center)
+    setattr(kernel_model, x_name, x_0)
+    setattr(kernel_model, y_name, y_0)
     setattr(kernel_model, flux_name, 1.0)
     half_y, half_x = psf_half_size(kernel_model, oversample)
     jy = np.arange(-half_y, half_y + 1) / oversample
     jx = np.arange(-half_x, half_x + 1) / oversample
-    yy, xx = np.meshgrid(y_center + jy, x_center + jx, indexing='ij')
+    yy, xx = np.meshgrid(y_0 + jy, x_0 + jx, indexing='ij')
     kernel = evaluate_model(kernel_model, xx, yy)
 
     # The source grid, in integer grid units. Grid point q is at q /
