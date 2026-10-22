@@ -12,8 +12,8 @@ from photutils.utils._coords import make_random_xycoords
 from photutils.utils._misc import _get_meta
 from photutils.utils._parameters import as_pair
 
-__all__ = ['make_model_params', 'make_random_models_table',
-           'params_table_to_models']
+__all__ = ['make_model_params', 'make_pair_params',
+           'make_random_models_table', 'params_table_to_models']
 
 
 def make_model_params(shape, n_sources, *, x_name='x_0', y_name='y_0',
@@ -207,6 +207,166 @@ def make_model_params(shape, n_sources, *, x_name='x_0', y_name='y_0',
     add_kind_column(model_params, kind)
 
     return model_params
+
+
+def make_pair_params(shape, n_pairs, separation, *, flux=(1, 1),
+                     flux_ratio=1.0, x_name='x_0', y_name='y_0',
+                     border_size=(0, 0), seed=0, kind=None, **kwargs):
+    """
+    Make a table of parameters for close pairs of simulated sources.
+
+    Each pair has two sources at a given separation and random
+    orientation. The table has two rows per pair, and the two rows of
+    a pair share a ``pair_id`` value. Pair midpoints are at least three
+    times the largest separation apart, so pairs never interleave, and
+    both sources of every pair lie inside the ``border_size`` margins.
+
+    Parameters
+    ----------
+    shape : 2-tuple of int or int
+        The (ny, nx) shape of the image in which the sources will be
+        placed. If a single integer is provided, it is used for both
+        dimensions.
+
+    n_pairs : int
+        The number of pairs to generate. If the pairs do not fit within
+        the given ``shape``, fewer than ``n_pairs`` pairs are generated
+        and an `~astropy.utils.exceptions.AstropyUserWarning` is
+        issued.
+
+    separation : float or 2-tuple of float
+        The separation in pixels between the two sources of a pair. A
+        2-tuple gives the lower and upper bounds of the half-open
+        interval ``[lower, upper)`` from which the separation of each
+        pair is sampled uniformly. Separations must be positive.
+
+    flux : float or 2-tuple of float, optional
+        The flux of the first source of each pair. A 2-tuple gives the
+        lower and upper bounds from which the flux of each pair is
+        sampled uniformly.
+
+    flux_ratio : float or 2-tuple of float, optional
+        The flux of the second source of each pair divided by the flux
+        of the first. A 2-tuple gives the lower and upper bounds from
+        which the ratio of each pair is sampled uniformly.
+
+    x_name : str, optional
+        The name of the model parameter that corresponds to the x
+        position of the sources. This will be the column name in the
+        output table.
+
+    y_name : str, optional
+        The name of the model parameter that corresponds to the y
+        position of the sources. This will be the column name in the
+        output table.
+
+    border_size : tuple of 2 int or int, optional
+        The (ny, nx) size of the border around the image where no
+        sources will be generated. If a single integer is provided, it
+        will be used for both dimensions.
+
+    seed : int, optional
+        A seed to initialize the `numpy.random.BitGenerator`. If `None`,
+        then fresh, unpredictable entropy will be pulled from the OS.
+
+    kind : str or `None`, optional
+        If not `None`, a ``'kind'`` column filled with this value is
+        added as the last column.
+
+    **kwargs
+        Keyword arguments are accepted for additional model parameters.
+        The values can be a scalar, used for every source, or a 2-tuple
+        of the lower and upper bounds from which the value of each
+        source is sampled uniformly. The names ``id``, ``x_name``,
+        ``y_name``, and ``pair_id`` cannot be used.
+
+    Returns
+    -------
+    table : `~astropy.table.QTable`
+        A table with the columns ``id``, ``x_name``, ``y_name``,
+        ``flux``, and ``pair_id``, followed by one column for each
+        keyword parameter and the optional ``kind`` column. Rows ``2k``
+        and ``2k + 1`` are the two sources of pair ``k + 1``.
+
+    Raises
+    ------
+    ValueError
+        If a separation is not positive, if ``border_size`` and the
+        largest separation leave no room for pairs within the given
+        ``shape``, or if a keyword argument has a reserved name.
+
+    Warns
+    -----
+    `~astropy.utils.exceptions.AstropyUserWarning`
+        If fewer than ``n_pairs`` pairs could be generated.
+
+    See Also
+    --------
+    make_model_params, make_satellite_params
+
+    Examples
+    --------
+    >>> from photutils.simulation import make_pair_params
+    >>> params = make_pair_params((100, 100), 3, (2, 5), flux=(100, 500),
+    ...                           flux_ratio=(0.1, 1), seed=0)
+    >>> print(params.colnames)
+    ['id', 'x_0', 'y_0', 'flux', 'pair_id']
+    >>> print(len(params))
+    6
+    """
+    shape = as_pair('shape', shape, lower_bound=(0, 0))
+    border_size = as_pair('border_size', border_size, lower_bound=(0, 1))
+
+    if np.any(np.asarray(separation) <= 0):
+        msg = 'separation must be positive'
+        raise ValueError(msg)
+
+    for param in kwargs:
+        if param in ('id', x_name, y_name, 'pair_id'):
+            msg = (f'{param} cannot be used as a keyword argument because '
+                   'it is the name of an output column')
+            raise ValueError(msg)
+
+    max_separation = np.max(separation)
+    margin = 0.5 * max_separation
+    xrange = (border_size[1] + margin, shape[1] - border_size[1] - margin)
+    yrange = (border_size[0] + margin, shape[0] - border_size[0] - margin)
+    if xrange[0] >= xrange[1] or yrange[0] >= yrange[1]:
+        msg = 'border_size and separation are too large for the given shape'
+        raise ValueError(msg)
+
+    rng = np.random.default_rng(seed)
+    midpoints = make_random_xycoords(n_pairs, xrange, yrange,
+                                     min_separation=3 * max_separation,
+                                     seed=rng)
+    n_made = len(midpoints)
+    x_mid, y_mid = np.transpose(midpoints)
+
+    separations = sample_param(rng, separation, n_made, name='separation')
+    angles = rng.uniform(0, 2 * np.pi, n_made)
+    first_flux = sample_param(rng, flux, n_made, name='flux')
+    ratios = sample_param(rng, flux_ratio, n_made, name='flux_ratio')
+
+    dx = 0.5 * separations * np.cos(angles)
+    dy = 0.5 * separations * np.sin(angles)
+
+    def interleave(first, second):  # numpydoc ignore=GL08
+        return np.column_stack((first, second)).ravel()
+
+    params = QTable()
+    params.meta.update(_get_meta())  # keep params.meta type
+    params['id'] = np.arange(2 * n_made) + 1
+    params[x_name] = interleave(x_mid - dx, x_mid + dx)
+    params[y_name] = interleave(y_mid - dy, y_mid + dy)
+    params['flux'] = interleave(first_flux, first_flux * ratios)
+    params['pair_id'] = np.repeat(np.arange(n_made) + 1, 2)
+
+    for param, prange in kwargs.items():
+        params[param] = sample_param(rng, prange, len(params), name=param)
+
+    add_kind_column(params, kind)
+
+    return params
 
 
 def sample_param(rng, bounds, size, *, log=False, name='parameter'):
