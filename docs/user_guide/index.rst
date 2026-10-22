@@ -86,12 +86,12 @@ Elliptical Isophotes
     isophote.rst
 
 
-Datasets and Simulation
------------------------
+Simulation
+----------
 .. toctree::
     :maxdepth: 1
 
-    datasets.rst
+    simulation.rst
 
 
 Serialization

@@ -27,7 +27,7 @@ before thresholding to smooth the noise and maximize the detectability
 of objects with a shape similar to the filter kernel.
 
 Let's start by making a synthetic image provided by the
-`photutils.simulation` module::
+:ref:`photutils.simulation <simulation>` module::
 
     >>> from photutils.simulation import make_100gaussians_image
     >>> data = make_100gaussians_image()
