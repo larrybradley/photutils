@@ -41,7 +41,7 @@ First, we create the image, subtract its background, and extract a
 cutout of the source::
 
     >>> import numpy as np
-    >>> from photutils.datasets import make_4gaussians_image
+    >>> from photutils.simulation import make_4gaussians_image
     >>> data = make_4gaussians_image()
     >>> data -= np.median(data[0:30, 0:125])  # subtract background
     >>> data = data[40:80, 75:105]  # extract single object
@@ -83,8 +83,8 @@ approximate isophotal ellipse for the source:
     import matplotlib.pyplot as plt
     import numpy as np
     from photutils.aperture import EllipticalAperture
-    from photutils.datasets import make_4gaussians_image
     from photutils.morphology import data_properties
+    from photutils.simulation import make_4gaussians_image
 
     data = make_4gaussians_image()
     data -= np.median(data[0:30, 0:125])  # subtract background

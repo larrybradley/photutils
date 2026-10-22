@@ -25,8 +25,8 @@ Photutils also optionally depends on other packages for some features:
   and to convert source segments into region objects.
 
 * `GWCS <https://gwcs.readthedocs.io/en/stable/>`_ 0.22 or later:
-  Required in `~photutils.datasets.make_gwcs` to create a simple celestial
-  GWCS object.
+  Required in `~photutils.simulation.make_gwcs` to create a simple
+  celestial GWCS object.
 
 * `asdf <https://asdf.readthedocs.io/>`_ 3.3 or later: Required to
   serialize apertures and PSF models to the `Advanced Scientific Data
