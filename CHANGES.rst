@@ -54,6 +54,13 @@ New Features
     and its subclasses, because they are not integrated over the
     pixels. [#XXXX]
 
+  - Added ``match_segments``, ``match_sources``, ``completeness``, and
+    ``false_detection_rate`` to ``photutils.simulation`` for scoring
+    source detection against the input sources of a simulated image.
+    Each segment or detection is credited to one input source, so
+    blends are counted once, and completeness comes with Wilson score
+    intervals. [#XXXX]
+
 Bug Fixes
 ^^^^^^^^^
 
