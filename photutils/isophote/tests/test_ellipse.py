@@ -12,11 +12,11 @@ from astropy.modeling.models import Gaussian2D
 from astropy.utils.exceptions import AstropyUserWarning
 
 from photutils.datasets import make_noise_image
-from photutils.datasets.load import _get_path
 from photutils.isophote.ellipse import Ellipse
 from photutils.isophote.geometry import EllipseGeometry
 from photutils.isophote.isophote import Isophote, IsophoteList
 from photutils.isophote.tests.make_test_data import make_test_image
+from photutils.utils._testing import get_path
 
 # Define an off-center position and a tilted sma
 POS = 384
@@ -37,8 +37,7 @@ class TestEllipse:
 
     @pytest.mark.remote_data
     def test_find_center(self):
-        path = _get_path('isophote/M51.fits', location='photutils-datasets',
-                         cache=True)
+        path = get_path('isophote/M51.fits')
         hdu = fits.open(path)
         data = hdu[0].data
         hdu.close()
