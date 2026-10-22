@@ -266,55 +266,11 @@ def make_model_image(shape, model, params_table, *, model_shape=None,
     """
     shape = as_pair('shape', shape, lower_bound=(0, 0))
     n_nodes = validate_n_nodes(n_nodes)
-
-    if not isinstance(model, Model):
-        msg = 'model must be a Model instance'
-        raise TypeError(msg)
-    if model.n_inputs != 2 or model.n_outputs != 1:
-        msg = 'model must be a 2D model'
-        raise ValueError(msg)
-    if not isinstance(params_table, Table):
-        msg = 'params_table must be an astropy Table'
-        raise TypeError(msg)
-
-    xypos_map = {x_name: x_name, y_name: y_name}
-
-    # By default, use the model parameter names as the column names
-    # if they are in the table
-    params_to_set = set(params_table.colnames) & set(model.param_names)
-    xypos_map.update({param: param for param in params_to_set})
-
-    if params_map is not None:
-        # params_map takes precedence over x_name and y_name and
-        # any matching column names in params_table
-        xypos_map.update(params_map)
-    params_map = xypos_map
-
-    for key, value in params_map.items():
-        if key not in model.param_names:
-            msg = f'key "{key}" not in model parameter names'
-            raise ValueError(msg)
-        if value not in params_table.colnames:
-            msg = f'value "{value}" not in params_table column names'
-            raise ValueError(msg)
-
-    if model_shape is not None:
-        model_shape = as_pair('model_shape', model_shape, lower_bound=(0, 0))
-
-    variable_shape = False
-    if 'model_shape' in params_table.colnames:
-        model_shape = np.array([as_pair('model_shape', mshape,
-                                        lower_bound=(0, 0))
-                                for mshape in params_table['model_shape']])
-        variable_shape = True
-
-    if model_shape is None:
-        try:
-            _ = model.bounding_box
-        except NotImplementedError as exc:
-            msg = ('model_shape must be specified if the model does not '
-                   'have a bounding_box attribute')
-            raise ValueError(msg) from exc
+    _validate_model_and_table(model, params_table)
+    params_map = _make_params_map(model, params_table, x_name, y_name,
+                                  params_map)
+    model_shape, variable_shape = _validate_model_shape(model, params_table,
+                                                        model_shape)
 
     if 'local_bkg' in params_table.colnames:
         local_bkg = params_table['local_bkg']
@@ -325,57 +281,16 @@ def make_model_image(shape, model, params_table, *, model_shape=None,
     model = model.copy()
 
     image = np.zeros(shape, dtype=float)
+    unit = _get_output_unit(model, params_table, params_map)
+    if unit is not None:
+        image <<= unit
 
-    # Determine the output image units, if any, by evaluating the model
-    # with unit scalars derived from the mapped table columns. Unmapped
-    # model parameters keep their default values (and units). This is
-    # done up front so that the output units do not depend on whether
-    # any sources are actually rendered (e.g., a zero-row table or
-    # sources that do not overlap the image).
-    for key, param in params_map.items():
-        unit = getattr(params_table[param], 'unit', None)
-        setattr(model, key, 1 if unit is None else 1 * unit)
-    result = model(0, 0)
-    if isinstance(result, u.Quantity):
-        image <<= result.unit
-
-    if progress_bar:
-        desc = 'Add model sources'
-        params_table = add_progress_bar(params_table, desc=desc)
-
-    for i, source in enumerate(params_table):
-        params = {key: source[param] for key, param in params_map.items()}
-
-        # Skip sources that have any nonfinite parameter or local
-        # background value
-        if (not all(np.isfinite(value) for value in params.values())
-                or not np.isfinite(local_bkg[i])):
-            continue
-
-        try:
-            for key, value in params.items():
-                setattr(model, key, value)
-        except u.UnitsError as exc:
-            msg = ('params_table must be a QTable when its columns have '
-                   'units')
-            raise ValueError(msg) from exc
-
-        # This assumes that if the user also uses params_table to
-        # override the (x/y)_name mapping that the x_name and y_name
-        # values are correct (i.e., the mapping keys include x_name and
-        # y_name). There is no good way to check/enforce this.
-        x0 = getattr(model, x_name).value
-        y0 = getattr(model, y_name).value
-
-        if variable_shape:
-            mod_shape = model_shape[i]
-        elif model_shape is None:
-            # The bounding box size generally depends on model
-            # parameters, so needs to be calculated for each source
-            mod_shape = _model_shape_from_bbox(model, bbox_factor=bbox_factor)
-        else:
-            mod_shape = model_shape
-
+    sources = _iter_sources(model, params_table, params_map, local_bkg,
+                            model_shape=model_shape,
+                            variable_shape=variable_shape,
+                            bbox_factor=bbox_factor, x_name=x_name,
+                            y_name=y_name, progress_bar=progress_bar)
+    for i, x0, y0, mod_shape in sources:
         try:
             slc_lg, _ = overlap_slices(shape, mod_shape, (y0, x0), mode='trim')
         except NoOverlapError:
@@ -756,3 +671,276 @@ def _model_shape_from_bbox(model, *, bbox_factor=None):
 
     return (int(np.ceil(bbox[0][1] - bbox[0][0])),
             int(np.ceil(bbox[1][1] - bbox[1][0])))
+
+
+def _validate_model_and_table(model, params_table):
+    """
+    Validate the source model and the parameters table.
+
+    Parameters
+    ----------
+    model : 2D `astropy.modeling.Model`
+        The 2D model used to render the sources.
+
+    params_table : `~astropy.table.Table`
+        The table of model parameters for each source.
+
+    Raises
+    ------
+    TypeError
+        If ``model`` is not an `astropy.modeling.Model` instance or if
+        ``params_table`` is not an `~astropy.table.Table`.
+
+    ValueError
+        If ``model`` does not have 2 inputs and 1 output.
+    """
+    if not isinstance(model, Model):
+        msg = 'model must be a Model instance'
+        raise TypeError(msg)
+    if model.n_inputs != 2 or model.n_outputs != 1:
+        msg = 'model must be a 2D model'
+        raise ValueError(msg)
+    if not isinstance(params_table, Table):
+        msg = 'params_table must be an astropy Table'
+        raise TypeError(msg)
+
+
+def _make_params_map(model, params_table, x_name, y_name, params_map):
+    """
+    Make the mapping from model parameter names to table column names.
+
+    Parameters
+    ----------
+    model : 2D `astropy.modeling.Model`
+        The 2D model used to render the sources.
+
+    params_table : `~astropy.table.Table`
+        The table of model parameters for each source.
+
+    x_name, y_name : str
+        The names of the model parameters for the x and y positions.
+
+    params_map : dict or None
+        The user mapping from model parameter names to column names,
+        which takes precedence over ``x_name``, ``y_name``, and the
+        column names that match model parameter names.
+
+    Returns
+    -------
+    params_map : dict
+        The mapping from model parameter names to column names.
+
+    Raises
+    ------
+    ValueError
+        If a key is not a model parameter name or a value is not a
+        column name.
+    """
+    xypos_map = {x_name: x_name, y_name: y_name}
+
+    # By default, use the model parameter names as the column names
+    # if they are in the table
+    params_to_set = set(params_table.colnames) & set(model.param_names)
+    xypos_map.update({param: param for param in params_to_set})
+
+    if params_map is not None:
+        # params_map takes precedence over x_name and y_name and
+        # any matching column names in params_table
+        xypos_map.update(params_map)
+    params_map = xypos_map
+
+    for key, value in params_map.items():
+        if key not in model.param_names:
+            msg = f'key "{key}" not in model parameter names'
+            raise ValueError(msg)
+        if value not in params_table.colnames:
+            msg = f'value "{value}" not in params_table column names'
+            raise ValueError(msg)
+
+    return params_map
+
+
+def _validate_model_shape(model, params_table, model_shape):
+    """
+    Validate the model shape of the sources.
+
+    Parameters
+    ----------
+    model : 2D `astropy.modeling.Model`
+        The 2D model used to render the sources.
+
+    params_table : `~astropy.table.Table`
+        The table of model parameters for each source. A
+        ``'model_shape'`` column overrides ``model_shape``.
+
+    model_shape : 2-tuple of int, int, or `None`
+        The shape around the center of each source.
+
+    Returns
+    -------
+    model_shape : `None`, 2-tuple of int, or 2D `~numpy.ndarray`
+        The validated model shape, or an array of the (ny, nx) shapes
+        of each source if ``variable_shape`` is `True`.
+
+    variable_shape : bool
+        Whether ``params_table`` has a ``'model_shape'`` column.
+
+    Raises
+    ------
+    ValueError
+        If no model shape is specified and the model does not have a
+        bounding box.
+    """
+    if model_shape is not None:
+        model_shape = as_pair('model_shape', model_shape, lower_bound=(0, 0))
+
+    variable_shape = False
+    if 'model_shape' in params_table.colnames:
+        model_shape = np.array([as_pair('model_shape', mshape,
+                                        lower_bound=(0, 0))
+                                for mshape in params_table['model_shape']])
+        variable_shape = True
+
+    if model_shape is None:
+        try:
+            _ = model.bounding_box
+        except NotImplementedError as exc:
+            msg = ('model_shape must be specified if the model does not '
+                   'have a bounding_box attribute')
+            raise ValueError(msg) from exc
+
+    return model_shape, variable_shape
+
+
+def _get_output_unit(model, params_table, params_map):
+    """
+    Return the units of the model output, if any.
+
+    The units are found by evaluating the model with unit scalars
+    derived from the mapped table columns, so that they do not depend
+    on whether any sources are rendered (e.g., a zero-row table or
+    sources that do not overlap the image). Unmapped model parameters
+    keep their values and units.
+
+    Parameters
+    ----------
+    model : 2D `astropy.modeling.Model`
+        A copy of the model used to render the sources. Its mapped
+        parameters are changed.
+
+    params_table : `~astropy.table.Table`
+        The table of model parameters for each source.
+
+    params_map : dict
+        The mapping from model parameter names to column names.
+
+    Returns
+    -------
+    unit : `None` or `~astropy.units.UnitBase`
+        The units of the model output, or `None` if it has no units.
+    """
+    for key, param in params_map.items():
+        unit = getattr(params_table[param], 'unit', None)
+        setattr(model, key, 1 if unit is None else 1 * unit)
+    result = model(0, 0)
+    if isinstance(result, u.Quantity):
+        return result.unit
+    return None
+
+
+def _iter_sources(model, params_table, params_map, local_bkg, *,
+                  model_shape, variable_shape, bbox_factor, x_name, y_name,
+                  progress_bar):
+    """
+    Set the model parameters for each source in turn.
+
+    Sources that have any nonfinite parameter or local background value
+    are skipped.
+
+    Parameters
+    ----------
+    model : 2D `astropy.modeling.Model`
+        A copy of the model used to render the sources. Its parameters
+        are set for each source before the source is yielded.
+
+    params_table : `~astropy.table.Table`
+        The table of model parameters for each source.
+
+    params_map : dict
+        The mapping from model parameter names to column names.
+
+    local_bkg : `None` or array_like
+        The local background of each source, or `None` for none.
+
+    model_shape : `None`, 2-tuple of int, or 2D `~numpy.ndarray`
+        The model shape returned by `_validate_model_shape`.
+
+    variable_shape : bool
+        Whether ``model_shape`` holds the shape of each source.
+
+    bbox_factor : `None` or float
+        The factor passed to the model ``bounding_box`` method when
+        ``model_shape`` is `None`.
+
+    x_name, y_name : str
+        The names of the model parameters for the x and y positions.
+
+    progress_bar : bool
+        Whether to display a progress bar.
+
+    Yields
+    ------
+    index : int
+        The row index of the source in ``params_table``.
+
+    x0, y0 : float
+        The source center.
+
+    model_shape : 2-tuple of int
+        The (ny, nx) shape around the source center.
+
+    Raises
+    ------
+    ValueError
+        If a ``params_table`` column has units and ``params_table`` is
+        not a `~astropy.table.QTable`.
+    """
+    if progress_bar:
+        desc = 'Add model sources'
+        params_table = add_progress_bar(params_table, desc=desc)
+
+    for i, source in enumerate(params_table):
+        params = {key: source[param] for key, param in params_map.items()}
+
+        # Skip sources that have any nonfinite parameter or local
+        # background value
+        if (not all(np.isfinite(value) for value in params.values())
+                or (local_bkg is not None
+                    and not np.isfinite(local_bkg[i]))):
+            continue
+
+        try:
+            for key, value in params.items():
+                setattr(model, key, value)
+        except u.UnitsError as exc:
+            msg = ('params_table must be a QTable when its columns have '
+                   'units')
+            raise ValueError(msg) from exc
+
+        # This assumes that if the user also uses params_table to
+        # override the (x/y)_name mapping that the x_name and y_name
+        # values are correct (i.e., the mapping keys include x_name and
+        # y_name). There is no good way to check/enforce this.
+        x0 = getattr(model, x_name).value
+        y0 = getattr(model, y_name).value
+
+        if variable_shape:
+            mod_shape = model_shape[i]
+        elif model_shape is None:
+            # The bounding box size generally depends on model
+            # parameters, so needs to be calculated for each source
+            mod_shape = _model_shape_from_bbox(model, bbox_factor=bbox_factor)
+        else:
+            mod_shape = model_shape
+
+        yield i, x0, y0, mod_shape
