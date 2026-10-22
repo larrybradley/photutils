@@ -4,10 +4,13 @@ Tools for scoring source-detection results against the input sources
 of a simulated image.
 """
 
+import warnings
+
 import numpy as np
 from astropy.table import QTable, Table
 
 from photutils.simulation.noise import make_noise_image
+from photutils.utils.exceptions import NoDetectionsWarning
 
 __all__ = ['completeness', 'false_detection_rate', 'match_segments',
            'match_sources']
@@ -49,8 +52,9 @@ def match_segments(segment_img, params_table, *, x_name='x_0',
 
     Returns
     -------
-    result : `~astropy.table.QTable`
-        A copy of ``params_table`` with three added columns:
+    result : `~astropy.table.Table` or `~astropy.table.QTable`
+        A copy of ``params_table`` (of the same class) with three added
+        columns:
 
         * ``'label'``: the segment label under the source position, or
           0 if there is none. A position belongs to the pixel whose
@@ -101,8 +105,8 @@ def match_segments(segment_img, params_table, *, x_name='x_0',
         raise ValueError(msg)
 
     data = np.asarray(segment_img.data)
-    x = np.asarray(params_table[x_name], dtype=float)
-    y = np.asarray(params_table[y_name], dtype=float)
+    x = _as_float(params_table[x_name])
+    y = _as_float(params_table[y_name])
 
     with np.errstate(invalid='ignore'):
         ix = np.floor(x + 0.5)
@@ -167,8 +171,9 @@ def match_sources(x, y, params_table, max_separation, *, x_name='x_0',
 
     Returns
     -------
-    result : `~astropy.table.QTable`
-        A copy of ``params_table`` with four added columns:
+    result : `~astropy.table.Table` or `~astropy.table.QTable`
+        A copy of ``params_table`` (of the same class) with four added
+        columns:
 
         * ``'detected'``: whether the source claimed a detection.
         * ``'blended'``: whether the source had detections within
@@ -180,7 +185,8 @@ def match_sources(x, y, params_table, max_separation, *, x_name='x_0',
           detection, or NaN.
 
         The table ``meta['unmatched_indices']`` is a sorted array of the
-        indices of the detections that no input source claimed.
+        indices of the detections that no input source claimed,
+        including detections whose positions are not finite.
 
     Raises
     ------
@@ -214,8 +220,8 @@ def match_sources(x, y, params_table, max_separation, *, x_name='x_0',
     if priority not in params_table.colnames:
         msg = f'params_table has no "{priority}" column'
         raise ValueError(msg)
-    x = np.atleast_1d(np.asarray(x, dtype=float))
-    y = np.atleast_1d(np.asarray(y, dtype=float))
+    x = np.atleast_1d(_as_float(x))
+    y = np.atleast_1d(_as_float(y))
     if x.shape != y.shape:
         msg = 'x and y must have the same shape'
         raise ValueError(msg)
@@ -223,8 +229,8 @@ def match_sources(x, y, params_table, max_separation, *, x_name='x_0',
         msg = 'max_separation must be positive'
         raise ValueError(msg)
 
-    x_in = np.asarray(params_table[x_name], dtype=float)
-    y_in = np.asarray(params_table[y_name], dtype=float)
+    x_in = _as_float(params_table[x_name])
+    y_in = _as_float(params_table[y_name])
     n_inputs = len(params_table)
 
     match_index = np.full(n_inputs, -1, dtype=int)
@@ -232,13 +238,17 @@ def match_sources(x, y, params_table, max_separation, *, x_name='x_0',
     has_candidates = np.zeros(n_inputs, dtype=bool)
 
     finite = np.isfinite(x_in) & np.isfinite(y_in)
-    if x.size > 0 and np.any(finite):
-        tree = KDTree(np.column_stack((x, y)))
-        candidates = np.empty(n_inputs, dtype=object)
-        candidates[finite] = tree.query_ball_point(
+    finite_det = np.flatnonzero(np.isfinite(x) & np.isfinite(y))
+    if finite_det.size > 0 and np.any(finite):
+        tree = KDTree(np.column_stack((x[finite_det], y[finite_det])))
+        hits = tree.query_ball_point(
             np.column_stack((x_in[finite], y_in[finite])), r=max_separation)
+        candidates = np.empty(n_inputs, dtype=object)
+        # Map the tree indices back to indices into x and y
+        for idx, hit in zip(np.flatnonzero(finite), hits, strict=True):
+            candidates[idx] = finite_det[np.asarray(hit, dtype=int)]
         claimed = np.zeros(x.size, dtype=bool)
-        order = np.argsort(-np.asarray(params_table[priority], dtype=float),
+        order = np.argsort(-_as_float(params_table[priority]),
                            kind='stable')
         for idx in order:
             if not finite[idx] or len(candidates[idx]) == 0:
@@ -336,7 +346,7 @@ def completeness(detected, values, bins, *, confidence=0.683):
     from astropy.stats import binom_conf_interval
 
     detected = np.asarray(detected, dtype=bool)
-    values = np.asarray(values, dtype=float)
+    values = _as_float(values)
     if detected.shape != values.shape:
         msg = 'detected and values must have the same shape'
         raise ValueError(msg)
@@ -388,7 +398,10 @@ def false_detection_rate(detect, shape, *, n_trials=10, stddev=1.0,
         noise image. It must return a
         `~photutils.segmentation.SegmentationImage` (or any object with
         an ``n_labels`` attribute), an `~astropy.table.Table` with one
-        row per detection, or `None` for no detections.
+        row per detection, or `None` for no detections. A
+        `~photutils.utils.exceptions.NoDetectionsWarning` raised by
+        ``detect`` is suppressed, since no detections is the expected
+        result on a noise image.
 
     shape : 2-tuple of int
         The shape of the noise images.
@@ -459,7 +472,11 @@ def false_detection_rate(detect, shape, *, n_trials=10, stddev=1.0,
     for trial, trial_seed in enumerate(seeds):
         image = make_noise_image(shape, mean=0.0, stddev=stddev,
                                  kernel=kernel, seed=trial_seed)
-        n_detections[trial] = _count_detections(detect(image))
+        with warnings.catch_warnings():
+            # No detections is the expected result on a noise image
+            warnings.simplefilter('ignore', NoDetectionsWarning)
+            detections = detect(image)
+        n_detections[trial] = _count_detections(detections)
 
     result = QTable()
     result['trial'] = np.arange(n_trials) + 1
@@ -510,10 +527,34 @@ def _credit_by_priority(labels, priority):
     credited : 1D `~numpy.ndarray` of bool
         Whether each source is credited with its label.
     """
-    order = np.argsort(-np.asarray(priority, dtype=float), kind='stable')
+    order = np.argsort(-_as_float(priority), kind='stable')
     ordered = labels[order]
     _, first = np.unique(ordered, return_index=True)
     credited = np.zeros(len(labels), dtype=bool)
     credited[order[first]] = True
     credited &= labels > 0
     return credited
+
+
+def _as_float(values):
+    """
+    Return values as a float array with masked entries set to NaN.
+
+    Masked entries come, for example, from stacking tables of
+    populations with different columns using `~astropy.table.vstack`.
+
+    Parameters
+    ----------
+    values : array_like
+        The values, possibly a masked column or array.
+
+    Returns
+    -------
+    result : `~numpy.ndarray`
+        The values as floats.
+    """
+    result = np.array(values, dtype=float)
+    mask = np.ma.getmaskarray(values)
+    if np.any(mask):
+        result[mask] = np.nan
+    return result
