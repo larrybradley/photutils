@@ -22,6 +22,18 @@ New Features
     and ``discretize_oversample`` keywords of the deprecated
     ``photutils.datasets.make_model_image``. [#XXXX]
 
+  - Added ``log_params`` and ``kind`` keywords to
+    ``photutils.simulation.make_model_params``. ``log_params`` samples
+    the named parameters uniformly in log10, and ``kind`` adds a column
+    that labels the population. [#XXXX]
+
+  - Added ``photutils.simulation.make_pair_params`` to make tables of
+    close source pairs at set separations and flux ratios. [#XXXX]
+
+  - Added ``photutils.simulation.make_satellite_params`` to make tables
+    of sources placed around host sources, such as stars on bright
+    galaxies. [#XXXX]
+
 Bug Fixes
 ^^^^^^^^^
 

@@ -13,7 +13,8 @@ from photutils.utils._misc import _get_meta
 from photutils.utils._parameters import as_pair
 
 __all__ = ['make_model_params', 'make_pair_params',
-           'make_random_models_table', 'params_table_to_models']
+           'make_random_models_table', 'make_satellite_params',
+           'params_table_to_models']
 
 
 def make_model_params(shape, n_sources, *, x_name='x_0', y_name='y_0',
@@ -363,6 +364,149 @@ def make_pair_params(shape, n_pairs, separation, *, flux=(1, 1),
 
     for param, prange in kwargs.items():
         params[param] = sample_param(rng, prange, len(params), name=param)
+
+    add_kind_column(params, kind)
+
+    return params
+
+
+def make_satellite_params(host_params, n_per_host, radius, *,
+                          radius_unit='pixel', r_eff_name='r_eff',
+                          x_name='x_0', y_name='y_0', seed=0, kind=None,
+                          **kwargs):
+    """
+    Make a table of parameters for simulated sources placed around host
+    sources.
+
+    For each row of ``host_params``, ``n_per_host`` sources are placed at
+    random angles and at distances from the host center sampled
+    uniformly from the ``radius`` range. A typical use is placing faint
+    stars on bright galaxies to test detection on top of extended
+    emission.
+
+    The positions are not limited to any image, so sources around a host
+    near an image edge can fall outside the image.
+
+    Parameters
+    ----------
+    host_params : `~astropy.table.Table`
+        A table of host sources, with ``x_name`` and ``y_name`` position
+        columns and, if ``radius_unit='r_eff'``, an ``r_eff_name``
+        column.
+
+    n_per_host : int
+        The number of sources placed around each host.
+
+    radius : float or 2-tuple of float
+        The distance from the host center. A 2-tuple gives the lower and
+        upper bounds of the half-open interval ``[lower, upper)`` from
+        which the distance of each source is sampled uniformly.
+
+    radius_unit : {'pixel', 'r_eff'}, optional
+        The unit of ``radius``. With ``'r_eff'``, the radius is in units
+        of each host's ``r_eff_name`` column.
+
+    r_eff_name : str, optional
+        The name of the ``host_params`` column used when
+        ``radius_unit='r_eff'``.
+
+    x_name : str, optional
+        The name of the x position column, in both ``host_params`` and
+        the output table.
+
+    y_name : str, optional
+        The name of the y position column, in both ``host_params`` and
+        the output table.
+
+    seed : int, optional
+        A seed to initialize the `numpy.random.BitGenerator`. If `None`,
+        then fresh, unpredictable entropy will be pulled from the OS.
+
+    kind : str or `None`, optional
+        If not `None`, a ``'kind'`` column filled with this value is
+        added as the last column.
+
+    **kwargs
+        Keyword arguments are accepted for additional model parameters.
+        The values can be a scalar, used for every source, or a 2-tuple
+        of the lower and upper bounds from which the value of each
+        source is sampled uniformly. The names ``id``, ``x_name``,
+        ``y_name``, and ``host_id`` cannot be used.
+
+    Returns
+    -------
+    table : `~astropy.table.QTable`
+        A table with the columns ``id``, ``x_name``, ``y_name``, and
+        ``host_id``, followed by one column for each keyword parameter
+        and the optional ``kind`` column. The ``host_id`` is the host's
+        ``id`` value if ``host_params`` has an ``id`` column, and its
+        1-based row number otherwise.
+
+    Raises
+    ------
+    ValueError
+        If ``radius_unit`` is invalid, if ``host_params`` has no
+        ``r_eff_name`` column when ``radius_unit='r_eff'``, or if a
+        keyword argument has a reserved name.
+
+    See Also
+    --------
+    make_model_params, make_pair_params
+
+    Examples
+    --------
+    >>> from astropy.table import QTable
+    >>> from photutils.simulation import make_satellite_params
+    >>> hosts = QTable({'x_0': [50.0, 150.0], 'y_0': [60.0, 40.0],
+    ...                 'r_eff': [5.0, 8.0]})
+    >>> stars = make_satellite_params(hosts, 3, (0.5, 2.5),
+    ...                               radius_unit='r_eff', flux=(5, 300),
+    ...                               seed=0)
+    >>> print(stars.colnames)
+    ['id', 'x_0', 'y_0', 'host_id', 'flux']
+    >>> print(stars['host_id'].tolist())
+    [1, 1, 1, 2, 2, 2]
+    """
+    if radius_unit not in ('pixel', 'r_eff'):
+        msg = "radius_unit must be 'pixel' or 'r_eff'"
+        raise ValueError(msg)
+    if radius_unit == 'r_eff' and r_eff_name not in host_params.colnames:
+        msg = f'host_params has no "{r_eff_name}" column'
+        raise ValueError(msg)
+
+    for param in kwargs:
+        if param in ('id', x_name, y_name, 'host_id'):
+            msg = (f'{param} cannot be used as a keyword argument because '
+                   'it is the name of an output column')
+            raise ValueError(msg)
+
+    n_hosts = len(host_params)
+    host_index = np.repeat(np.arange(n_hosts), n_per_host)
+    n_sources = len(host_index)
+
+    rng = np.random.default_rng(seed)
+    radii = sample_param(rng, radius, n_sources, name='radius')
+    if radius_unit == 'r_eff':
+        radii *= np.asarray(host_params[r_eff_name], dtype=float)[host_index]
+    angles = rng.uniform(0, 2 * np.pi, n_sources)
+
+    if 'id' in host_params.colnames:
+        host_ids = np.asarray(host_params['id'])
+    else:
+        host_ids = np.arange(n_hosts) + 1
+
+    x_host = np.asarray(host_params[x_name], dtype=float)[host_index]
+    y_host = np.asarray(host_params[y_name], dtype=float)[host_index]
+
+    params = QTable()
+    params.meta.update(_get_meta())  # keep params.meta type
+    params['id'] = np.arange(n_sources) + 1
+    params[x_name] = x_host + radii * np.cos(angles)
+    params[y_name] = y_host + radii * np.sin(angles)
+    params['host_id'] = host_ids[host_index]
+
+    for param, prange in kwargs.items():
+        params[param] = sample_param(rng, prange, n_sources, name=param)
 
     add_kind_column(params, kind)
 

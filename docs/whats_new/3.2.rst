@@ -29,6 +29,34 @@ tools for making simulated images. It starts with versions of the
 ``photutils.psf.make_psf_model_image`` whose optional arguments are
 keyword-only.
 
+Scene Generators
+----------------
+
+:func:`~photutils.simulation.make_model_params` has two new keywords.
+``log_params`` samples the named parameters uniformly in log10, which
+flux and size distributions in a completeness test need, and ``kind``
+adds a column that labels the population, so tables of stars and
+galaxies can be stacked and scored together.
+
+Two new functions make controlled scenes for the hard cases of source
+detection. :func:`~photutils.simulation.make_pair_params` makes close
+pairs at set separations and flux ratios, and
+:func:`~photutils.simulation.make_satellite_params` places sources
+around host sources, such as faint stars on bright galaxies::
+
+    >>> from photutils.simulation import (make_model_params,
+    ...                                   make_pair_params,
+    ...                                   make_satellite_params)
+    >>> stars = make_model_params((512, 512), 100, flux=(3, 300),
+    ...                           log_params=('flux',), kind='star')
+    >>> pairs = make_pair_params((512, 512), 20, (2, 6), flux=(50, 200),
+    ...                          flux_ratio=(0.1, 1), kind='pair')
+    >>> hosts = make_model_params((512, 512), 5, r_eff=(10, 20),
+    ...                           min_separation=100, border_size=60)
+    >>> on_hosts = make_satellite_params(hosts, 10, (0.5, 2.5),
+    ...                                  radius_unit='r_eff',
+    ...                                  flux=(5, 300), kind='star_on_gal')
+
 
 .. _whatsnew-3.2-api-changes:
 
