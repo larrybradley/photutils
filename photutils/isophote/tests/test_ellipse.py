@@ -15,11 +15,11 @@ from astropy.utils.exceptions import AstropyUserWarning
 from numpy.testing import assert_allclose, assert_array_equal
 
 from photutils.datasets import make_noise_image
-from photutils.datasets.load import _get_path
 from photutils.isophote.ellipse import Ellipse
 from photutils.isophote.geometry import EllipseGeometry
 from photutils.isophote.isophote import Isophote, IsophoteList
 from photutils.isophote.tests.make_test_data import make_test_image
+from photutils.utils._testing import get_path
 from photutils.utils.exceptions import PhotutilsDeprecationWarning
 
 # Define an off-center position and a tilted sma.
@@ -70,8 +70,7 @@ class TestEllipse:
 
     @pytest.mark.remote_data
     def test_find_center(self):
-        path = _get_path('isophote/M51.fits', location='photutils-datasets',
-                         cache=True)
+        path = get_path('isophote/M51.fits')
         hdu = fits.open(path)
         data = hdu[0].data
         hdu.close()

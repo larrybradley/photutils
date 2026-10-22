@@ -9,20 +9,19 @@ from astropy.io import fits
 from astropy.modeling.models import Gaussian2D
 from numpy.testing import assert_allclose, assert_array_equal
 
-from photutils.datasets.load import _get_path
 from photutils.isophote.ellipse import Ellipse
 from photutils.isophote.geometry import EllipseGeometry
 from photutils.isophote.integrator import (BILINEAR, INTEGRATORS, MEAN, MEDIAN,
                                            NEAREST_NEIGHBOR)
 from photutils.isophote.sample import EllipseSample
 from photutils.isophote.tests.make_test_data import make_test_image
+from photutils.utils._testing import get_path
 
 
 @pytest.mark.remote_data
 class TestData:
     def setup_class(self):
-        path = _get_path('isophote/synth_highsnr.fits',
-                         location='photutils-datasets', cache=True)
+        path = get_path('isophote/synth_highsnr.fits')
         hdu = fits.open(path)
         self.data = hdu[0].data
         hdu.close()

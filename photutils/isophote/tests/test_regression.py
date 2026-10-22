@@ -58,9 +58,9 @@ import pytest
 from astropy.io import fits
 from astropy.table import Table
 
-from photutils.datasets.load import _get_path
 from photutils.isophote.ellipse import Ellipse
 from photutils.isophote.integrator import BILINEAR
+from photutils.utils._testing import get_path
 
 
 @pytest.mark.parametrize('name', ['synth_highsnr'])
@@ -79,8 +79,7 @@ def test_regression(name):
     table = Table.read(path)
 
     nrows = len(table['SMA'])
-    path = _get_path(f'isophote/{name}.fits',
-                     location='photutils-datasets', cache=True)
+    path = get_path(f'isophote/{name}.fits')
     hdu = fits.open(path)
     data = hdu[0].data
     hdu.close()
@@ -245,8 +244,7 @@ def test_regression_summary(name, max_extra, noisy):
     path = op.join(op.dirname(op.abspath(__file__)), 'data',
                    f'{name}_table.fits')
     table = Table.read(path)
-    path = _get_path(f'isophote/{name}.fits',
-                     location='photutils-datasets', cache=True)
+    path = get_path(f'isophote/{name}.fits')
     with fits.open(path) as hdu:
         data = hdu[0].data
     isolist = Ellipse(data).fit_image()
