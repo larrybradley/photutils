@@ -19,10 +19,10 @@ from astropy.nddata import NDData
 from astropy.table import QTable
 from numpy.testing import assert_allclose, assert_equal
 
-from photutils.datasets import make_model_image
 from photutils.psf import GriddedPSFModel, STDPSFGrid
 from photutils.psf.tests.test_model_io import STDPSF_FILENAMES
 from photutils.segmentation import SourceCatalog, detect_sources
+from photutils.simulation import make_model_image
 
 
 def _reference_find_bounding_points(model, x, y):

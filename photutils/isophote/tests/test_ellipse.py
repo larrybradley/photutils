@@ -14,11 +14,11 @@ from astropy.modeling.models import Gaussian2D
 from astropy.utils.exceptions import AstropyUserWarning
 from numpy.testing import assert_allclose, assert_array_equal
 
-from photutils.datasets import make_noise_image
 from photutils.isophote.ellipse import Ellipse
 from photutils.isophote.geometry import EllipseGeometry
 from photutils.isophote.isophote import Isophote, IsophoteList
 from photutils.isophote.tests.make_test_data import make_test_image
+from photutils.simulation import make_noise_image
 from photutils.utils._testing import get_path
 from photutils.utils.exceptions import PhotutilsDeprecationWarning
 

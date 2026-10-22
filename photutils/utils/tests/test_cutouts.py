@@ -9,7 +9,7 @@ from astropy.nddata import NoOverlapError, PartialOverlapError
 from numpy.testing import assert_equal
 
 from photutils.aperture import BoundingBox
-from photutils.datasets import make_100gaussians_image
+from photutils.simulation import make_100gaussians_image
 from photutils.utils.cutouts import CutoutImage, _make_cutouts
 
 

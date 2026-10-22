@@ -6,8 +6,8 @@ Tools for making a simulated image for tests.
 import numpy as np
 from astropy.io import fits
 
-from photutils.datasets import make_noise_image
 from photutils.isophote.geometry import EllipseGeometry
+from photutils.simulation import make_noise_image
 
 
 def make_test_image(*, nx=512, ny=512, x0=None, y0=None,

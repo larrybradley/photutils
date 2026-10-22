@@ -9,7 +9,7 @@ from astropy.coordinates import SkyCoord
 from astropy.wcs import WCS
 
 from photutils.aperture import CircularAperture
-from photutils.datasets import make_4gaussians_image
+from photutils.simulation import make_4gaussians_image
 
 # The shape of the small uniform image used by the quality-flag tests
 UNIT_SHAPE = (25, 25)

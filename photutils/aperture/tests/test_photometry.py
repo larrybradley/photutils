@@ -23,7 +23,7 @@ from photutils.aperture.rectangle import (RectangularAnnulus,
                                           SkyRectangularAnnulus,
                                           SkyRectangularAperture)
 from photutils.aperture.tests.conftest import NoBatchCircularAperture
-from photutils.datasets import make_wcs
+from photutils.simulation import make_wcs
 from photutils.utils._optional_deps import HAS_MATPLOTLIB, HAS_REGIONS
 
 APERTURE_CL = [CircularAperture,

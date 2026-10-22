@@ -12,7 +12,7 @@ from scipy.ndimage import (binary_dilation, binary_erosion, binary_fill_holes,
                            uniform_filter)
 
 from photutils.background import make_morans_i_map, make_morans_i_mask
-from photutils.datasets import make_100gaussians_image
+from photutils.simulation import make_100gaussians_image
 
 
 def _slow_box_sum(array, size):

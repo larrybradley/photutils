@@ -10,7 +10,7 @@ from astropy.convolution import Gaussian2DKernel
 from astropy.utils.exceptions import AstropyUserWarning
 from numpy.testing import assert_allclose
 
-from photutils.datasets import make_100gaussians_image
+from photutils.simulation import make_100gaussians_image
 from photutils.utils._convolution import _filter_data
 
 

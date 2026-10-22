@@ -10,10 +10,10 @@ from astropy.convolution import convolve
 from astropy.modeling.models import Gaussian2D
 from numpy.testing import assert_equal
 
-from photutils.datasets import make_100gaussians_image
 from photutils.segmentation.finder import SourceFinder
 from photutils.segmentation.flags import SEGMENTATION_FLAGS
 from photutils.segmentation.utils import make_2dgaussian_kernel
+from photutils.simulation import make_100gaussians_image
 from photutils.utils.exceptions import (NoDetectionsWarning,
                                         PhotutilsDeprecationWarning)
 

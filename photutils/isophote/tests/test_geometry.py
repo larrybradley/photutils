@@ -9,9 +9,9 @@ from astropy import log
 from astropy.modeling.models import Gaussian2D
 from numpy.testing import assert_allclose, assert_array_equal
 
-from photutils.datasets import make_noise_image
 from photutils.isophote.geometry import IN_MASK, OUT_MASK, EllipseGeometry
 from photutils.isophote.tests.make_test_data import make_test_image
+from photutils.simulation import make_noise_image
 
 
 @pytest.mark.parametrize(('astep', 'linear_growth'),
