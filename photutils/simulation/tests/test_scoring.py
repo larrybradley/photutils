@@ -5,11 +5,13 @@ Tests for the scoring module.
 
 import numpy as np
 import pytest
+from astropy.convolution import Gaussian2DKernel
 from astropy.table import QTable
 from numpy.testing import assert_allclose, assert_array_equal
 
 from photutils.segmentation import SegmentationImage
-from photutils.simulation import completeness, match_segments, match_sources
+from photutils.simulation import (completeness, false_detection_rate,
+                                  match_segments, match_sources)
 
 
 @pytest.fixture(name='segm')
@@ -361,3 +363,104 @@ class TestCompleteness:
         match = 'confidence must be between 0 and 1'
         with pytest.raises(ValueError, match=match):
             completeness([True], [1.0], [0, 2], confidence=1.5)
+
+
+class TestFalseDetectionRate:
+    """
+    Tests for ``false_detection_rate``.
+    """
+
+    def test_different_seed_per_trial(self):
+        """
+        Test that each trial uses a different noise frame.
+        """
+        frames = []
+
+        def detect(image):
+            frames.append(image.copy())
+
+        false_detection_rate(detect, (50, 60), n_trials=5, seed=0)
+        assert len(frames) == 5
+        for i in range(5):
+            assert frames[i].shape == (50, 60)
+            for j in range(i + 1, 5):
+                assert not np.array_equal(frames[i], frames[j])
+
+    def test_reproducible(self):
+        """
+        Test that the same seed gives identical frames and results.
+        """
+        def detect(image):
+            return QTable({'x': np.nonzero(image > 2.5)[1]})
+
+        result1 = false_detection_rate(detect, (100, 100), n_trials=3,
+                                       seed=7)
+        result2 = false_detection_rate(detect, (100, 100), n_trials=3,
+                                       seed=7)
+        assert_array_equal(result1['n_detections'], result2['n_detections'])
+        assert result1['n_detections'].sum() > 0
+
+    def test_return_types(self):
+        """
+        Test that segmentation images, tables, and `None` are counted.
+        """
+        segm = SegmentationImage(np.array([[1, 0], [0, 2]]))
+        result = false_detection_rate(lambda _image: segm, (10, 10),
+                                      n_trials=2)
+        assert_array_equal(result['n_detections'], [2, 2])
+
+        table = QTable({'x': [1.0, 2.0, 3.0]})
+        result = false_detection_rate(lambda _image: table, (10, 10),
+                                      n_trials=2)
+        assert_array_equal(result['n_detections'], [3, 3])
+
+        result = false_detection_rate(lambda _image: None, (10, 10),
+                                      n_trials=2)
+        assert_array_equal(result['n_detections'], [0, 0])
+
+        match = 'detect must return a SegmentationImage, a table, or None'
+        with pytest.raises(TypeError, match=match):
+            false_detection_rate(lambda _image: 3, (10, 10), n_trials=1)
+
+    def test_rate_units(self):
+        """
+        Test the columns and the rate per million pixels.
+        """
+        table = QTable({'x': [1.0, 2.0, 3.0, 4.0]})
+        result = false_detection_rate(lambda _image: table, (1000, 500),
+                                      n_trials=3)
+        assert result.colnames == ['trial', 'n_detections',
+                                   'rate_per_megapixel']
+        assert_array_equal(result['trial'], [1, 2, 3])
+        assert_allclose(result['rate_per_megapixel'], 8.0)
+
+    def test_noise_level_and_kernel(self):
+        """
+        Test that the frames have zero mean and the requested standard
+        deviation, with and without a kernel.
+        """
+        frames = []
+
+        def detect(image):
+            frames.append(image)
+
+        false_detection_rate(detect, (512, 512), n_trials=2, stddev=3.0,
+                             seed=0)
+        kernel = Gaussian2DKernel(1.5)
+        false_detection_rate(detect, (512, 512), n_trials=2, stddev=3.0,
+                             kernel=kernel, seed=0)
+        for frame in frames:
+            assert_allclose(np.std(frame), 3.0, rtol=0.05)
+            assert abs(np.mean(frame)) < 0.2
+        # The kernel correlates neighboring pixels
+        shifted = np.corrcoef(frames[2][:, :-1].ravel(),
+                              frames[2][:, 1:].ravel())[0, 1]
+        assert shifted > 0.5
+
+    def test_errors(self):
+        """
+        Test the input validation of ``false_detection_rate``.
+        """
+        match = 'n_trials must be a positive integer'
+        with pytest.raises(ValueError, match=match):
+            false_detection_rate(lambda _image: None, (10, 10), n_trials=0)
