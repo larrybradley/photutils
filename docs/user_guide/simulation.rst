@@ -7,8 +7,8 @@ Introduction
 ------------
 
 `photutils.simulation` provides tools for making simulated data. These
-tools mostly involve astronomical images, but they also include PSF
-models and source catalogs.
+tools make simulated astronomical images, source parameter tables,
+noise, and WCS objects.
 
 These tools are useful for the Photutils documentation examples,
 tests, and benchmarks. However, they can also be used for general data

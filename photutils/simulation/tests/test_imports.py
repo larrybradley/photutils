@@ -9,6 +9,17 @@ import sys
 
 import pytest
 
+from photutils import simulation
+
+# photutils.simulation defines no package-level __all__, so collect the
+# public callables defined in its submodules
+PUBLIC_FUNCTIONS = sorted(
+    name for name in dir(simulation)
+    if (not name.startswith('_')
+        and callable(getattr(simulation, name))
+        and getattr(simulation, name).__module__.startswith(
+            'photutils.simulation.')))
+
 
 @pytest.mark.parametrize('code', [
     'import photutils.simulation',
@@ -25,24 +36,20 @@ def test_import_order(code):
         [sys.executable, '-c', code], check=True)
 
 
-@pytest.mark.parametrize('name', [
-    'make_model_params',
-    'make_random_models_table',
-    'make_model_image',
-    'make_psf_model_image',
-    'make_4gaussians_image',
-    'make_100gaussians_image',
-    'make_noise_image',
-    'apply_poisson_noise',
-    'make_wcs',
-    'make_gwcs'])
+@pytest.mark.parametrize('name', PUBLIC_FUNCTIONS)
 def test_optional_args_keyword_only(name):
     """
     Test that every parameter with a default is keyword-only.
     """
-    from photutils import simulation
-
     sig = inspect.signature(getattr(simulation, name))
     for param in sig.parameters.values():
         if param.default is not inspect.Parameter.empty:
             assert param.kind is inspect.Parameter.KEYWORD_ONLY, param.name
+
+
+def test_public_functions_collected():
+    """
+    Test that the public function collection is not empty.
+    """
+    assert 'make_model_image' in PUBLIC_FUNCTIONS
+    assert len(PUBLIC_FUNCTIONS) >= 10
