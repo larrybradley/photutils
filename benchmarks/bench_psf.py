@@ -33,7 +33,9 @@ from photutils.psf import (AiryDiskPSF, CircularGaussianPRF,
                            GriddedPSFModel, ImagePSF, IterativePSFPhotometry,
                            MoffatPSF, PSFPhotometry, SourceGrouper,
                            extract_stars, fit_2dgaussian, fit_fwhm)
-from photutils.simulation import make_psf_model_image
+from photutils.psf.utils import _get_psf_model_main_params
+from photutils.simulation import (make_model_image, make_model_params,
+                                  make_psf_model_image)
 
 # The FWHM (pixels) used for all of the PSF models
 FWHM = 2.8
@@ -216,11 +218,22 @@ def make_scene(psf_model, shape, n_sources, *, flux_range=(100, 1000),
     params : `~astropy.table.Table`
         The true source parameters (``x_0``, ``y_0``, and ``flux``).
     """
-    data, params = make_psf_model_image(shape, psf_model, n_sources,
-                                        model_shape=MODEL_SHAPE,
-                                        min_separation=min_separation,
-                                        border_size=15, seed=seed,
-                                        flux=flux_range)
+    # make_psf_model_image rejects the point-evaluated *PSF models, so
+    # the scene is built with make_model_image, which has no such check.
+    # A point-evaluated model is integrated over each pixel so that the
+    # pixel values are physical.
+    x_name, y_name, flux_name = _get_psf_model_main_params(psf_model)
+    n_nodes = None
+    if (type(psf_model).__name__.endswith('PSF')
+            and not isinstance(psf_model, ImagePSF)):
+        n_nodes = 3
+    params = make_model_params(shape, n_sources, x_name=x_name,
+                               y_name=y_name, min_separation=min_separation,
+                               border_size=(np.array(MODEL_SHAPE) - 1) // 2,
+                               seed=seed, **{flux_name: flux_range})
+    data = make_model_image(shape, psf_model, params,
+                            model_shape=MODEL_SHAPE, x_name=x_name,
+                            y_name=y_name, n_nodes=n_nodes)
     rng = np.random.default_rng(seed)
     data = data + rng.normal(0.0, noise_std, shape)
     return data, params

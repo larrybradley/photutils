@@ -222,6 +222,11 @@ def optimal_snr(model, params_table, error, *, psf_model=None, n_nodes=None,
             slices = _source_slices(mod_shape, x0, y0)
             if not _can_reach_image(slices, margins, shape):
                 continue
+            # Only the image and the PSF margin around it can contribute
+            slices = tuple(
+                slice(max(slc.start, -mar), min(slc.stop, size + mar))
+                for slc, mar, size in zip(slices, margins, shape,
+                                          strict=True))
             out_slices, cutout = render_convolved(model, psf_model, slices,
                                                   x0, y0,
                                                   oversample=oversample,
