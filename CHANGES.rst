@@ -17,10 +17,10 @@ New Features
 
   - ``PSFPhotometry`` and ``IterativePSFPhotometry`` now accept a
     ``wcs`` keyword, which is also taken from the ``wcs`` attribute of
-    an ``NDData`` input. If a WCS is input, the results table includes
-    ``sky_centroid``, ``sky_centroid_ra_err``, and
-    ``sky_centroid_dec_err`` columns with the sky positions of the
-    fitted sources and their errors. [#2532]
+    an ``NDData`` input if that WCS is celestial. If a WCS is input,
+    the results table includes ``sky_centroid``,
+    ``sky_centroid_ra_err``, and ``sky_centroid_dec_err`` columns with
+    the sky positions of the fitted sources and their errors. [#2532]
 
 - ``photutils.utils``
 

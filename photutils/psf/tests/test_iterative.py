@@ -15,6 +15,7 @@ from astropy.modeling.models import Const2D, Gaussian2D
 from astropy.nddata import NDData, StdDevUncertainty
 from astropy.table import QTable, Table
 from astropy.utils.exceptions import AstropyUserWarning
+from astropy.wcs import WCS
 from numpy.testing import assert_allclose, assert_equal
 
 from photutils.background import LocalBackground, MMMBackground
@@ -1108,3 +1109,14 @@ def test_wcs(mode):
     match = 'must be None when data is an NDData instance'
     with pytest.raises(ValueError, match=match):
         psfphot(nddata, init_params=init_params, wcs=wcs)
+
+    # A non-celestial NDData WCS is ignored
+    linear_wcs = WCS(naxis=2)
+    linear_wcs.wcs.ctype = ['LINEAR', 'LINEAR']
+    psfphot = IterativePSFPhotometry(
+        psf_model, (7, 7), finder=make_one_shot_finder(50.0, 50.0),
+        **kwargs)
+    nddata = NDData(data, uncertainty=StdDevUncertainty(error),
+                    wcs=linear_wcs)
+    phot3 = psfphot(nddata, init_params=init_params)
+    assert phot3.colnames == phot0.colnames

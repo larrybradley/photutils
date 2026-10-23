@@ -104,6 +104,44 @@ def _frame_rotation(wcs, skycoord):
     return center.position_angle(north.transform_to(frame)).to_value(u.rad)
 
 
+def get_celestial_axis_indices(wcs):
+    """
+    Get the indices of the celestial longitude and latitude world axes
+    of a WCS.
+
+    The second element of each ``world_axis_object_components`` entry
+    is the index of the axis within the sky coordinate, 0 for the
+    longitude and 1 for the latitude, whatever the axis order of the
+    WCS.
+
+    Parameters
+    ----------
+    wcs : WCS object
+        A world coordinate system (WCS) transformation that
+        supports the `astropy shared interface for WCS
+        <https://docs.astropy.org/en/stable/wcs/wcsapi.html>`_ (e.g.,
+        `astropy.wcs.WCS`, `gwcs.wcs.WCS`).
+
+    Returns
+    -------
+    lon_idx, lat_idx : int
+        The indices of the longitude and latitude world axes.
+
+    Raises
+    ------
+    ValueError
+        If the WCS does not have exactly one celestial longitude axis
+        and one celestial latitude axis.
+    """
+    component_indices = [comp[1] for comp
+                         in _low_level_wcs(wcs).world_axis_object_components]
+    if component_indices.count(0) != 1 or component_indices.count(1) != 1:
+        msg = ('wcs must have exactly one celestial longitude axis and '
+               'one celestial latitude axis')
+        raise ValueError(msg)
+    return component_indices.index(0), component_indices.index(1)
+
+
 def _pixel_to_world_radians(wcs, x, y):
     """
     Convert pixel coordinates to world longitude and latitude in
@@ -146,19 +184,9 @@ def _pixel_to_world_radians(wcs, x, y):
     """
     low_level_wcs = _low_level_wcs(wcs)
 
-    # The second element of each world_axis_object_components entry
-    # is the index of the axis within the sky coordinate, 0 for the
-    # longitude and 1 for the latitude, whatever the axis order of the
-    # WCS. The check comes before the transform so that an invalid WCS
-    # is rejected without evaluating it.
-    component_indices = [comp[1] for comp
-                         in low_level_wcs.world_axis_object_components]
-    if component_indices.count(0) != 1 or component_indices.count(1) != 1:
-        msg = ('wcs must have exactly one celestial longitude axis and '
-               'one celestial latitude axis')
-        raise ValueError(msg)
-    lon_idx = component_indices.index(0)
-    lat_idx = component_indices.index(1)
+    # The check comes before the transform so that an invalid WCS is
+    # rejected without evaluating it
+    lon_idx, lat_idx = get_celestial_axis_indices(low_level_wcs)
     units = low_level_wcs.world_axis_units
 
     if _is_gwcs(low_level_wcs):

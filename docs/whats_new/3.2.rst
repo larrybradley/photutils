@@ -60,7 +60,8 @@ and ``sky_centroid_dec_err``). The sky errors are computed with
 `~photutils.utils.pixel_to_sky_errors` and include the ``xy_cov``
 covariance. For an `~astropy.nddata.NDData` input, the WCS is taken
 from its ``wcs`` attribute, so these columns are added whenever the
-input has a WCS::
+input has a celestial WCS. A non-celestial ``wcs`` attribute is
+ignored::
 
     >>> from photutils.datasets import make_wcs
     >>> wcs = make_wcs(data.shape)

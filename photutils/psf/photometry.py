@@ -35,6 +35,7 @@ from photutils.utils._parameters import as_pair
 from photutils.utils._progress_bars import add_progress_bar
 from photutils.utils._quantity_helpers import process_quantities
 from photutils.utils._repr import make_repr
+from photutils.utils._wcs_helpers import get_celestial_axis_indices
 from photutils.utils.exceptions import PhotutilsDeprecationWarning
 
 __all__ = ['PSFPhotometry']
@@ -1722,6 +1723,32 @@ class PSFPhotometry(_ModelImageMixin):
         return data_array, mask, error
 
     @staticmethod
+    def _get_nddata_wcs(data):
+        """
+        Get the celestial WCS of an NDData input.
+
+        Parameters
+        ----------
+        data : `~astropy.nddata.NDData`
+            The input data.
+
+        Returns
+        -------
+        wcs : WCS object or `None`
+            The ``wcs`` attribute of ``data``, or `None` if it is
+            `None` or does not have celestial longitude and latitude
+            axes. A non-celestial WCS is ignored because the sky
+            columns of the results table need a celestial WCS.
+        """
+        if data.wcs is None:
+            return None
+        try:
+            get_celestial_axis_indices(data.wcs)
+        except ValueError:
+            return None
+        return data.wcs
+
+    @staticmethod
     def _check_nddata_kwargs(*, mask, error, wcs):
         """
         Reject explicit mask/error/wcs keywords for NDData inputs.
@@ -1763,7 +1790,7 @@ class PSFPhotometry(_ModelImageMixin):
             # Handle NDData input
             if isinstance(data, NDData):
                 self._check_nddata_kwargs(mask=mask, error=error, wcs=wcs)
-                wcs = data.wcs
+                wcs = self._get_nddata_wcs(data)
                 data, mask, error = self._coerce_nddata(data)
 
             data, mask = split_masked_array(data, mask)

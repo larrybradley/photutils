@@ -646,12 +646,12 @@ print the source ID along with the fit x, y, and flux values::
       9  5.5219 89.8622 542.6817
      10 71.8331 90.5734 692.6518
 
-If a WCS is input with the ``wcs`` keyword (or as the ``wcs`` attribute
-of an `~astropy.nddata.NDData` input), the table also includes the sky
-position of each fit source center (``sky_centroid``) and its errors
-along the Right Ascension and Declination directions in arcsec. The sky
-errors include the covariance of the fit x and y positions (the
-``xy_cov`` column)::
+If a celestial WCS is input with the ``wcs`` keyword (or as the
+``wcs`` attribute of an `~astropy.nddata.NDData` input), the table
+also includes the sky position of each fit source center
+(``sky_centroid``) and its errors along the Right Ascension and
+Declination directions in arcsec. The sky errors include the
+covariance of the fit x and y positions (the ``xy_cov`` column)::
 
     >>> from photutils.datasets import make_wcs
     >>> wcs = make_wcs(data.shape)
