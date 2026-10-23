@@ -590,12 +590,11 @@ def pixel_to_sky_covariance(wcs, pixel_covariance, xycen):
     if np.any(good):
         jac = compute_pixel_to_sky_jacobians(wcs, xycen[good, 0],
                                              xycen[good, 1])
-        # The Einstein summation computes the matrix product of the
-        # Jacobian, the pixel covariance, and the Jacobian transpose
-        # for each source. The result is the sky covariance matrix in
-        # the local tangent plane.
-        sky_covariance[good] = np.einsum('nij,njk,nlk->nil', jac,
-                                         pixel_covariance[good], jac)
+        # The stacked matrix product of the Jacobian, the pixel
+        # covariance, and the Jacobian transpose for each source is the
+        # sky covariance matrix in the local tangent plane
+        sky_covariance[good] = (jac @ pixel_covariance[good]
+                                @ jac.transpose(0, 2, 1))
 
     return sky_covariance
 
