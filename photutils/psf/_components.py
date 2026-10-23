@@ -25,7 +25,9 @@ from photutils.utils._deprecation import (DeprecatedColumnQTable,
                                           deprecated_renamed_argument)
 from photutils.utils._flags import update_flag_docstring
 from photutils.utils._misc import _get_meta
+from photutils.utils._moments import PSD_RTOL
 from photutils.utils._overlap import overlap_slices
+from photutils.utils.wcs import pixel_to_sky_errors
 
 from .flags import PSF_FLAGS
 
@@ -1238,6 +1240,45 @@ class PSFResultsAssembler:
             if (param_cov := info.get('param_cov')) is not None:
                 xy_cov[i] = param_cov[x_index, y_index]
         return xy_cov
+
+    def add_sky_columns(self, results_tbl, wcs):
+        """
+        Add the sky positions and their errors to a results table.
+
+        The ``sky_centroid``, ``sky_centroid_ra_err``, and
+        ``sky_centroid_dec_err`` columns are appended to the table. The
+        sky errors are computed from the ``x_err``, ``y_err``, and
+        ``xy_cov`` columns with `~photutils.utils.pixel_to_sky_errors`.
+
+        Parameters
+        ----------
+        results_tbl : `~astropy.table.QTable`
+            The results table, which is modified in place.
+
+        wcs : WCS object
+            The world coordinate system (WCS) transformation of the
+            data.
+        """
+        mapper = self.param_mapper
+        x_fit = np.asarray(results_tbl[mapper.fit_colnames['x']], dtype=float)
+        y_fit = np.asarray(results_tbl[mapper.fit_colnames['y']], dtype=float)
+        x_err = np.asarray(results_tbl[mapper.err_colnames['x']], dtype=float)
+        y_err = np.asarray(results_tbl[mapper.err_colnames['y']], dtype=float)
+        xy_cov = np.asarray(results_tbl['xy_cov'], dtype=float)
+
+        # A fitter covariance matrix that is not positive semidefinite
+        # can have an x-y covariance larger in absolute value than
+        # x_err * y_err. Its sky errors are undefined, so they are set
+        # to NaN instead of raising an error.
+        with np.errstate(invalid='ignore'):
+            invalid_cov = np.abs(xy_cov) > x_err * y_err * (1.0 + PSD_RTOL)
+        xy_cov = np.where(invalid_cov, np.nan, xy_cov)
+
+        ra_err, dec_err = pixel_to_sky_errors(wcs, x_fit, y_fit, x_err,
+                                              y_err, xy_cov=xy_cov)
+        results_tbl['sky_centroid'] = wcs.pixel_to_world(x_fit, y_fit)
+        results_tbl['sky_centroid_ra_err'] = ra_err
+        results_tbl['sky_centroid_dec_err'] = dec_err
 
     def param_errors_to_table(self, fit_param_errs, data_unit):
         """

@@ -15,6 +15,13 @@ New Features
     ``IterativePSFPhotometry`` now have an ``xy_cov`` column with the
     covariance of the fitted x and y positions. [#2531]
 
+  - ``PSFPhotometry`` and ``IterativePSFPhotometry`` now accept a
+    ``wcs`` keyword, which is also taken from the ``wcs`` attribute of
+    an ``NDData`` input. If a WCS is input, the results table includes
+    ``sky_centroid``, ``sky_centroid_ra_err``, and
+    ``sky_centroid_dec_err`` columns with the sky positions of the
+    fitted sources and their errors. [#2532]
+
 - ``photutils.utils``
 
   - Added a ``pixel_to_sky_errors`` function to convert pixel position

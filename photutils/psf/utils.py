@@ -729,8 +729,8 @@ def _create_call_docstring(*, iterative=False):
             ``data`` is a `~numpy.ma.MaskedArray`, its mask is combined
             with the input ``mask``. If an `~astropy.nddata.NDData`
             object is input, its ``data``, ``mask``, ``uncertainty``,
-            and ``unit`` attributes are used, and the ``mask`` and
-            ``error`` keywords must not be set.
+            ``unit``, and ``wcs`` attributes are used, and the ``mask``,
+            ``error``, and ``wcs`` keywords must not be set.
 
         mask : 2D bool `~numpy.ndarray`, optional
             A boolean mask with the same shape as ``data``, where
@@ -812,6 +812,14 @@ def _create_call_docstring(*, iterative=False):
             numbered from 1 in row order. The output table is sorted by
             ``'id'``.
 
+        wcs : WCS object or `None`, optional
+            A world coordinate system (WCS) transformation that
+            supports the `astropy shared interface for WCS
+            <https://docs.astropy.org/en/stable/wcs/wcsapi.html>`_
+            (e.g., `astropy.wcs.WCS`, `gwcs.wcs.WCS`). If input, the
+            sky positions of the fit source centers and their errors
+            are added to the output table.
+
         Returns
         -------
         table : `~astropy.table.QTable` or `None`
@@ -880,6 +888,23 @@ def _create_call_docstring(*, iterative=False):
               the position uncertainty of a source whose fit x and y
               centers are correlated (e.g., for an elliptical PSF
               model rotated with respect to the pixel axes).
+            * ``'sky_centroid'`` : the sky coordinate of the fit
+              source center as a `~astropy.coordinates.SkyCoord`, in
+              the coordinate frame of the ``wcs``. This column is
+              included only if ``wcs`` is input.
+            * ``'sky_centroid_ra_err'``, ``'sky_centroid_dec_err'`` :
+              the 1-sigma errors of the sky position along the Right
+              Ascension (as a great-circle angle, i.e., including the
+              cos(dec) factor) and Declination directions in arcsec,
+              computed from ``'x_err'``, ``'y_err'``, and ``'xy_cov'``
+              with `~photutils.utils.pixel_to_sky_errors`. For a
+              celestial frame that is not equatorial (e.g., Galactic),
+              they are the errors along the longitude and latitude of
+              that frame. They are NaN where ``'xy_cov'`` is NaN (e.g.,
+              for a fixed source center), where the parameter
+              covariance matrix is not positive semidefinite, or where
+              the WCS is undefined. These columns are included only if
+              ``wcs`` is input.
 
         Notes
         -----

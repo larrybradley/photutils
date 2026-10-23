@@ -1722,9 +1722,9 @@ class PSFPhotometry(_ModelImageMixin):
         return data_array, mask, error
 
     @staticmethod
-    def _check_nddata_kwargs(*, mask, error):
+    def _check_nddata_kwargs(*, mask, error, wcs):
         """
-        Reject explicit mask/error keywords for NDData inputs.
+        Reject explicit mask/error/wcs keywords for NDData inputs.
 
         Parameters
         ----------
@@ -1734,19 +1734,23 @@ class PSFPhotometry(_ModelImageMixin):
         error : 2D `~numpy.ndarray` or `None`
             The error keyword value passed to ``__call__``.
 
+        wcs : WCS object or `None`
+            The wcs keyword value passed to ``__call__``.
+
         Raises
         ------
         ValueError
-            If mask or error is not None.
+            If mask, error, or wcs is not None.
         """
-        if mask is not None or error is not None:
-            msg = ('The mask and error keywords must be None when '
-                   'data is an NDData instance. Define the mask and '
-                   'uncertainty in the NDData object instead.')
+        if mask is not None or error is not None or wcs is not None:
+            msg = ('The mask, error, and wcs keywords must be None when '
+                   'data is an NDData instance. Define the mask, '
+                   'uncertainty, and wcs in the NDData object instead.')
             raise ValueError(msg)
 
     @_create_call_docstring(iterative=False)
-    def __call__(self, data, *, mask=None, error=None, init_params=None):
+    def __call__(self, data, *, mask=None, error=None, init_params=None,
+                 wcs=None):
         # Reset state from previous runs
         self._reset_results()
 
@@ -1758,7 +1762,8 @@ class PSFPhotometry(_ModelImageMixin):
         try:
             # Handle NDData input
             if isinstance(data, NDData):
-                self._check_nddata_kwargs(mask=mask, error=error)
+                self._check_nddata_kwargs(mask=mask, error=error, wcs=wcs)
+                wcs = data.wcs
                 data, mask, error = self._coerce_nddata(data)
 
             data, mask = split_masked_array(data, mask)
@@ -1782,6 +1787,8 @@ class PSFPhotometry(_ModelImageMixin):
             # Note: _assemble_results_table handles _state cleanup
             self.results = self._assemble_results_table(
                 init_params, fit_params, data.shape)
+            if wcs is not None:
+                self._results_assembler.add_sky_columns(self.results, wcs)
 
             # Reorder fit_info to match the results table rows, which
             # are sorted by the id column during table assembly

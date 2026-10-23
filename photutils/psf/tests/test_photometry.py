@@ -12,6 +12,7 @@ from types import MappingProxyType
 import astropy.units as u
 import numpy as np
 import pytest
+from astropy.coordinates import SkyCoord
 from astropy.modeling.fitting import (LevMarLSQFitter, LMLSQFitter,
                                       SimplexLSQFitter, TRFLSQFitter)
 from astropy.modeling.models import Const2D, Gaussian1D, Gaussian2D
@@ -19,15 +20,18 @@ from astropy.nddata import NDData, StdDevUncertainty
 from astropy.table import MaskedColumn, QTable, Table
 from astropy.utils.exceptions import AstropyUserWarning
 from astropy.utils.masked import Masked
+from astropy.wcs import WCS
 from numpy.testing import assert_allclose, assert_equal
 
 from photutils.background import LocalBackground, MMMBackground
-from photutils.datasets import make_model_image, make_noise_image
+from photutils.datasets import make_gwcs, make_model_image, make_noise_image
 from photutils.detection import DAOStarFinder
 from photutils.psf import (CircularGaussianPRF, GaussianPRF, ImagePSF,
                            PSFPhotometry, SourceGrouper, make_psf_model,
                            make_psf_model_image)
 from photutils.psf.flags import decode_psf_flags
+from photutils.utils import pixel_to_sky_errors
+from photutils.utils._optional_deps import HAS_GWCS
 from photutils.utils.exceptions import (NoDetectionsWarning,
                                         PhotutilsDeprecationWarning)
 
@@ -3480,3 +3484,200 @@ class TestXYCovariance:
         psfphot(data, error=error, init_params=init_params)
         assert 'xy_cov' not in psfphot.results_to_init_params().colnames
         assert 'xy_cov' not in psfphot.results_to_model_params().colnames
+
+
+def make_rotated_wcs(theta=30.0, pixel_scale=0.1):
+    """
+    Make a celestial WCS whose pixel axes are rotated by ``theta``
+    degrees from North, with square pixels of ``pixel_scale`` arcsec.
+    """
+    wcs = WCS(naxis=2)
+    wcs.wcs.ctype = ['RA---TAN', 'DEC--TAN']
+    wcs.wcs.crval = [150.0, 2.0]
+    wcs.wcs.crpix = [50.0, 50.0]
+    cos = np.cos(np.deg2rad(theta))
+    sin = np.sin(np.deg2rad(theta))
+    wcs.wcs.cd = pixel_scale / 3600.0 * np.array([[-cos, sin],
+                                                  [sin, cos]])
+    return wcs
+
+
+class TestSkyColumns:
+    """
+    Test the sky position columns added when a WCS is input.
+    """
+
+    sky_colnames = ('sky_centroid', 'sky_centroid_ra_err',
+                    'sky_centroid_dec_err')
+
+    @staticmethod
+    def make_data():
+        psf_model = GaussianPRF(flux=1, x_fwhm=2.0, y_fwhm=4.0, theta=30.0)
+        data, true_params = make_psf_model_image((101, 101), psf_model, 10,
+                                                 model_shape=(15, 15),
+                                                 flux=(500, 700),
+                                                 min_separation=15, seed=0)
+        sigma = 0.9
+        data += make_noise_image(data.shape, mean=0, stddev=sigma, seed=0)
+        error = np.full(data.shape, sigma)
+        init_params = Table({'x': true_params['x_0'],
+                             'y': true_params['y_0']})
+        return psf_model, data, error, init_params
+
+    @staticmethod
+    def check_sky_columns(phot, wcs):
+        assert isinstance(phot['sky_centroid'], SkyCoord)
+        expected = wcs.pixel_to_world(phot['x_fit'], phot['y_fit'])
+        assert_allclose(phot['sky_centroid'].ra.deg, expected.ra.deg,
+                        rtol=0, atol=1e-12)
+        assert_allclose(phot['sky_centroid'].dec.deg, expected.dec.deg,
+                        rtol=0, atol=1e-12)
+
+        ra_err, dec_err = pixel_to_sky_errors(
+            wcs, phot['x_fit'], phot['y_fit'], phot['x_err'],
+            phot['y_err'], xy_cov=phot['xy_cov'])
+        assert phot['sky_centroid_ra_err'].unit == u.arcsec
+        assert phot['sky_centroid_dec_err'].unit == u.arcsec
+        assert_allclose(phot['sky_centroid_ra_err'], ra_err)
+        assert_allclose(phot['sky_centroid_dec_err'], dec_err)
+
+    def test_no_wcs(self):
+        psf_model, data, error, init_params = self.make_data()
+        psfphot = PSFPhotometry(psf_model, (7, 7), aperture_radius=4)
+        phot = psfphot(data, error=error, init_params=init_params)
+        assert phot.colnames[-1] == 'xy_cov'
+        for colname in self.sky_colnames:
+            assert colname not in phot.colnames
+
+    def test_wcs(self):
+        psf_model, data, error, init_params = self.make_data()
+        psfphot = PSFPhotometry(psf_model, (7, 7), aperture_radius=4)
+        phot0 = psfphot(data, error=error, init_params=init_params)
+        wcs = make_rotated_wcs()
+        phot = psfphot(data, error=error, init_params=init_params, wcs=wcs)
+
+        assert phot.colnames == [*phot0.colnames, *self.sky_colnames]
+        for colname in phot0.colnames:
+            assert_equal(phot[colname], phot0[colname])
+        self.check_sky_columns(phot, wcs)
+        assert np.all(np.isfinite(phot['sky_centroid_ra_err']))
+
+        # The x-y covariance changes the sky errors for a WCS whose
+        # axes are rotated with respect to the pixel axes
+        ra_err, dec_err = pixel_to_sky_errors(
+            wcs, phot['x_fit'], phot['y_fit'], phot['x_err'], phot['y_err'])
+        assert np.all(np.abs(phot['sky_centroid_ra_err'] / ra_err - 1)
+                      > 0.05)
+        assert np.all(np.abs(phot['sky_centroid_dec_err'] / dec_err - 1)
+                      > 0.05)
+
+    def test_units(self):
+        psf_model, data, error, init_params = self.make_data()
+        psfphot = PSFPhotometry(psf_model, (7, 7), aperture_radius=4)
+        wcs = make_rotated_wcs()
+        phot = psfphot(data, error=error, init_params=init_params, wcs=wcs)
+        photu = psfphot(data << u.Jy, error=error << u.Jy,
+                        init_params=init_params, wcs=wcs)
+        self.check_sky_columns(photu, wcs)
+        assert_allclose(photu['sky_centroid_ra_err'],
+                        phot['sky_centroid_ra_err'])
+
+    @pytest.mark.skipif(not HAS_GWCS, reason='gwcs is required')
+    def test_gwcs(self):
+        psf_model, data, error, init_params = self.make_data()
+        psfphot = PSFPhotometry(psf_model, (7, 7), aperture_radius=4)
+        wcs = make_gwcs(data.shape)
+        phot = psfphot(data, error=error, init_params=init_params, wcs=wcs)
+        self.check_sky_columns(phot, wcs)
+        assert np.all(np.isfinite(phot['sky_centroid_ra_err']))
+
+    def test_nddata(self):
+        psf_model, data, error, init_params = self.make_data()
+        psfphot = PSFPhotometry(psf_model, (7, 7), aperture_radius=4)
+        wcs = make_rotated_wcs()
+        phot = psfphot(data, error=error, init_params=init_params, wcs=wcs)
+
+        nddata = NDData(data, uncertainty=StdDevUncertainty(error), wcs=wcs)
+        phot2 = psfphot(nddata, init_params=init_params)
+        assert phot2.colnames == phot.colnames
+        assert_allclose(phot2['sky_centroid_ra_err'],
+                        phot['sky_centroid_ra_err'])
+
+        nddata = NDData(data, uncertainty=StdDevUncertainty(error))
+        phot3 = psfphot(nddata, init_params=init_params)
+        assert 'sky_centroid' not in phot3.colnames
+
+        match = 'must be None when data is an NDData instance'
+        with pytest.raises(ValueError, match=match):
+            psfphot(nddata, init_params=init_params, wcs=wcs)
+
+    def test_invalid_and_fixed(self, test_data):
+        data, error, sources = test_data
+        wcs = make_rotated_wcs()
+        psf_model = CircularGaussianPRF(flux=1, fwhm=2.7)
+        init_params = Table({'x': [*sources['x_0'], -50.0],
+                             'y': [*sources['y_0'], -50.0],
+                             'flux': [600.0] * (len(sources) + 1)})
+        psfphot = PSFPhotometry(psf_model, (5, 5))
+        phot = psfphot(data, error=error, init_params=init_params, wcs=wcs)
+        self.check_sky_columns(phot, wcs)
+        for colname in ('sky_centroid_ra_err', 'sky_centroid_dec_err'):
+            assert np.all(np.isfinite(phot[colname][:-1]))
+            assert np.isnan(phot[colname][-1])
+        assert np.isnan(phot['sky_centroid'][-1].ra.deg)
+
+        # Fixed positions have a sky position but no sky errors
+        psf_model.x_0.fixed = True
+        psfphot = PSFPhotometry(psf_model, (5, 5))
+        phot = psfphot(data, error=error, init_params=init_params[:-1],
+                       wcs=wcs)
+        assert np.all(np.isfinite(phot['sky_centroid'].ra.deg))
+        assert np.all(np.isnan(phot['sky_centroid_ra_err']))
+        assert np.all(np.isnan(phot['sky_centroid_dec_err']))
+
+    def test_invalid_covariance(self):
+        """
+        Test that a fitter covariance whose x-y term exceeds the product
+        of the x and y errors gives NaN sky errors instead of an
+        exception.
+        """
+        def mock_fitter(model, *args, **kwargs):  # noqa: ARG001
+            # The fitted parameters are flux, x_0, and y_0
+            param_cov = np.array([[1.0, 0.0, 0.0],
+                                  [0.0, 0.01, 0.02],
+                                  [0.0, 0.02, 0.01]])
+            mock_fitter.fit_info = {'status': 1, 'param_cov': param_cov}
+            return model
+
+        mock_fitter.fit_info = {}
+        psf_model = CircularGaussianPRF(fwhm=2.5)
+        data = np.zeros((21, 21))
+        init_params = QTable({'x_0': [10.0], 'y_0': [10.0],
+                              'flux': [500.0]})
+        match = "'fitter_maxiters' will be ignored because the fitter's"
+        with pytest.warns(AstropyUserWarning, match=match):
+            psfphot = PSFPhotometry(psf_model, (5, 5), fitter=mock_fitter)
+        phot = psfphot(data, init_params=init_params,
+                       wcs=make_rotated_wcs())
+        assert_allclose(phot['xy_cov'], 0.02)
+        assert np.isfinite(phot['sky_centroid'][0].ra.deg)
+        assert np.isnan(phot['sky_centroid_ra_err'][0])
+        assert np.isnan(phot['sky_centroid_dec_err'][0])
+
+    @pytest.mark.parametrize('fmt', ['ascii.ecsv', 'fits'])
+    def test_write(self, tmp_path, fmt):
+        psf_model, data, error, init_params = self.make_data()
+        psfphot = PSFPhotometry(psf_model, (7, 7), aperture_radius=4)
+        wcs = make_rotated_wcs()
+        phot = psfphot(data, error=error, init_params=init_params, wcs=wcs)
+        # The table metadata has nested dictionaries that cannot be
+        # written to a FITS header
+        phot.meta.clear()
+        filename = tmp_path / f'psf_results.{fmt.split(".")[-1]}'
+        phot.write(filename, format=fmt)
+        tbl = QTable.read(filename, format=fmt)
+        assert isinstance(tbl['sky_centroid'], SkyCoord)
+        assert_allclose(tbl['sky_centroid'].ra.deg,
+                        phot['sky_centroid'].ra.deg)
+        assert_allclose(tbl['sky_centroid_ra_err'],
+                        phot['sky_centroid_ra_err'])

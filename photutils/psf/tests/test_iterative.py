@@ -9,6 +9,7 @@ import warnings
 import astropy.units as u
 import numpy as np
 import pytest
+from astropy.coordinates import SkyCoord
 from astropy.modeling.fitting import TRFLSQFitter
 from astropy.modeling.models import Const2D, Gaussian2D
 from astropy.nddata import NDData, StdDevUncertainty
@@ -17,12 +18,13 @@ from astropy.utils.exceptions import AstropyUserWarning
 from numpy.testing import assert_allclose, assert_equal
 
 from photutils.background import LocalBackground, MMMBackground
-from photutils.datasets import make_model_image, make_noise_image
+from photutils.datasets import make_model_image, make_noise_image, make_wcs
 from photutils.detection import DAOStarFinder
 from photutils.psf import (CircularGaussianPRF, GaussianPRF,
                            IterativePSFPhotometry, SourceGrouper,
                            make_psf_model_image)
 from photutils.psf.flags import decode_psf_flags
+from photutils.utils import pixel_to_sky_errors
 from photutils.utils.exceptions import (NoDetectionsWarning,
                                         PhotutilsDeprecationWarning)
 
@@ -1043,3 +1045,66 @@ def test_xy_cov(mode):
 
     corr = phot['xy_cov'] / (phot['x_err'] * phot['y_err'])
     assert np.all(corr < -0.3)
+
+
+@pytest.mark.parametrize('mode', ['new', 'all'])
+def test_wcs(mode):
+    """
+    Test that the sky position columns are added to the results of
+    every iteration when a WCS is input.
+    """
+    psf_model = GaussianPRF(flux=1, x_fwhm=2.0, y_fwhm=4.0, theta=30.0)
+    sources = QTable()
+    sources['x_0'] = [30.0, 70.0, 50.0]
+    sources['y_0'] = [30.0, 70.0, 50.0]
+    sources['flux'] = [500.0, 300.0, 400.0]
+    data = make_model_image((101, 101), psf_model, sources,
+                            model_shape=(15, 15))
+    sigma = 0.5
+    data += make_noise_image(data.shape, mean=0, stddev=sigma, seed=0)
+    error = np.full(data.shape, sigma)
+    wcs = make_wcs(data.shape)
+
+    init_params = QTable()
+    init_params['x'] = [30.0, 70.0]
+    init_params['y'] = [30.0, 70.0]
+    kwargs = {'grouper': SourceGrouper(min_separation=5),
+              'aperture_radius': 4, 'mode': mode, 'maxiters': 3,
+              'sub_shape': (15, 15)}
+    psfphot = IterativePSFPhotometry(
+        psf_model, (7, 7), finder=make_one_shot_finder(50.0, 50.0),
+        **kwargs)
+    phot0 = psfphot(data, error=error, init_params=init_params)
+    psfphot = IterativePSFPhotometry(
+        psf_model, (7, 7), finder=make_one_shot_finder(50.0, 50.0),
+        **kwargs)
+    phot = psfphot(data, error=error, init_params=init_params, wcs=wcs)
+
+    sky_colnames = ['sky_centroid', 'sky_centroid_ra_err',
+                    'sky_centroid_dec_err']
+    assert phot.colnames == [*phot0.colnames, *sky_colnames]
+    assert_equal(phot['iter_detected'], [1, 1, 2])
+    assert isinstance(phot['sky_centroid'], SkyCoord)
+    expected = wcs.pixel_to_world(phot['x_fit'], phot['y_fit'])
+    assert_allclose(phot['sky_centroid'].ra.deg, expected.ra.deg)
+    assert_allclose(phot['sky_centroid'].dec.deg, expected.dec.deg)
+    ra_err, dec_err = pixel_to_sky_errors(
+        wcs, phot['x_fit'], phot['y_fit'], phot['x_err'], phot['y_err'],
+        xy_cov=phot['xy_cov'])
+    assert_allclose(phot['sky_centroid_ra_err'], ra_err)
+    assert_allclose(phot['sky_centroid_dec_err'], dec_err)
+    for result in psfphot.fit_results:
+        assert result.results.colnames[-3:] == sky_colnames
+
+    # NDData input with a WCS
+    psfphot = IterativePSFPhotometry(
+        psf_model, (7, 7), finder=make_one_shot_finder(50.0, 50.0),
+        **kwargs)
+    nddata = NDData(data, uncertainty=StdDevUncertainty(error), wcs=wcs)
+    phot2 = psfphot(nddata, init_params=init_params)
+    assert phot2.colnames == phot.colnames
+    assert_allclose(phot2['sky_centroid_ra_err'], phot['sky_centroid_ra_err'])
+
+    match = 'must be None when data is an NDData instance'
+    with pytest.raises(ValueError, match=match):
+        psfphot(nddata, init_params=init_params, wcs=wcs)
