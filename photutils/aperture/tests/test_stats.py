@@ -34,10 +34,10 @@ from photutils.aperture.rectangle import (RectangularAnnulus,
 from photutils.aperture.stats import (_BLOCK_MAX_PIXELS, _MAD_STD_SCALE,
                                       ApertureStats)
 from photutils.aperture.tests.conftest import NoBatchCircularAperture
-from photutils.datasets import make_100gaussians_image, make_wcs
+from photutils.datasets import make_100gaussians_image, make_gwcs, make_wcs
 from photutils.segmentation import (SEGMENTATION_FLAGS, SegmentationImage,
                                     SourceCatalog)
-from photutils.utils._optional_deps import HAS_REGIONS
+from photutils.utils._optional_deps import HAS_GWCS, HAS_REGIONS
 from photutils.utils.exceptions import PhotutilsDeprecationWarning
 
 
@@ -2460,6 +2460,22 @@ class TestSkyOrientation:
         assert np.isnan(apstats.orientation[0])
         assert np.isnan(sky_orient[0])
         assert np.isfinite(sky_orient[1])
+
+    @pytest.mark.skipif(not HAS_GWCS, reason='gwcs is required')
+    def test_gwcs_outside_bounding_box(self):
+        """
+        Test that the sky orientation is NaN for a centroid outside the
+        bounding box of a gwcs, where the sky centroid is also NaN.
+        """
+        gwcs = make_gwcs((31, 31))
+        apstats = self._elongated_source_stats(30.0, gwcs)
+        assert np.isfinite(apstats.sky_orientation[0])
+
+        # The source centroid is at x = 15.2
+        gwcs.bounding_box = ((-0.5, 14.5), (-0.5, 30.5))
+        apstats = self._elongated_source_stats(30.0, gwcs)
+        assert np.isnan(apstats.sky_centroid[0].ra)
+        assert np.isnan(apstats.sky_orientation[0])
 
     def test_no_wcs(self):
         """
