@@ -32,6 +32,10 @@ Bug Fixes
     iteration`` when another thread accessed the properties of the
     same object at the same time. [#2526]
 
+  - Fixed ``ApertureStats.sky_orientation`` so that it is NaN for a
+    centroid outside the bounding box of a ``gwcs`` WCS, where
+    ``sky_centroid`` is also NaN. [#2530]
+
 - ``photutils.detection``
 
   - Fixed a race condition on free-threaded Python builds where
@@ -77,6 +81,12 @@ Bug Fixes
     ``SourceCatalog.copy`` could raise ``RuntimeError: dictionary
     changed size during iteration`` when another thread accessed the
     properties of the same object at the same time. [#2526]
+
+  - Fixed the ``SourceCatalog`` sky centroid error properties (e.g.,
+    ``sky_centroid_err``, ``sky_centroid_win_ra_err``) and
+    ``sky_orientation`` so that they are NaN for a centroid outside the
+    bounding box of a ``gwcs`` WCS, where the sky centroid is also NaN.
+    [#2530]
 
 - ``photutils.utils``
 
