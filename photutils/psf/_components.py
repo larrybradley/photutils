@@ -1205,6 +1205,40 @@ class PSFResultsAssembler:
                       for key in ('ierr', 'status'))]
         return np.array(bad, dtype=int)
 
+    def get_xy_covariances(self, fit_info):
+        """
+        Get the covariance of the fitted x and y positions of each
+        source.
+
+        Parameters
+        ----------
+        fit_info : list of dict
+            List of fit information dictionaries. The ``'param_cov'``
+            entry of each is the covariance matrix of the source, with
+            rows and columns ordered as the fitted model parameters.
+
+        Returns
+        -------
+        xy_cov : `~numpy.ndarray`
+            The x-y position covariance of each source. The values are
+            NaN for sources without a ``'param_cov'`` entry and for all
+            sources if the x or y position is fixed.
+        """
+        mapper = self.param_mapper
+        fitted_params = mapper.fitted_param_names
+        x_param = mapper.alias_to_model_param['x']
+        y_param = mapper.alias_to_model_param['y']
+        xy_cov = np.full(len(fit_info), np.nan)
+        if x_param not in fitted_params or y_param not in fitted_params:
+            return xy_cov
+
+        x_index = fitted_params.index(x_param)
+        y_index = fitted_params.index(y_param)
+        for i, info in enumerate(fit_info):
+            if (param_cov := info.get('param_cov')) is not None:
+                xy_cov[i] = param_cov[x_index, y_index]
+        return xy_cov
+
     def param_errors_to_table(self, fit_param_errs, data_unit):
         """
         Convert the fitter's parameter errors to an astropy Table.
@@ -1543,7 +1577,7 @@ class PSFResultsAssembler:
         The final results table is built by merging the input
         ``init_params`` table with the ``fit_params`` table. Additional
         columns are added for ``n_pixels_fit``, ``group_size``, ``qfit``,
-        ``cfit``, ``reduced_chi2``, and ``flags``.
+        ``cfit``, ``reduced_chi2``, ``flags``, and ``xy_cov``.
 
         This method also cleans up the state dictionary as data is
         consumed to reduce memory usage.
@@ -1591,6 +1625,7 @@ class PSFResultsAssembler:
             - Quality metrics (qfit, cfit, reduced_chi2)
             - Bitwise flags indicating fit conditions
             - Fit statistics (n_pixels_fit, group_size)
+            - Covariance of the fitted x and y positions (xy_cov)
         """
         # Add metrics and flags column to fit_params. The results in the
         # state container match the order of the fit_params results,
@@ -1603,6 +1638,7 @@ class PSFResultsAssembler:
         #   consumed by calc_fit_metrics_func
         # - 'fit_error_indices', 'fitted_models_table',
         #   'valid_mask_by_id': consumed by define_flags_func
+        # - 'xy_cov': added as the last column
 
         # Consume n_pixels_fit and group_size data, removing from state
         fit_params['n_pixels_fit'] = state.pop('n_pixels_fit')
@@ -1622,6 +1658,7 @@ class PSFResultsAssembler:
         # Calculate flags and check for convergence warnings before cleanup
         fit_params['flags'] = define_flags_func(
             fit_params, data_shape, init_params)
+        fit_params['xy_cov'] = state.pop('xy_cov')
 
         # Join the fit_params table (with metrics and flags) to the
         # init_params table. By default, join will sort the rows by the

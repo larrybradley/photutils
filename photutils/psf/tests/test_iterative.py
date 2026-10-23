@@ -19,8 +19,9 @@ from numpy.testing import assert_allclose, assert_equal
 from photutils.background import LocalBackground, MMMBackground
 from photutils.datasets import make_model_image, make_noise_image
 from photutils.detection import DAOStarFinder
-from photutils.psf import (CircularGaussianPRF, IterativePSFPhotometry,
-                           SourceGrouper, make_psf_model_image)
+from photutils.psf import (CircularGaussianPRF, GaussianPRF,
+                           IterativePSFPhotometry, SourceGrouper,
+                           make_psf_model_image)
 from photutils.psf.flags import decode_psf_flags
 from photutils.utils.exceptions import (NoDetectionsWarning,
                                         PhotutilsDeprecationWarning)
@@ -996,3 +997,49 @@ def test_masked_array(test_data, mode):
     assert np.any(phot1['n_pixels_fit'] == 16)
     assert_equal(phot1['n_pixels_fit'], phot0['n_pixels_fit'])
     assert_allclose(phot1['flux_fit'], phot0['flux_fit'])
+
+
+@pytest.mark.parametrize('mode', ['new', 'all'])
+def test_xy_cov(mode):
+    """
+    Test that the ``xy_cov`` column holds the x-y position covariance
+    of each source from the ``fit_info`` of the iteration in which it
+    was last fit.
+    """
+    psf_model = GaussianPRF(flux=1, x_fwhm=2.0, y_fwhm=4.0, theta=30.0)
+    sources = QTable()
+    sources['x_0'] = [30.0, 70.0, 50.0]
+    sources['y_0'] = [30.0, 70.0, 50.0]
+    sources['flux'] = [500.0, 300.0, 400.0]
+    data = make_model_image((101, 101), psf_model, sources,
+                            model_shape=(15, 15))
+    sigma = 0.5
+    data += make_noise_image(data.shape, mean=0, stddev=sigma, seed=0)
+    error = np.full(data.shape, sigma)
+
+    init_params = QTable()
+    init_params['x'] = [30.0, 70.0]
+    init_params['y'] = [30.0, 70.0]
+    psfphot = IterativePSFPhotometry(
+        psf_model, (7, 7), finder=make_one_shot_finder(50.0, 50.0),
+        grouper=SourceGrouper(min_separation=5), aperture_radius=4,
+        mode=mode, maxiters=3, sub_shape=(15, 15))
+    phot = psfphot(data, error=error, init_params=init_params)
+
+    assert len(phot) == 3
+    assert_equal(phot['iter_detected'], [1, 1, 2])
+    assert phot.colnames[-1] == 'xy_cov'
+
+    fitted = [name for name in psf_model.param_names
+              if not psf_model.fixed[name]]
+    x_index = fitted.index('x_0')
+    y_index = fitted.index('y_0')
+    fit_results = psfphot.fit_results
+    if mode == 'all':
+        fit_results = fit_results[-1:]
+    expected = [info['param_cov'][x_index, y_index]
+                for result in fit_results for info in result.fit_info]
+    assert_allclose(phot['xy_cov'], expected, rtol=0, atol=0)
+
+    corr = phot['xy_cov'] / (phot['x_err'] * phot['y_err'])
+    assert np.all(corr < -0.3)

@@ -621,7 +621,8 @@ uncertainty object that can be converted to standard-deviation errors:
 The result is an Astropy `~astropy.table.QTable` with columns for the
 source and group identification numbers, the x, y, and flux initial,
 fit, and error values, local background, number of unmasked pixels
-fit, the group size, quality-of-fit metrics, and flags. See the
+fit, the group size, quality-of-fit metrics, flags, and the covariance
+of the fit x and y positions. See the
 `~photutils.psf.PSFPhotometry` documentation for descriptions of the
 output columns.
 
