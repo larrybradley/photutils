@@ -577,12 +577,14 @@ class IterativePSFPhotometry(_ModelImageMixin):
         return vstack([prepared_orig, new_sources])
 
     @_create_call_docstring(iterative=True)
-    def __call__(self, data, *, mask=None, error=None, init_params=None):
+    def __call__(self, data, *, mask=None, error=None, init_params=None,
+                 wcs=None):
         if isinstance(data, NDData):
-            PSFPhotometry._check_nddata_kwargs(mask=mask, error=error)
+            PSFPhotometry._check_nddata_kwargs(mask=mask, error=error,
+                                               wcs=wcs)
             data_, mask, error = PSFPhotometry._coerce_nddata(data)
             return self.__call__(data_, mask=mask, error=error,
-                                 init_params=init_params)
+                                 init_params=init_params, wcs=data.wcs)
 
         data, mask = split_masked_array(data, mask)
 
@@ -592,7 +594,7 @@ class IterativePSFPhotometry(_ModelImageMixin):
         with warnings.catch_warnings(record=True) as rwarn0:
             warnings.simplefilter('always')
             phot_tbl = self._psfphot(data, mask=mask, error=error,
-                                     init_params=init_params)
+                                     init_params=init_params, wcs=wcs)
             self.fit_results.append(deepcopy(self._psfphot))
 
         # This needs to be run outside the context manager to be able
@@ -657,7 +659,7 @@ class IterativePSFPhotometry(_ModelImageMixin):
                     init_params = new_sources
 
                 new_tbl = self._psfphot(residual_data, mask=mask, error=error,
-                                        init_params=init_params)
+                                        init_params=init_params, wcs=wcs)
                 self._psfphot.finder_results = finder_results
                 self.fit_results.append(deepcopy(self._psfphot))
 

@@ -646,6 +646,26 @@ print the source ID along with the fit x, y, and flux values::
       9  5.5219 89.8622 542.6817
      10 71.8331 90.5734 692.6518
 
+If a WCS is input with the ``wcs`` keyword (or as the ``wcs`` attribute
+of an `~astropy.nddata.NDData` input), the table also includes the sky
+position of each fit source center (``sky_centroid``) and its errors
+along the Right Ascension and Declination directions in arcsec. The sky
+errors include the covariance of the fit x and y positions (the
+``xy_cov`` column)::
+
+    >>> from photutils.datasets import make_wcs
+    >>> wcs = make_wcs(data.shape)
+    >>> phot = psfphot(data, error=error, wcs=wcs)
+    >>> phot['sky_centroid_ra_err'].info.format = '.5f'  # optional format
+    >>> phot['sky_centroid_dec_err'].info.format = '.5f'
+    >>> print(phot[('id', 'sky_centroid_ra_err', 'sky_centroid_dec_err')][:3])
+     id sky_centroid_ra_err sky_centroid_dec_err
+               arcsec              arcsec
+    --- ------------------- --------------------
+      1             0.00139              0.00140
+      2             0.00134              0.00133
+      3             0.00115              0.00115
+
 Let's create the residual image::
 
     >>> resid = psfphot.make_residual_image(data)
