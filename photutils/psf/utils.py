@@ -730,7 +730,9 @@ def _create_call_docstring(*, iterative=False):
             with the input ``mask``. If an `~astropy.nddata.NDData`
             object is input, its ``data``, ``mask``, ``uncertainty``,
             ``unit``, and ``wcs`` attributes are used, and the ``mask``,
-            ``error``, and ``wcs`` keywords must not be set.
+            ``error``, and ``wcs`` keywords must not be set. A ``wcs``
+            attribute without celestial longitude and latitude axes is
+            ignored.
 
         mask : 2D bool `~numpy.ndarray`, optional
             A boolean mask with the same shape as ``data``, where
@@ -818,7 +820,9 @@ def _create_call_docstring(*, iterative=False):
             <https://docs.astropy.org/en/stable/wcs/wcsapi.html>`_
             (e.g., `astropy.wcs.WCS`, `gwcs.wcs.WCS`). If input, the
             sky positions of the fit source centers and their errors
-            are added to the output table.
+            are added to the output table. The WCS must have exactly
+            one celestial longitude axis and one celestial latitude
+            axis. Otherwise, a `ValueError` is raised.
 
         Returns
         -------
@@ -891,7 +895,7 @@ def _create_call_docstring(*, iterative=False):
             * ``'sky_centroid'`` : the sky coordinate of the fit
               source center as a `~astropy.coordinates.SkyCoord`, in
               the coordinate frame of the ``wcs``. This column is
-              included only if ``wcs`` is input.
+              included only if a celestial ``wcs`` is input.
             * ``'sky_centroid_ra_err'``, ``'sky_centroid_dec_err'`` :
               the 1-sigma errors of the sky position along the Right
               Ascension (as a great-circle angle, i.e., including the
@@ -904,7 +908,7 @@ def _create_call_docstring(*, iterative=False):
               for a fixed source center), where the parameter
               covariance matrix is not positive semidefinite, or where
               the WCS is undefined. These columns are included only if
-              ``wcs`` is input.
+              a celestial ``wcs`` is input.
 
         Notes
         -----

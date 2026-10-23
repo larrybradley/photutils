@@ -3611,6 +3611,26 @@ class TestSkyColumns:
         with pytest.raises(ValueError, match=match):
             psfphot(nddata, init_params=init_params, wcs=wcs)
 
+    def test_non_celestial_wcs(self):
+        """
+        Test that a non-celestial NDData WCS is ignored, while an
+        explicit non-celestial ``wcs`` raises an error.
+        """
+        psf_model, data, error, init_params = self.make_data()
+        psfphot = PSFPhotometry(psf_model, (7, 7), aperture_radius=4)
+        phot = psfphot(data, error=error, init_params=init_params)
+
+        wcs = WCS(naxis=2)
+        wcs.wcs.ctype = ['LINEAR', 'LINEAR']
+        nddata = NDData(data, uncertainty=StdDevUncertainty(error), wcs=wcs)
+        phot2 = psfphot(nddata, init_params=init_params)
+        assert phot2.colnames == phot.colnames
+        assert_allclose(phot2['xy_cov'], phot['xy_cov'])
+
+        match = 'wcs must have exactly one celestial longitude axis'
+        with pytest.raises(ValueError, match=match):
+            psfphot(data, error=error, init_params=init_params, wcs=wcs)
+
     def test_invalid_and_fixed(self, test_data):
         data, error, sources = test_data
         wcs = make_rotated_wcs()

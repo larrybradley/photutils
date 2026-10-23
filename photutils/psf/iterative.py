@@ -584,7 +584,8 @@ class IterativePSFPhotometry(_ModelImageMixin):
                                                wcs=wcs)
             data_, mask, error = PSFPhotometry._coerce_nddata(data)
             return self.__call__(data_, mask=mask, error=error,
-                                 init_params=init_params, wcs=data.wcs)
+                                 init_params=init_params,
+                                 wcs=PSFPhotometry._get_nddata_wcs(data))
 
         data, mask = split_masked_array(data, mask)
 
