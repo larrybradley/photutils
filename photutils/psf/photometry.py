@@ -859,6 +859,7 @@ class PSFPhotometry(_ModelImageMixin):
             'fit_param_errs': None,
             'fit_error_indices': None,
             'fitted_models_table': None,
+            'xy_cov': None,
             'n_pixels_fit': None,
             'group_size': None,
             'invalid_reasons': None,
@@ -1583,6 +1584,8 @@ class PSFPhotometry(_ModelImageMixin):
         # Store results in state for other methods that need them
         self._state['fit_error_indices'] = fit_error_indices
         self._state['fitted_models_table'] = fitted_models_table
+        self._state['xy_cov'] = self._results_assembler.get_xy_covariances(
+            self.fit_info)
 
         return fit_params
 

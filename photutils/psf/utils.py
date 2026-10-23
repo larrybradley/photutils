@@ -872,6 +872,15 @@ def _create_call_docstring(*, iterative=False):
               decoding flag values. The flags are:
               <flag_descriptions>
 
+            * ``'xy_cov'`` : the covariance of the fit source x and y
+              centers, in pixels squared. It is NaN if the x or y
+              center is fixed, if the source was not fit, or if the
+              ``fitter`` did not return a parameter covariance matrix.
+              Together with ``'x_err'`` and ``'y_err'``, it describes
+              the position uncertainty of a source whose fit x and y
+              centers are correlated (e.g., for an elliptical PSF
+              model rotated with respect to the pixel axes).
+
         Notes
         -----
         The ``qfit`` and ``cfit`` metrics are equivalent to the ``q``

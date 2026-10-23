@@ -9,6 +9,12 @@ General
 New Features
 ^^^^^^^^^^^^
 
+- ``photutils.psf``
+
+  - The results tables of ``PSFPhotometry`` and
+    ``IterativePSFPhotometry`` now have an ``xy_cov`` column with the
+    covariance of the fitted x and y positions. [#2531]
+
 - ``photutils.utils``
 
   - Added a ``pixel_to_sky_errors`` function to convert pixel position

@@ -24,8 +24,9 @@ from numpy.testing import assert_allclose, assert_equal
 from photutils.background import LocalBackground, MMMBackground
 from photutils.datasets import make_model_image, make_noise_image
 from photutils.detection import DAOStarFinder
-from photutils.psf import (CircularGaussianPRF, ImagePSF, PSFPhotometry,
-                           SourceGrouper, make_psf_model, make_psf_model_image)
+from photutils.psf import (CircularGaussianPRF, GaussianPRF, ImagePSF,
+                           PSFPhotometry, SourceGrouper, make_psf_model,
+                           make_psf_model_image)
 from photutils.psf.flags import decode_psf_flags
 from photutils.utils.exceptions import (NoDetectionsWarning,
                                         PhotutilsDeprecationWarning)
@@ -3346,3 +3347,136 @@ def test_read_only_inputs(dtype, grouped):
         assert_equal(res, exp)
     for arr, original in zip(arrays, originals, strict=True):
         assert_equal(arr, original)
+
+
+def _fit_info_xy_cov(psf_model, fit_info):
+    """
+    Return the x-y position covariance of each source from its
+    ``fit_info`` parameter covariance matrix.
+    """
+    fitted = [name for name in psf_model.param_names
+              if not psf_model.fixed[name]]
+    x_index = fitted.index(getattr(psf_model, 'x_name', 'x_0'))
+    y_index = fitted.index(getattr(psf_model, 'y_name', 'y_0'))
+    return np.array([info['param_cov'][x_index, y_index]
+                     for info in fit_info])
+
+
+class TestXYCovariance:
+    """
+    Test the ``xy_cov`` column of the PSF photometry results.
+    """
+
+    @staticmethod
+    def make_data(psf_model):
+        data, true_params = make_psf_model_image((101, 101), psf_model, 10,
+                                                 model_shape=(15, 15),
+                                                 flux=(500, 700),
+                                                 min_separation=15, seed=0)
+        sigma = 0.9
+        data += make_noise_image(data.shape, mean=0, stddev=sigma, seed=0)
+        error = np.full(data.shape, sigma)
+        init_params = Table({'x': true_params['x_0'],
+                             'y': true_params['y_0']})
+        return data, error, init_params
+
+    @pytest.mark.parametrize(('psf_model', 'corr_range'), [
+        (CircularGaussianPRF(flux=1, fwhm=2.7), (-0.1, 0.1)),
+        (GaussianPRF(flux=1, x_fwhm=2.0, y_fwhm=4.0, theta=30.0),
+         (-0.7, -0.3)),
+    ])
+    def test_matches_fit_info(self, psf_model, corr_range):
+        data, error, init_params = self.make_data(psf_model)
+        psfphot = PSFPhotometry(psf_model, (7, 7), aperture_radius=4)
+        phot = psfphot(data, error=error, init_params=init_params)
+
+        assert phot.colnames[-1] == 'xy_cov'
+        assert not isinstance(phot['xy_cov'], u.Quantity)
+        assert_allclose(phot['xy_cov'],
+                        _fit_info_xy_cov(psf_model, psfphot.fit_info),
+                        rtol=0, atol=0)
+
+        corr = phot['xy_cov'] / (phot['x_err'] * phot['y_err'])
+        assert np.all(corr > corr_range[0])
+        assert np.all(corr < corr_range[1])
+
+    def test_units(self):
+        psf_model = GaussianPRF(flux=1, x_fwhm=2.0, y_fwhm=4.0, theta=30.0)
+        data, error, init_params = self.make_data(psf_model)
+        psfphot = PSFPhotometry(psf_model, (7, 7), aperture_radius=4)
+        phot = psfphot(data, error=error, init_params=init_params)
+        photu = psfphot(data << u.Jy, error=error << u.Jy,
+                        init_params=init_params)
+        assert not isinstance(photu['xy_cov'], u.Quantity)
+        assert_allclose(photu['xy_cov'], phot['xy_cov'])
+
+    def test_model_aliases(self, test_data):
+        """
+        Test a compound model whose x and y parameters are not the
+        first fitted parameters and are named by the ``x_name`` and
+        ``y_name`` attributes.
+        """
+        data, error, _ = test_data
+        psf_model = Const2D(1.0) * Gaussian2D(x_stddev=1.2, y_stddev=1.2)
+        psf_model.x_name = 'x_mean_1'
+        psf_model.y_name = 'y_mean_1'
+        psf_model.flux_name = 'amplitude_0'
+        psf_model.amplitude_1 = 1.0 / (2.0 * np.pi * 1.2**2)
+        psf_model.amplitude_1.fixed = True
+        psf_model.theta_1.fixed = True
+
+        psfphot = PSFPhotometry(psf_model, (5, 5),
+                                finder=DAOStarFinder(5.0, 3.0),
+                                aperture_radius=4)
+        phot = psfphot(data, error=error)
+        expected = _fit_info_xy_cov(psf_model, psfphot.fit_info)
+        assert np.all(np.isfinite(expected))
+        assert_allclose(phot['xy_cov'], expected, rtol=0, atol=0)
+
+    @pytest.mark.parametrize('fixed_param', ['x_0', 'y_0'])
+    def test_fixed_position(self, test_data, fixed_param):
+        data, error, sources = test_data
+        psf_model = CircularGaussianPRF(flux=1, fwhm=2.7)
+        getattr(psf_model, fixed_param).fixed = True
+        init_params = Table({'x': sources['x_0'], 'y': sources['y_0']})
+        psfphot = PSFPhotometry(psf_model, (5, 5), aperture_radius=4)
+        phot = psfphot(data, error=error, init_params=init_params)
+        assert np.all(np.isfinite(phot['flux_err']))
+        assert np.all(np.isnan(phot['xy_cov']))
+
+    def test_missing_covariance(self):
+        def mock_fitter(model, *args, **kwargs):  # noqa: ARG001
+            mock_fitter.fit_info = {'status': 1}
+            return model
+
+        mock_fitter.fit_info = {}
+        psf_model = CircularGaussianPRF(fwhm=2.5)
+        data = np.zeros((21, 21))
+        init_params = QTable({'x_0': [10.0], 'y_0': [10.0],
+                              'flux': [500.0]})
+        match = "'fitter_maxiters' will be ignored because the fitter's"
+        with pytest.warns(AstropyUserWarning, match=match):
+            psfphot = PSFPhotometry(psf_model, (5, 5), fitter=mock_fitter)
+        phot = psfphot(data, init_params=init_params)
+        assert np.isnan(phot['xy_cov'][0])
+
+    def test_invalid_source(self, test_data):
+        data, error, sources = test_data
+        psf_model = CircularGaussianPRF(flux=1, fwhm=2.7)
+        init_params = Table({'x': [*sources['x_0'], -50.0],
+                             'y': [*sources['y_0'], -50.0],
+                             'flux': [600.0] * (len(sources) + 1)})
+        psfphot = PSFPhotometry(psf_model, (5, 5))
+        phot = psfphot(data, error=error, init_params=init_params)
+        assert np.all(np.isfinite(phot['xy_cov'][:-1]))
+        assert np.isnan(phot['xy_cov'][-1])
+        assert phot['flags'][-1] & 64
+
+    def test_not_in_init_params(self, test_data):
+        data, error, sources = test_data
+        psf_model = CircularGaussianPRF(flux=1, fwhm=2.7)
+        init_params = Table({'x': sources['x_0'], 'y': sources['y_0']})
+        psfphot = PSFPhotometry(psf_model, (5, 5), aperture_radius=4)
+        psfphot(data, error=error, init_params=init_params)
+        assert 'xy_cov' not in psfphot.results_to_init_params().colnames
+        assert 'xy_cov' not in psfphot.results_to_model_params().colnames
