@@ -11,8 +11,7 @@ import numpy as np
 from astropy.utils.exceptions import AstropyUserWarning
 
 from photutils.utils._moments import PSD_RTOL, pixel_to_sky_covariance
-from photutils.utils._wcs_helpers import (_is_gwcs, _low_level_wcs,
-                                          compute_pixel_to_sky_jacobians)
+from photutils.utils._wcs_helpers import compute_pixel_to_sky_jacobians
 
 __all__ = ['compute_pixel_area_map', 'compute_pixel_areas',
            'pixel_to_sky_errors']
@@ -421,14 +420,5 @@ def pixel_to_sky_errors(wcs, x, y, x_err, y_err, *, xy_cov=0.0):
     # x_err * y_err) can give a variance that is slightly negative from
     # rounding. The clip keeps NaN variances.
     errors = np.sqrt(np.maximum(sky_covariance[:, (0, 1), (0, 1)], 0.0))
-
-    # The Jacobians ignore any gwcs bounding box (see above). The
-    # positions are evaluated again with the bounding box applied so
-    # that the errors are NaN wherever pixel_to_world returns NaN.
-    low_level_wcs = _low_level_wcs(wcs)
-    if _is_gwcs(low_level_wcs):
-        world = low_level_wcs.pixel_to_world_values(xycen[:, 0],
-                                                    xycen[:, 1])
-        errors[~np.all(np.isfinite(world), axis=0)] = np.nan
     east_err, north_err = errors.T.reshape(2, *x.shape)
     return east_err << u.arcsec, north_err << u.arcsec
