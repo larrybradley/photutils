@@ -18,7 +18,8 @@ plain `~numpy.ndarray` without units.
 
 import numpy as np
 
-from photutils.utils._wcs_helpers import compute_pixel_to_sky_jacobians
+from photutils.utils._wcs_helpers import (_is_gwcs, _low_level_wcs,
+                                          compute_pixel_to_sky_jacobians)
 
 # The variance of a uniform distribution across a single pixel. This is
 # the smallest second moment a resolved source can have given finite
@@ -547,7 +548,11 @@ def pixel_to_sky_covariance(wcs, pixel_covariance, xycen):
 
     The pixel covariance of each source is mapped to the local tangent
     plane with the forward WCS Jacobian ``F`` evaluated at the source
-    position (``sky_covariance = F pixel_covariance F^T``).
+    position (``sky_covariance = F pixel_covariance F^T``). The finite
+    differences of the Jacobian ignore any gwcs bounding box, so the
+    matrices are defined for positions within half a pixel of the
+    bounding-box edge. A position outside the bounding box, where the
+    WCS ``pixel_to_world`` method returns NaN, has a NaN matrix.
 
     Parameters
     ----------
@@ -567,11 +572,21 @@ def pixel_to_sky_covariance(wcs, pixel_covariance, xycen):
     sky_covariance : `~numpy.ndarray`
         The ``(N, 2, 2)`` tangent-plane covariance matrices in
         arcsec**2, with rows and columns ordered ``(East, North)``.
-        Matrices are NaN where the position or covariance is not finite.
+        Matrices are NaN where the position or covariance is not finite
+        or where the position is outside the bounding box of a gwcs.
     """
     sky_covariance = np.full(pixel_covariance.shape, np.nan)
     good = (np.all(np.isfinite(xycen), axis=1)
             & np.all(np.isfinite(pixel_covariance), axis=(1, 2)))
+
+    # The positions are evaluated with the gwcs bounding box applied so
+    # that the matrices are NaN wherever pixel_to_world returns NaN
+    low_level_wcs = _low_level_wcs(wcs)
+    if np.any(good) and _is_gwcs(low_level_wcs):
+        world = low_level_wcs.pixel_to_world_values(xycen[good, 0],
+                                                    xycen[good, 1])
+        good[good] = np.all(np.isfinite(world), axis=0)
+
     if np.any(good):
         jac = compute_pixel_to_sky_jacobians(wcs, xycen[good, 0],
                                              xycen[good, 1])

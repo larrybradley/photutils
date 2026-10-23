@@ -4473,19 +4473,30 @@ def test_sky_centroid_err():
                         sky_err[:, 1])
 
 
+@pytest.mark.parametrize('wcs_type', [
+    'fits',
+    pytest.param('gwcs', marks=pytest.mark.skipif(
+        not HAS_GWCS, reason='gwcs is required'))])
 @pytest.mark.parametrize('prefix', ['centroid', 'centroid_win',
                                     'centroid_quad'])
-def test_sky_centroid_err_matches_pixel_to_sky_errors(prefix):
+def test_sky_centroid_err_matches_pixel_to_sky_errors(prefix, wcs_type):
     """
     Test that the sky centroid errors match those from the public
     `pixel_to_sky_errors` function for the same centroids and pixel
     error covariances.
 
     The WCS is rotated, so the x and y errors mix on the sky and the
-    comparison also checks that the x-y error covariance is used.
+    comparison also checks that the x-y error covariance is used. The
+    gwcs bounding box excludes a border of the image, so the errors of
+    the sources outside it must be NaN in both.
     """
     data = make_100gaussians_image()
-    wcs = make_wcs(data.shape)
+    if wcs_type == 'fits':
+        wcs = make_wcs(data.shape)
+    else:
+        wcs = make_gwcs(data.shape)
+        ny, nx = data.shape
+        wcs.bounding_box = ((9.5, nx - 10.5), (9.5, ny - 10.5))
     error = np.full(data.shape, 2.0)
     segment_map = detect_sources(data, 15.0, n_pixels=10)
     cat = SourceCatalog(data, segment_map, error=error, wcs=wcs)
@@ -4510,6 +4521,13 @@ def test_sky_centroid_err_matches_pixel_to_sky_errors(prefix):
                     sky_err[:, 0].to_value(u.arcsec), rtol=1e-12)
     assert_allclose(north_err.to_value(u.arcsec),
                     sky_err[:, 1].to_value(u.arcsec), rtol=1e-12)
+
+    if wcs_type == 'gwcs':
+        outside = ~np.isfinite(wcs.pixel_to_world_values(xycen[:, 0],
+                                                         xycen[:, 1])[0])
+        assert np.any(outside)
+        assert np.all(np.isnan(sky_err[outside]))
+        assert np.all(np.isfinite(sky_err[~outside & finite]))
 
 
 def test_sky_centroid_err_no_wcs():
