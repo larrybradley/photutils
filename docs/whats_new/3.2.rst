@@ -42,6 +42,35 @@ supports the astropy shared WCS interface, including ``gwcs`` objects::
     <Quantity [0.01, 0.02] arcsec>
 
 
+Sky Positions in PSF Photometry Results
+=======================================
+
+The results tables of `~photutils.psf.PSFPhotometry` and
+`~photutils.psf.IterativePSFPhotometry` now include an ``xy_cov``
+column with the covariance of the fitted x and y positions. The
+covariance is nonzero for an elliptical PSF that is rotated with
+respect to the pixel axes. The ``x_err`` and ``y_err`` columns alone
+do not describe the position uncertainty in that case.
+
+Both classes also accept a new ``wcs`` keyword in their ``__call__``
+method. If a WCS is input, the results table includes the sky position
+of each fitted source (``sky_centroid``) and its errors along the Right
+Ascension and Declination directions in arcsec (``sky_centroid_ra_err``
+and ``sky_centroid_dec_err``). The sky errors are computed with
+`~photutils.utils.pixel_to_sky_errors` and include the ``xy_cov``
+covariance. For an `~astropy.nddata.NDData` input, the WCS is taken
+from its ``wcs`` attribute, so these columns are added whenever the
+input has a WCS::
+
+    >>> from photutils.datasets import make_wcs
+    >>> wcs = make_wcs(data.shape)
+    >>> psfphot = PSFPhotometry(psf_model, fit_shape, finder=finder,
+    ...                         aperture_radius=4)
+    >>> phot = psfphot(data, error=error, wcs=wcs)
+    >>> phot.colnames[-4:]
+    ['xy_cov', 'sky_centroid', 'sky_centroid_ra_err', 'sky_centroid_dec_err']
+
+
 .. _whatsnew-3.2-api-changes:
 
 API Changes
