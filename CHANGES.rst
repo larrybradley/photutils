@@ -16,7 +16,9 @@ New Features
     a ``make_morans_i_map`` function to calculate the map of the
     statistic. The mask does not require the background level or the
     background noise to be known, so it can be used as the ``mask``
-    input to ``Background2D``. [#2545]
+    input to ``Background2D``. The ``patch_shape='disk'`` option
+    uses a nearly round patch, which gives nearly round masked regions
+    instead of square ones. [#2545, #XXXX]
 
 - ``photutils.isophote``
 
