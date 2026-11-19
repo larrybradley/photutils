@@ -214,10 +214,6 @@ class TestMakeMoransIMap:
     def test_reference_wide(self):
         """
         Test a wide image and its transpose against a slow reference.
-
-        The box sums of images that are at least 256 pixels wide add
-        and subtract whole rows, and the box sums of narrower images
-        filter along the columns.
         """
         rng = np.random.default_rng(7)
         data = rng.normal(0.0, 1.0, (30, 300))
@@ -236,28 +232,6 @@ class TestMakeMoransIMap:
                                    weights=weights.T)
         assert_equal(np.isnan(result), np.isnan(expected.T))
         assert_allclose(result, expected.T, atol=1e-5)
-
-    @pytest.mark.parametrize('strip_pixels', [1000, 25000])
-    def test_strips(self, monkeypatch, strip_pixels):
-        """
-        Test that the map does not depend on the strips of rows used to
-        calculate it.
-
-        The strips are as short as their overlap or 50 rows tall,
-        instead of the whole 300-row image.
-        """
-        rng = np.random.default_rng(8)
-        data = make_100gaussians_image()
-        data[100:120, 200:260] = np.nan
-        weights = rng.uniform(0.5, 2.0, data.shape)
-        mask = rng.random(data.shape) < 0.01
-        expected = make_morans_i_map(data, mask=mask, weights=weights)
-
-        monkeypatch.setattr('photutils.background.morans_i._STRIP_PIXELS',
-                            strip_pixels)
-        result = make_morans_i_map(data, mask=mask, weights=weights)
-        assert_equal(np.isnan(result), np.isnan(expected))
-        assert_allclose(result, expected, atol=1e-6)
 
     def test_patch_larger_than_image(self, small):
         data = small[:12, :9]
@@ -310,6 +284,16 @@ class TestMakeMoransIMap:
         result = make_morans_i_map(noise.astype(np.float32))
         assert_allclose(result, expected, atol=1e-5)
 
+        # The weights are used with the precision of the data
+        rng = np.random.default_rng(9)
+        weights = rng.uniform(0.5, 2.0, noise.shape)
+        expected = make_morans_i_map(noise, weights=weights)
+        for dtypes in ((np.float32, np.float32), (np.float32, np.float64),
+                       (np.float64, np.float32)):
+            result = make_morans_i_map(noise.astype(dtypes[0]),
+                                       weights=weights.astype(dtypes[1]))
+            assert_allclose(result, expected, atol=1e-4)
+
     def test_non_contiguous_and_int(self, noise):
         expected = make_morans_i_map(np.ascontiguousarray(noise[::2, ::2]))
         assert_equal(make_morans_i_map(noise[::2, ::2]), expected)
@@ -336,6 +320,18 @@ class TestMakeMoransIMap:
         result = make_morans_i_map(noise << u.Jy)
         assert not isinstance(result, u.Quantity)
         assert_equal(result, make_morans_i_map(noise))
+
+    def test_n_threads(self, noise):
+        data = noise.copy()
+        data[50, 60] = np.nan
+        rng = np.random.default_rng(8)
+        weights = rng.uniform(0.5, 2.0, data.shape)
+        for kwargs in ({}, {'weights': weights, 'patch_size': 9}):
+            expected = make_morans_i_map(data, **kwargs)
+            for n_threads in (2, 3, 500):
+                result = make_morans_i_map(data, n_threads=n_threads, **kwargs)
+                assert_equal(np.isnan(result), np.isnan(expected))
+                assert_allclose(result, expected, atol=1e-6)
 
     def test_constant_data(self):
         """
@@ -408,6 +404,11 @@ class TestMakeMoransIMap:
         match = 'weights must have the same shape as data'
         with pytest.raises(ValueError, match=match):
             make_morans_i_map(noise, weights=np.ones((3, 3)))
+
+        match = 'n_threads must be a positive integer'
+        for n_threads in (0, 1.5, True):
+            with pytest.raises(ValueError, match=match):
+                make_morans_i_map(noise, n_threads=n_threads)
 
     def test_masked_array(self, small):
         """
@@ -499,6 +500,30 @@ class TestMakeMoransIMask:
                                       opening_iterations, stat)
         assert np.any(expected)
         assert_equal(mask, expected)
+
+    @pytest.mark.parametrize('opening_iterations', [1, 2, 3])
+    def test_morphology_excluded(self, opening_iterations):
+        """
+        Test the opening next to excluded pixels against SciPy.
+        """
+        data = make_100gaussians_image()
+        bad = np.zeros(data.shape, dtype=bool)
+        bad[100:180, 200:300] = True
+        bad[:, 450:] = True
+        mask = make_morans_i_mask(data, mask=bad, percent=30.0,
+                                  opening_iterations=opening_iterations)
+
+        stat = make_morans_i_map(data, mask=bad)
+        flagged = binary_fill_holes(stat > np.percentile(
+            stat[np.isfinite(stat)], 70.0))
+        expected = _reference_opening(flagged, opening_iterations, stat)
+        assert_equal(mask, expected)
+        assert not np.any(mask[bad])
+
+        # The excluded pixels change the result
+        unexcluded = _reference_opening(flagged, opening_iterations,
+                                        np.zeros(stat.shape))
+        assert not np.array_equal(expected, unexcluded)
 
     def test_fill_holes(self):
         """
@@ -741,6 +766,11 @@ class TestMakeMoransIMask:
         assert not np.any(mask[far_border])
         interior = (slice(65, 335), slice(65, 535))
         assert np.mean(mask[interior] != expected[interior]) < 0.005
+
+    def test_n_threads(self):
+        data = make_100gaussians_image()
+        assert_equal(make_morans_i_mask(data, n_threads=4),
+                     make_morans_i_mask(data))
 
     def test_inputs(self, noise):
         match = 'n_sigma must be a positive number'
