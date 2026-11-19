@@ -45,6 +45,14 @@ patch size, and it can use multiple threads with the ``n_threads``
 keyword. The map of the statistic itself is available from the new
 `~photutils.background.make_morans_i_map` function.
 
+Each source is masked in a region with the shape of the patch used to
+calculate the statistic. The default square patch therefore gives
+square masked regions. The ``patch_shape='disk'`` keyword uses a nearly
+round patch with the same area instead, which gives nearly round masked
+regions for sources of all brightnesses::
+
+    >>> mask = make_morans_i_mask(data, patch_shape='disk')
+
 See :ref:`morans_i_mask` for more details.
 
 

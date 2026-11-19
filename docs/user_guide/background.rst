@@ -269,24 +269,54 @@ this image).
 
 Holes in the flagged regions are then filled, and a binary opening
 removes small isolated regions. A source dominates the statistic of
-every patch that contains its detectable pixels, so the flagged region
-around a source extends to approximately half the patch size beyond
-where the source is detected. This margin also covers the faint outer
-regions of the source that sigma clipping misses. Because the patch is
-square, the flagged regions around compact sources are square. The
-default number of iterations of the binary opening
-(``opening_iterations``) is set from the patch size so that the
-opening rounds the corners of these regions without enlarging them and
-removes only the faintest, marginal detections.
+every patch that contains its detectable pixels, so each detected source
+is flagged in a region with the shape of the patch that extends to
+approximately half the patch size beyond where the source is detected.
+This margin also covers the faint outer regions of the source that sigma
+clipping misses. With the default square patch, the flagged regions are
+therefore square. The default number of iterations of the binary opening
+(``opening_iterations``) is set from the patch size so that the opening
+rounds the corners of these regions without enlarging them and removes
+only the faintest, marginal detections. It only trims the corners of the
+regions of bright sources, which are larger than the patch.
 
-The ``patch_size`` keyword sets the side length of the patch, which
-must be an odd integer larger than 3. Smaller patches give a noisier
-statistic (its standard deviation for uncorrelated noise is
-approximately ``0.5 / patch_size``) and smaller margins around the
-sources. They also leave more patches free of sources in crowded
-images. Larger patches give a less noisy statistic, but larger margins
-and lower spatial resolution, so nearby sources merge into larger
-masked regions.
+The ``patch_size`` keyword sets the side length of the square patch,
+which must be an odd integer larger than 3 (a disk patch has the same
+area). Smaller patches give a noisier statistic (its standard deviation
+for uncorrelated noise is approximately ``0.5 / patch_size``) and
+smaller margins around the sources. They also leave more patches free of
+sources in crowded images. Larger patches give a less noisy statistic,
+but larger margins and lower spatial resolution, so nearby sources merge
+into larger masked regions.
+
+The ``patch_shape='disk'`` keyword uses a nearly round patch instead,
+which gives nearly round masked regions for sources of all
+brightnesses. The disk patch is the union of three rectangles with the
+same area as the square patch, so the statistic has about the same
+noise. It takes about two to three times as long to calculate. The
+masked regions need little rounding, so only two opening iterations
+are used by default with a disk patch::
+
+    >>> mask_disk = make_morans_i_mask(data, patch_shape='disk')
+
+Let's compare the source masks made with the square and disk patches:
+
+.. plot::
+
+    import matplotlib.pyplot as plt
+    from photutils.background import make_morans_i_mask
+    from photutils.datasets import make_100gaussians_image
+
+    data = make_100gaussians_image()
+    square = make_morans_i_mask(data)
+    disk = make_morans_i_mask(data, patch_shape='disk')
+
+    fig, ax = plt.subplots(2, 1, figsize=(6, 7.5))
+    ax[0].imshow(square, origin='lower', cmap='gray')
+    ax[0].set_title('Square Patch')
+    ax[1].imshow(disk, origin='lower', cmap='gray')
+    ax[1].set_title('Disk Patch')
+    fig.tight_layout()
 
 The statistic responds to how much the pixel values vary within each
 patch, not to how bright they are. The faint outer regions of very
