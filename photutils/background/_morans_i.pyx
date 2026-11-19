@@ -35,6 +35,9 @@ free-threaded Python builds.
 
 import numpy as np
 
+from libc.stdlib cimport free, malloc, realloc
+from libc.string cimport memset
+
 __all__ = ['fill_holes', 'morans_i_rows', 'opening']
 
 cdef extern from "math.h" nogil:
@@ -367,6 +370,44 @@ def morans_i_rows(const real_t[:, ::1] data,
                     (total[4] / total[0] - mean * total[3] / total[0]) / var)
 
 
+cdef struct PixelStack:
+    Py_ssize_t* data
+    Py_ssize_t size
+    Py_ssize_t capacity
+
+
+cdef inline bint push_runs(PixelStack* stack, const unsigned char* pixels,
+                           Py_ssize_t start, Py_ssize_t length) noexcept nogil:
+    """
+    Push the index of the first pixel of each run of unmarked background
+    pixels (with a value of 0) in a segment of a row.
+
+    The segment starts at the flat index ``start`` and has ``length``
+    pixels. Return `False` if the stack cannot be enlarged.
+    """
+    cdef Py_ssize_t i = start
+    cdef Py_ssize_t stop = start + length
+    cdef Py_ssize_t* data
+
+    while i < stop:
+        if pixels[i] != 0:
+            i += 1
+            continue
+        if stack.size == stack.capacity:
+            data = <Py_ssize_t*>realloc(
+                stack.data, 2 * stack.capacity * sizeof(Py_ssize_t))
+            if data == NULL:
+                return False
+            stack.data = data
+            stack.capacity *= 2
+        stack.data[stack.size] = i
+        stack.size += 1
+        i += 1
+        while i < stop and pixels[i] == 0:
+            i += 1
+    return True
+
+
 def fill_holes(unsigned char[:, ::1] mask):
     """
     Fill the holes of a binary mask in place.
@@ -382,49 +423,66 @@ def fill_holes(unsigned char[:, ::1] mask):
     """
     cdef Py_ssize_t ny = mask.shape[0]
     cdef Py_ssize_t nx = mask.shape[1]
-    cdef Py_ssize_t y, x
-    cdef bint changed = True
+    cdef Py_ssize_t y, left, right, i
+    cdef unsigned char* pixels
+    cdef unsigned char* row
+    cdef PixelStack stack
+    cdef bint ok = True
 
     if ny == 0 or nx == 0:
         return
 
+    stack.size = 0
+    stack.capacity = 4096
+    stack.data = <Py_ssize_t*>malloc(stack.capacity * sizeof(Py_ssize_t))
+    if stack.data == NULL:
+        raise MemoryError
+
+    pixels = &mask[0, 0]
     with nogil:
         # Background pixels that are connected to the border are
-        # marked with a value of 2, starting from the border itself
-        for x in range(nx):
-            if mask[0, x] == 0:
-                mask[0, x] = 2
-            if mask[ny - 1, x] == 0:
-                mask[ny - 1, x] = 2
-        for y in range(ny):
-            if mask[y, 0] == 0:
-                mask[y, 0] = 2
-            if mask[y, nx - 1] == 0:
-                mask[y, nx - 1] = 2
+        # marked with a value of 2. The fill starts from the
+        # background runs on the border.
+        ok = (push_runs(&stack, pixels, 0, nx)
+              and push_runs(&stack, pixels, (ny - 1) * nx, nx))
+        y = 1
+        while ok and y < ny - 1:
+            ok = (push_runs(&stack, pixels, y * nx, 1)
+                  and push_runs(&stack, pixels, y * nx + nx - 1, 1))
+            y += 1
 
-        # Propagate the marks with alternating forward and backward
-        # raster scans until nothing changes. Compact regions need
-        # only a few scans.
-        while changed:
-            changed = False
-            for y in range(ny):
-                for x in range(nx):
-                    if mask[y, x] == 0 and (
-                            (y > 0 and mask[y - 1, x] == 2)
-                            or (x > 0 and mask[y, x - 1] == 2)):
-                        mask[y, x] = 2
-                        changed = True
-            for y in range(ny - 1, -1, -1):
-                for x in range(nx - 1, -1, -1):
-                    if mask[y, x] == 0 and (
-                            (y < ny - 1 and mask[y + 1, x] == 2)
-                            or (x < nx - 1 and mask[y, x + 1] == 2)):
-                        mask[y, x] = 2
-                        changed = True
+        # Each popped pixel is extended to the whole horizontal run of
+        # unmarked background pixels that contains it. The run is
+        # marked, and the first pixel of each unmarked background run
+        # that touches it in the rows above and below is pushed.
+        while ok and stack.size > 0:
+            stack.size -= 1
+            i = stack.data[stack.size]
+            if pixels[i] != 0:
+                continue
+            y = i // nx
+            row = pixels + y * nx
+            left = i - y * nx
+            right = left + 1
+            while left > 0 and row[left - 1] == 0:
+                left -= 1
+            while right < nx and row[right] == 0:
+                right += 1
+            memset(row + left, 2, right - left)
+            if y > 0:
+                ok = push_runs(&stack, pixels, (y - 1) * nx + left,
+                               right - left)
+            if ok and y < ny - 1:
+                ok = push_runs(&stack, pixels, (y + 1) * nx + left,
+                               right - left)
 
-        for y in range(ny):
-            for x in range(nx):
-                mask[y, x] = mask[y, x] != 2
+        if ok:
+            for i in range(ny * nx):
+                pixels[i] = pixels[i] != 2
+
+    free(stack.data)
+    if not ok:
+        raise MemoryError
 
 
 cdef void erode_or_dilate(const unsigned char[:, ::1] src,
