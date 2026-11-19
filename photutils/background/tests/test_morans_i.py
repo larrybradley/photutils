@@ -30,12 +30,29 @@ def _slow_box_sum(array, size):
 
 def _disk_footprint(patch_size):
     """
-    Return the digital disk with the area of a square patch.
+    Return the footprint of a disk patch.
+
+    It is the union of three centered rectangles with corners on a
+    circle at 15, 45, and 75 degrees, with the area of a square patch.
     """
-    radius = patch_size / np.sqrt(np.pi)
-    half = int(radius)
+    angles = np.deg2rad([15.0, 45.0, 75.0])
+    half = 40
     yy, xx = np.mgrid[-half:half + 1, -half:half + 1]
-    return xx**2 + yy**2 <= radius**2
+
+    def footprint(radius):
+        result = np.zeros(yy.shape, dtype=bool)
+        for angle in angles:
+            result |= ((np.abs(xx) <= np.floor(radius * np.cos(angle)))
+                       & (np.abs(yy) <= np.floor(radius * np.sin(angle))))
+        return result
+
+    # The continuous area of the union is radius**2 times this factor
+    unit_area = 4.0 * (2.0 * np.sin(angles[0]) * np.sin(angles[2])
+                       + np.sin(angles[1])**2
+                       - 2.0 * np.sin(angles[0]) * np.sin(angles[1]))
+    result = footprint(patch_size / np.sqrt(unit_area))
+    ys, xs = np.nonzero(result)
+    return result[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
 
 
 def _reference_morans_i(data, patch_size, *, mask=None, weights=None,
@@ -857,7 +874,8 @@ class TestMakeMoransIMask:
         disk = make_morans_i_mask(data, patch_shape='disk',
                                   opening_iterations=0)
         square = make_morans_i_mask(data, opening_iterations=0)
-        assert np.all(np.abs(fill_ratios(disk) - np.pi / 4) < 0.06)
+        # A disk has a fill ratio of pi / 4 and the polygon about 0.68
+        assert np.all((fill_ratios(disk) > 0.65) & (fill_ratios(disk) < 0.85))
         assert np.all(fill_ratios(square) > 0.9)
 
         # The default opening for a disk patch has 2 iterations

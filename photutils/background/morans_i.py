@@ -69,12 +69,15 @@ def _image_mean_sq(values):
 
 def _disk_rectangles(patch_size):
     """
-    Return the rectangles whose union is the digital disk that has the
+    Return the rectangles whose union approximates a disk that has the
     same area as a square patch.
 
-    The disk contains the pixels whose centers are within a radius of
-    ``patch_size / sqrt(pi)`` of the center pixel. It is the union of
-    one centered rectangle for each distinct half-width of its rows.
+    The patch is the union of three centered rectangles whose corners
+    are on a circle at 15, 45, and 75 degrees from the horizontal
+    axis. The radius of the circle is chosen so that the union has the
+    same area as the square patch. The run time of the statistic
+    increases with the number of rectangles, and three rectangles give
+    nearly round footprints.
 
     Parameters
     ----------
@@ -90,16 +93,22 @@ def _disk_rectangles(patch_size):
         The half-widths of the rectangles, in increasing order.
 
     n_pixels : int
-        The number of pixels in the disk.
+        The number of pixels in the patch.
     """
-    radius = patch_size / math.sqrt(math.pi)
-    offsets = np.arange(int(radius) + 1)
-    half_widths = np.floor(np.sqrt(radius**2 - offsets**2)).astype(np.intp)
-    widths = np.unique(half_widths)
-    heights = np.array([offsets[half_widths >= width].max()
-                        for width in widths], dtype=np.intp)
-    n_pixels = int(2 * half_widths[0] + 1
-                   + 2 * np.sum(2 * half_widths[1:] + 1))
+    angles = np.deg2rad([75.0, 45.0, 15.0])
+    unit_heights = np.sin(angles)
+    unit_widths = np.cos(angles)
+
+    # The area of the union for a unit radius. Each rectangle adds the
+    # columns beyond the half-width of the rectangle before it.
+    unit_area = 4.0 * np.sum(unit_heights
+                             * np.diff(unit_widths, prepend=0.0))
+    radius = patch_size / math.sqrt(unit_area)
+    heights = np.floor(radius * unit_heights).astype(np.intp)
+    widths = np.floor(radius * unit_widths).astype(np.intp)
+
+    n_pixels = int((2 * heights[0] + 1) * (2 * widths[0] + 1)
+                   + np.sum((2 * heights[1:] + 1) * 2 * np.diff(widths)))
     return heights, widths, n_pixels
 
 
@@ -145,13 +154,14 @@ def make_morans_i_map(data, *, patch_size=21, patch_shape='square',
         approximately ``0.5 / patch_size``.
 
     patch_shape : {'square', 'disk'}, optional
-        The shape of the patch. A disk patch contains the pixels whose
-        centers are within a radius of ``patch_size / sqrt(pi)`` of the
-        center pixel, so that it has the same area and about the same
-        noise as the square patch. A compact source gives the statistic
-        a footprint with the shape of the patch, so a disk patch gives
-        round footprints instead of square ones. It is several times
-        slower to calculate.
+        The shape of the patch. A disk patch is approximated by the
+        union of three centered rectangles whose corners are on a
+        circle at 15, 45, and 75 degrees from the horizontal axis. It
+        has the same area and about the same noise as the square
+        patch. A compact source gives the statistic a footprint with
+        the shape of the patch, so a disk patch gives nearly round
+        footprints instead of square ones. It takes about three times
+        as long to calculate.
 
     mask : 2D bool array_like, optional
         A boolean mask with the same shape as ``data``, where `True`
