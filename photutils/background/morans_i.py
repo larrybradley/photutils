@@ -13,7 +13,8 @@ import numpy as np
 from astropy.units import Quantity
 from astropy.utils.exceptions import AstropyUserWarning
 
-from photutils.background._morans_i import fill_holes, morans_i_rows, opening
+from photutils.background._morans_i import (fill_holes, morans_i_rows,
+                                            morans_i_rows_rects, opening)
 from photutils.utils._misc import split_masked_array
 
 __all__ = ['make_morans_i_map', 'make_morans_i_mask']
@@ -66,6 +67,42 @@ def _image_mean_sq(values):
     return min(mean_sq, _MAX_MEAN_SQ_RATIO * robust_std**2)
 
 
+def _disk_rectangles(patch_size):
+    """
+    Return the rectangles whose union is the digital disk that has the
+    same area as a square patch.
+
+    The disk contains the pixels whose centers are within a radius of
+    ``patch_size / sqrt(pi)`` of the center pixel. It is the union of
+    one centered rectangle for each distinct half-width of its rows.
+
+    Parameters
+    ----------
+    patch_size : int
+        The side length of the square patch.
+
+    Returns
+    -------
+    heights : 1D intp `~numpy.ndarray`
+        The half-heights of the rectangles, in decreasing order.
+
+    widths : 1D intp `~numpy.ndarray`
+        The half-widths of the rectangles, in increasing order.
+
+    n_pixels : int
+        The number of pixels in the disk.
+    """
+    radius = patch_size / math.sqrt(math.pi)
+    offsets = np.arange(int(radius) + 1)
+    half_widths = np.floor(np.sqrt(radius**2 - offsets**2)).astype(np.intp)
+    widths = np.unique(half_widths)
+    heights = np.array([offsets[half_widths >= width].max()
+                        for width in widths], dtype=np.intp)
+    n_pixels = int(2 * half_widths[0] + 1
+                   + 2 * np.sum(2 * half_widths[1:] + 1))
+    return heights, widths, n_pixels
+
+
 def _validate_n_threads(n_threads):
     if (isinstance(n_threads, bool)
             or not isinstance(n_threads, (int, np.integer))
@@ -75,8 +112,8 @@ def _validate_n_threads(n_threads):
     return int(n_threads)
 
 
-def make_morans_i_map(data, *, patch_size=21, mask=None, weights=None,
-                      n_threads=1):
+def make_morans_i_map(data, *, patch_size=21, patch_shape='square',
+                      mask=None, weights=None, n_threads=1):
     """
     Calculate a map of the Moran's I spatial autocorrelation statistic.
 
@@ -106,6 +143,15 @@ def make_morans_i_map(data, *, patch_size=21, mask=None, weights=None,
         statistic, while large patches lose spatial resolution. The
         standard deviation of the statistic for uncorrelated noise is
         approximately ``0.5 / patch_size``.
+
+    patch_shape : {'square', 'disk'}, optional
+        The shape of the patch. A disk patch contains the pixels whose
+        centers are within a radius of ``patch_size / sqrt(pi)`` of the
+        center pixel, so that it has the same area and about the same
+        noise as the square patch. A compact source gives the statistic
+        a footprint with the shape of the patch, so a disk patch gives
+        round footprints instead of square ones. It is several times
+        slower to calculate.
 
     mask : 2D bool array_like, optional
         A boolean mask with the same shape as ``data``, where `True`
@@ -206,6 +252,10 @@ def make_morans_i_map(data, *, patch_size=21, mask=None, weights=None,
         msg = 'patch_size must be an odd integer larger than 3'
         raise ValueError(msg)
 
+    if patch_shape not in ('square', 'disk'):
+        msg = "patch_shape must be 'square' or 'disk'"
+        raise ValueError(msg)
+
     if mask is not None:
         mask = np.asarray(mask, dtype=bool)
         if mask.shape != data.shape:
@@ -245,23 +295,33 @@ def make_morans_i_map(data, *, patch_size=21, mask=None, weights=None,
         pedestal = float(np.median(sample))
         image_mean_sq = _image_mean_sq(sample - pedestal)
 
-    min_count = _MIN_PATCH_FRACTION * patch_size**2
     result = np.empty(data.shape, dtype=np.float32)
+    if patch_shape == 'disk':
+        heights, widths, n_pixels = _disk_rectangles(patch_size)
+        min_count = _MIN_PATCH_FRACTION * n_pixels
+
+        def calc_rows(row_start, row_stop):
+            morans_i_rows_rects(data, mask, weights, pedestal,
+                                image_mean_sq, heights, widths, min_count,
+                                result, row_start, row_stop)
+    else:
+        min_count = _MIN_PATCH_FRACTION * patch_size**2
+
+        def calc_rows(row_start, row_stop):
+            morans_i_rows(data, mask, weights, pedestal, image_mean_sq,
+                          patch_size, min_count, result, row_start,
+                          row_stop)
+
     ny = data.shape[0]
     n_chunks = max(1, min(n_threads, ny))
     if n_chunks == 1:
-        morans_i_rows(data, mask, weights, pedestal, image_mean_sq,
-                      patch_size, min_count, result, 0, ny)
+        calc_rows(0, ny)
         return result
 
     # Each thread writes a separate band of rows of the result
     edges = np.linspace(0, ny, n_chunks + 1).astype(int)
     with ThreadPoolExecutor(max_workers=n_chunks) as executor:
-        list(executor.map(
-            lambda rows: morans_i_rows(data, mask, weights, pedestal,
-                                       image_mean_sq, patch_size,
-                                       min_count, result, *rows),
-            pairwise(edges)))
+        list(executor.map(lambda rows: calc_rows(*rows), pairwise(edges)))
     return result
 
 
@@ -384,9 +444,9 @@ def _calc_threshold(stat, *, n_sigma, percent, patch_size):
     return center + n_sigma * std
 
 
-def make_morans_i_mask(data, *, patch_size=21, n_sigma=3.0, percent=None,
-                       mask=None, weights=None, opening_iterations=None,
-                       n_threads=1):
+def make_morans_i_mask(data, *, patch_size=21, patch_shape='square',
+                       n_sigma=3.0, percent=None, mask=None, weights=None,
+                       opening_iterations=None, n_threads=1):
     """
     Make a source mask using the Moran's I spatial autocorrelation
     statistic.
@@ -413,6 +473,11 @@ def make_morans_i_mask(data, *, patch_size=21, n_sigma=3.0, percent=None,
         the statistic. It must be an odd integer larger than 3. Sources
         are masked out to a distance of approximately half the patch
         size beyond where they are detected.
+
+    patch_shape : {'square', 'disk'}, optional
+        The shape of the patch (see `make_morans_i_map`). A disk patch
+        gives round masked regions instead of square ones, at a higher
+        computational cost.
 
     n_sigma : float, optional
         The number of standard deviations above the background value of
@@ -473,11 +538,13 @@ def make_morans_i_mask(data, *, patch_size=21, n_sigma=3.0, percent=None,
         Regions are not eroded from the image edges or from pixels
         where the statistic is undefined (e.g., masked pixels or
         regions with too few usable pixels). If `None`,
-        ``patch_size // 2 - 2`` iterations are used. A detected source
-        is flagged in a region at least as wide as the patch, so the
-        default keeps the sources while rounding the square shape that
-        the patch gives their regions. Larger values remove compact
-        sources. Set to 0 to skip this step.
+        ``patch_size // 2 - 2`` iterations are used for a square patch
+        and 2 iterations are used for a disk patch. For a square patch,
+        a detected source is flagged in a region at least as wide as
+        the patch, so the default keeps the sources while rounding the
+        square shape that the patch gives their regions. Larger values
+        remove compact sources. A disk patch gives round regions
+        without the opening. Set to 0 to skip this step.
 
     n_threads : int, optional
         The number of threads used to calculate the statistic (see
@@ -532,14 +599,18 @@ def make_morans_i_mask(data, *, patch_size=21, n_sigma=3.0, percent=None,
         msg = 'opening_iterations must be a nonnegative integer'
         raise ValueError(msg)
 
-    stat = make_morans_i_map(data, patch_size=patch_size, mask=mask,
+    stat = make_morans_i_map(data, patch_size=patch_size,
+                             patch_shape=patch_shape, mask=mask,
                              weights=weights, n_threads=n_threads)
     threshold = _calc_threshold(stat, n_sigma=n_sigma, percent=percent,
                                 patch_size=patch_size)
     if threshold is None:
         return np.zeros(stat.shape, dtype=bool)
     if opening_iterations is None:
-        opening_iterations = patch_size // 2 - 2
+        if patch_shape == 'square':
+            opening_iterations = patch_size // 2 - 2
+        else:
+            opening_iterations = 2
 
     source_mask = stat > threshold
     excluded = np.isnan(stat).view(np.uint8)

@@ -9,7 +9,7 @@ import pytest
 from astropy.utils.exceptions import AstropyUserWarning
 from numpy.testing import assert_allclose, assert_equal
 from scipy.ndimage import (binary_dilation, binary_erosion, binary_fill_holes,
-                           uniform_filter)
+                           correlate, label, uniform_filter)
 
 from photutils.background import make_morans_i_map, make_morans_i_mask
 from photutils.datasets import make_100gaussians_image
@@ -28,7 +28,18 @@ def _slow_box_sum(array, size):
     return result
 
 
-def _reference_morans_i(data, patch_size, *, mask=None, weights=None):
+def _disk_footprint(patch_size):
+    """
+    Return the digital disk with the area of a square patch.
+    """
+    radius = patch_size / np.sqrt(np.pi)
+    half = int(radius)
+    yy, xx = np.mgrid[-half:half + 1, -half:half + 1]
+    return xx**2 + yy**2 <= radius**2
+
+
+def _reference_morans_i(data, patch_size, *, mask=None, weights=None,
+                        footprint=None):
     """
     Slow pure-NumPy reference for the sliding Moran's I statistic.
     """
@@ -62,11 +73,17 @@ def _reference_morans_i(data, patch_size, *, mask=None, weights=None):
 
     sums = [usable.astype(float), wts, wts * values, wts * values**2,
             wts * neighbor_mean, wts * values * neighbor_mean]
-    sums = [_slow_box_sum(array, patch_size) for array in sums]
+    if footprint is None:
+        sums = [_slow_box_sum(array, patch_size) for array in sums]
+        n_patch = patch_size**2
+    else:
+        sums = [correlate(array, footprint.astype(float), mode='constant')
+                for array in sums]
+        n_patch = footprint.sum()
     count, sum_w, sum_x, sum_xx, sum_n, sum_xn = sums
 
     result = np.full(data.shape, np.nan)
-    good = usable & (count >= 0.25 * patch_size**2)
+    good = usable & (count >= 0.25 * n_patch - 1.0e-9)
     with np.errstate(invalid='ignore', divide='ignore'):
         mean = sum_x / sum_w
         var = sum_xx / sum_w - mean**2
@@ -436,6 +453,50 @@ class TestMakeMoransIMap:
         make_morans_i_map(data)
         assert_equal(data, original)
 
+    @pytest.mark.parametrize('patch_size', [7, 9, 21])
+    def test_disk_reference(self, small, patch_size):
+        """
+        Test a disk patch against a reference with masked pixels,
+        nonfinite values, and weights, including the image edges.
+        """
+        data = small.copy()
+        data[5, 5] = np.nan
+        mask = np.zeros(data.shape, dtype=bool)
+        mask[10:14, 10:14] = True
+        rng = np.random.default_rng(11)
+        weights = rng.uniform(0.5, 2.0, data.shape)
+        weights[30, 30] = 0.0
+        footprint = _disk_footprint(patch_size)
+        for kwargs in ({}, {'mask': mask, 'weights': weights}):
+            result = make_morans_i_map(data, patch_size=patch_size,
+                                       patch_shape='disk', **kwargs)
+            expected = _reference_morans_i(data, patch_size,
+                                           footprint=footprint, **kwargs)
+            assert np.any(np.isfinite(expected))
+            assert_equal(np.isnan(result), np.isnan(expected))
+            assert_allclose(result, expected, atol=1e-5)
+
+    def test_disk_n_threads(self, noise):
+        expected = make_morans_i_map(noise, patch_shape='disk')
+        for n_threads in (2, 7):
+            result = make_morans_i_map(noise, patch_shape='disk',
+                                       n_threads=n_threads)
+            assert_allclose(result, expected, atol=1e-6)
+
+    def test_disk_noise(self, noise):
+        """
+        Test that a disk patch has the noise of a square patch with
+        the same area.
+        """
+        result = make_morans_i_map(noise, patch_shape='disk')
+        assert_allclose(np.std(result), np.std(make_morans_i_map(noise)),
+                        rtol=0.1)
+
+    def test_patch_shape_inputs(self, noise):
+        match = "patch_shape must be 'square' or 'disk'"
+        with pytest.raises(ValueError, match=match):
+            make_morans_i_map(noise, patch_shape='circle')
+
 
 class TestMakeMoransIMask:
     def test_noise(self, noise):
@@ -771,6 +832,38 @@ class TestMakeMoransIMask:
         data = make_100gaussians_image()
         assert_equal(make_morans_i_mask(data, n_threads=4),
                      make_morans_i_mask(data))
+
+    def test_disk_round_footprint(self):
+        """
+        Test that a disk patch gives round source regions at all source
+        brightnesses, while a square patch gives square regions.
+        """
+        rng = np.random.default_rng(12)
+        data = rng.normal(0.0, 1.0, (120, 600))
+        yy, xx = np.mgrid[:120, :600]
+        centers = [(60, 60 + 120 * i) for i in range(5)]
+        for (ycen, xcen), peak in zip(centers, (3.0, 10.0, 100.0, 1.0e3,
+                                                1.0e4), strict=True):
+            data += peak * np.exp(-((xx - xcen)**2 + (yy - ycen)**2) / 8.0)
+
+        def fill_ratios(mask):
+            labels, _ = label(mask)
+            ratios = []
+            for center in centers:
+                ys, xs = np.nonzero(labels == labels[center])
+                ratios.append(ys.size / ((np.ptp(ys) + 1) * (np.ptp(xs) + 1)))
+            return np.array(ratios)
+
+        disk = make_morans_i_mask(data, patch_shape='disk',
+                                  opening_iterations=0)
+        square = make_morans_i_mask(data, opening_iterations=0)
+        assert np.all(np.abs(fill_ratios(disk) - np.pi / 4) < 0.06)
+        assert np.all(fill_ratios(square) > 0.9)
+
+        # The default opening for a disk patch has 2 iterations
+        assert_equal(make_morans_i_mask(data, patch_shape='disk'),
+                     make_morans_i_mask(data, patch_shape='disk',
+                                        opening_iterations=2))
 
     def test_inputs(self, noise):
         match = 'n_sigma must be a positive number'

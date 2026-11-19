@@ -38,7 +38,7 @@ import numpy as np
 from libc.stdlib cimport free, malloc, realloc
 from libc.string cimport memset
 
-__all__ = ['fill_holes', 'morans_i_rows', 'opening']
+__all__ = ['fill_holes', 'morans_i_rows', 'morans_i_rows_rects', 'opening']
 
 cdef extern from "math.h" nogil:
     bint isfinite(double x)
@@ -598,3 +598,212 @@ def opening(unsigned char[:, ::1] mask, unsigned char[:, ::1] excluded,
         for y in range(ny):
             for x in range(nx):
                 mask[y, x] &= excluded[y, x] >> 1
+
+
+cdef inline void start_band(double* total, const double* col,
+                            Py_ssize_t outer, Py_ssize_t inner,
+                            Py_ssize_t nx, bint has_weights) noexcept nogil:
+    """
+    Add to the running sums along a row the columns of a band that are
+    to the left of the center of the first patch.
+
+    The band covers the column offsets from the patch center that are
+    larger than ``inner`` and at most ``outer`` in absolute value. An
+    ``inner`` value of -1 gives a full box.
+    """
+    cdef Py_ssize_t j
+
+    for j in range(min(outer, nx)):
+        add_sums(total, col + N_SUMS * j, has_weights)
+    for j in range(min(inner, nx)):
+        subtract_sums(total, col + N_SUMS * j, has_weights)
+
+
+cdef inline void slide_band(double* total, const double* col,
+                            Py_ssize_t j, Py_ssize_t outer,
+                            Py_ssize_t inner, Py_ssize_t nx,
+                            bint has_weights) noexcept nogil:
+    """
+    Move the running sums of a band along a row to the band centered
+    on column ``j``.
+    """
+    advance_slide(total, col, j, outer, nx, has_weights)
+    if inner >= 0:
+        if j + inner < nx:
+            subtract_sums(total, col + N_SUMS * (j + inner), has_weights)
+        if j - inner - 1 >= 0:
+            add_sums(total, col + N_SUMS * (j - inner - 1), has_weights)
+
+
+cdef inline void update_rect(double* sums, const double* terms,
+                             Py_ssize_t nx, bint add,
+                             bint has_weights) noexcept nogil:
+    """
+    Add the terms of an image row to, or subtract them from, the
+    running column sums of a rectangle.
+    """
+    cdef Py_ssize_t j
+
+    for j in range(nx):
+        if terms[3 * j] == 0.0:
+            continue
+        if add:
+            add_terms(sums + N_SUMS * j, terms[3 * j], terms[3 * j + 1],
+                      terms[3 * j + 2], has_weights)
+        else:
+            subtract_terms(sums + N_SUMS * j, terms[3 * j],
+                           terms[3 * j + 1], terms[3 * j + 2], has_weights)
+
+
+def morans_i_rows_rects(const real_t[:, ::1] data,
+                        const unsigned char[:, ::1] mask,
+                        const real_t[:, ::1] weights, double pedestal,
+                        double image_mean_sq,
+                        const Py_ssize_t[::1] heights,
+                        const Py_ssize_t[::1] widths, double min_count,
+                        float[:, ::1] out, Py_ssize_t row_start,
+                        Py_ssize_t row_stop):
+    """
+    Calculate the sliding-patch Moran's I statistic for a range of
+    image rows with a patch that is a union of centered rectangles.
+
+    A digital disk is the union of one rectangle for each distinct
+    half-width of its rows. Each rectangle has its own running column
+    sums over its rows. The sums of the patch along a row are the sums
+    over the band of columns that each rectangle adds to the narrower
+    rectangles before it.
+
+    Parameters
+    ----------
+    data, mask, weights, pedestal, image_mean_sq
+        See `morans_i_rows`.
+
+    heights : 1D intp `~numpy.ndarray`
+        The half-heights of the rectangles, in decreasing order.
+
+    widths : 1D intp `~numpy.ndarray`
+        The half-widths of the rectangles, in increasing order.
+
+    min_count, out, row_start, row_stop
+        See `morans_i_rows`.
+    """
+    cdef Py_ssize_t nx = data.shape[1]
+    cdef Py_ssize_t ny = data.shape[0]
+    cdef Py_ssize_t n_rects = heights.shape[0]
+    cdef Py_ssize_t half = heights[0]
+    cdef Py_ssize_t n_rows = 2 * half + 1
+    cdef Py_ssize_t row_first = row_start - half
+    cdef Py_ssize_t ok_size = half + 1
+    cdef Py_ssize_t row_in, row_out, step, slot, j, k, inner
+    cdef Py_ssize_t prev, cur, nxt
+    cdef bint has_mask = mask is not None
+    cdef bint has_weights = weights is not None
+    cdef Py_ssize_t count_idx = 5 if has_weights else 0
+    cdef double weight, neighbor_wt, neighbor, mean, mean_sq, var
+    cdef double[N_SUMS] total
+    cdef double* terms
+    cdef unsigned char* ok
+
+    cdef double[:, ::1] values = np.zeros((3, nx + 2))
+    cdef double[:, ::1] wts = np.zeros((3, nx + 2))
+    cdef double[:, ::1] wvalues = np.zeros((3, nx + 2))
+    cdef double[:, ::1] wts3 = np.zeros((3, nx))
+    cdef double[:, ::1] wvalues3 = np.zeros((3, nx))
+
+    # The weight, value, and neighbor mean of the pixels in the rows of
+    # the tallest rectangle. Unusable pixels have zero weight.
+    cdef double[:, :, ::1] pixels = np.zeros((n_rows, nx, 3))
+
+    # The running sums over the rows of each rectangle for each column
+    cdef double[:, :, ::1] col = np.zeros((n_rects, nx, N_SUMS))
+
+    cdef unsigned char[:, ::1] ok_ring = np.zeros((ok_size, nx),
+                                                  dtype=np.uint8)
+
+    if nx == 0 or ny == 0:
+        return
+
+    with nogil:
+        load_row(data, mask, has_mask, weights, has_weights, pedestal,
+                 row_first - 1, values[0], wts[0], wvalues[0], wts3[0],
+                 wvalues3[0])
+        load_row(data, mask, has_mask, weights, has_weights, pedestal,
+                 row_first, values[1], wts[1], wvalues[1], wts3[1],
+                 wvalues3[1])
+
+        for row_in in range(row_first, row_stop + half):
+            step = row_in - row_first
+            prev = step % 3
+            cur = (step + 1) % 3
+            nxt = (step + 2) % 3
+            load_row(data, mask, has_mask, weights, has_weights, pedestal,
+                     row_in + 1, values[nxt], wts[nxt], wvalues[nxt],
+                     wts3[nxt], wvalues3[nxt])
+
+            # Remove the rows that leave each rectangle. The row that
+            # leaves the tallest rectangle is in the slot of the new row,
+            # so it is removed first.
+            for k in range(n_rects):
+                if step >= half + heights[k] + 1:
+                    slot = (step - half - heights[k] - 1) % n_rows
+                    update_rect(&col[k, 0, 0], &pixels[slot, 0, 0], nx,
+                                False, has_weights)
+
+            slot = step % n_rows
+            terms = &pixels[slot, 0, 0]
+            if row_in < 0 or row_in >= ny:
+                for j in range(nx):
+                    terms[3 * j] = 0.0
+            else:
+                ok = &ok_ring[step % ok_size, 0]
+                for j in range(nx):
+                    weight = wts[cur, j + 1]
+                    neighbor_wt = (wts3[prev, j] + wts3[nxt, j]
+                                   + wts[cur, j] + wts[cur, j + 2])
+                    if weight == 0.0 or neighbor_wt <= 0.0:
+                        terms[3 * j] = 0.0
+                        ok[j] = 0
+                        continue
+                    neighbor = (wvalues3[prev, j] + wvalues3[nxt, j]
+                                + wvalues[cur, j]
+                                + wvalues[cur, j + 2]) / neighbor_wt
+                    terms[3 * j] = weight
+                    terms[3 * j + 1] = values[cur, j + 1]
+                    terms[3 * j + 2] = neighbor
+                    ok[j] = 1
+
+            # Add the rows that enter each rectangle. Shorter rectangles
+            # are centered on the same row, so their rows enter later.
+            for k in range(n_rects):
+                if step >= half - heights[k]:
+                    slot = (step - half + heights[k]) % n_rows
+                    update_rect(&col[k, 0, 0], &pixels[slot, 0, 0], nx,
+                                True, has_weights)
+
+            row_out = row_in - half
+            if row_out < row_start:
+                continue
+
+            ok = &ok_ring[(row_out - row_first) % ok_size, 0]
+            for k in range(N_SUMS):
+                total[k] = 0.0
+            for k in range(n_rects):
+                inner = widths[k - 1] if k > 0 else -1
+                start_band(total, &col[k, 0, 0], widths[k], inner, nx,
+                           has_weights)
+            for j in range(nx):
+                for k in range(n_rects):
+                    inner = widths[k - 1] if k > 0 else -1
+                    slide_band(total, &col[k, 0, 0], j, widths[k], inner,
+                               nx, has_weights)
+                if not ok[j] or total[count_idx] < min_count:
+                    out[row_out, j] = NAN
+                    continue
+                mean = total[1] / total[0]
+                mean_sq = total[2] / total[0]
+                var = mean_sq - mean * mean
+                if var <= VARIANCE_FLOOR * (mean_sq + image_mean_sq):
+                    out[row_out, j] = NAN
+                    continue
+                out[row_out, j] = <float>(
+                    (total[4] / total[0] - mean * total[3] / total[0]) / var)
