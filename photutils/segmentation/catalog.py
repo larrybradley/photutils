@@ -947,11 +947,11 @@ class SourceCatalog:
         if detection_cat is None:
             return None
 
-        # required columns
+        # Required columns
         columns = ['label', 'xcentroid', 'ycentroid', 'semimajor_sigma',
                    'semiminor_sigma', 'orientation']
 
-        # make a table of properties from the detection catalog
+        # Make a table of properties from the detection catalog
         if isinstance(detection_cat, SourceCatalog):
             columns.append('local_background_aperture')
             detcat_tbl = detection_cat.to_table(columns)
@@ -4672,7 +4672,7 @@ class SourceCatalog:
         colname = 'local_background_aperture'
         if (self._detcat_tbl is not None
                 and colname in self._detcat_tbl.colnames):
-            # local background aperture defined using the detection
+            # Local background aperture defined using the detection
             # image bbox
             return self._detcat_tbl[colname]
 
