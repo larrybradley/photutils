@@ -14,6 +14,7 @@ import astropy.units as u
 import numpy as np
 from astropy.coordinates import SkyCoord
 from astropy.stats import gaussian_fwhm_to_sigma
+from astropy.table import Table
 from scipy.ndimage import map_coordinates
 
 from photutils._future_column_names import get_future_column_names
@@ -830,15 +831,15 @@ class SourceCatalog:
             msg = 'segmentation_image must have at least one nonzero label'
             raise ValueError(msg)
 
-        #self._detection_catalog = self._validate_detection_cat(
-        #    detection_catalog)
-        #attrs = ('wcs', 'aperture_mask_method', 'kron_params')
-        #if self._detection_catalog is not None:
-        #    for attr in attrs:
-        #        setattr(self, attr, getattr(self._detection_catalog, attr))
+        self._detection_catalog = self._validate_detection_catalog(
+            detection_catalog)
+        attrs = ('wcs', 'aperture_mask_method', 'kron_params')
+        if self._detection_catalog is not None:
+            for attr in attrs:
+                setattr(self, attr, getattr(self._detection_catalog, attr))
 
-        # The detection_cat validation needs self._labels.
-        self._detcat_tbl = self._prepare_detcat_tbl(detection_cat)
+        # Table input for the detection catalog is not implemented yet.
+        self._detcat_tbl = None
 
         if convolved_data is None:
             self._convolved_data = self._data
@@ -955,20 +956,22 @@ class SourceCatalog:
         if isinstance(detection_cat, SourceCatalog):
             columns.append('local_background_aperture')
             detcat_tbl = detection_cat.to_table(columns)
-            # TODO: tbl meta preserved?
+            # It is not yet known whether the table metadata is preserved.
         elif isinstance(detection_cat, Table):
             for column in columns:
                 if column not in detection_cat:
-                    raise ValueError(f'{column!r} column was not found in '
-                                     'the input detection_cat')
+                    msg = (f'{column!r} column was not found in the input '
+                           'detection_cat')
+                    raise ValueError(msg)
             detcat_tbl = detection_cat
         else:
-            raise TypeError('detection_cat must be a SourceCatalog or Table '
-                            'instance')
+            msg = 'detection_cat must be a SourceCatalog or Table instance'
+            raise TypeError(msg)
 
         if not np.array_equal(detcat_tbl['labels'], self.labels):
-            raise ValueError('detection_cat must have same source labels as '
-                             'the input segment_img')
+            msg = ('detection_cat must have same source labels as the input '
+                   'segment_img')
+            raise ValueError(msg)
 
         return detcat_tbl
 
@@ -1077,12 +1080,12 @@ class SourceCatalog:
         attr = '_labels'
         setattr(newcls, attr, getattr(self, attr)[index])
 
-        # Need to slice detcat_tbl (if detection_catalog was input)
-        attr = '_detcat_tbl'
-        if getattr(self, attr) is None:
-            setattr(newcls, attr, None)
-        else:
-            setattr(newcls, attr, getattr(self, attr)[index])
+        # Need to slice the detection catalog and its table, if input
+        for attr in ('_detection_catalog', '_detcat_tbl'):
+            if getattr(self, attr) is None:
+                setattr(newcls, attr, None)
+            else:
+                setattr(newcls, attr, getattr(self, attr)[index])
 
         # _slices is always stored as a list (one tuple of slices per
         # source), even for a scalar catalog. The public ``slices``
