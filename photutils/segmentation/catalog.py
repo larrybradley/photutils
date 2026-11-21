@@ -837,7 +837,7 @@ class SourceCatalog:
         #    for attr in attrs:
         #        setattr(self, attr, getattr(self._detection_catalog, attr))
 
-        # detection_cat validation needs self._labels
+        # The detection_cat validation needs self._labels.
         self._detcat_tbl = self._prepare_detcat_tbl(detection_cat)
 
         if convolved_data is None:
