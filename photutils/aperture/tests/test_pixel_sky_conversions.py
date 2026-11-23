@@ -66,6 +66,14 @@ _APERTURE_CASES = [
      'pix_kw': {'w': 4, 'h': 2, 'theta': 45 * u.deg},
      'size_attrs': ('w', 'h'),
      'has_angle': True},
+    {'id': 'pill',
+     'sky_cls': SkyPillAperture,
+     'sky_kw': {'length': 3 * u.arcsec, 'width': 2 * u.arcsec,
+                'theta': 30 * u.deg},
+     'pix_cls': PillAperture,
+     'pix_kw': {'length': 6, 'width': 2, 'theta': 45 * u.deg},
+     'size_attrs': ('length', 'width'),
+     'has_angle': True},
     {'id': 'ellipse_annulus',
      'sky_cls': SkyEllipticalAnnulus,
      'sky_kw': {'a_in': 1 * u.arcsec, 'a_out': 2 * u.arcsec,
@@ -562,6 +570,34 @@ class TestSkyPixelAngleConvention:
         pix = sky.to_pixel(simple_wcs)
         diff = _angle_diff_deg(pix.theta, 180 * u.deg)
         assert abs(diff) < 2e-5
+
+
+class TestPillLongAxisDirection:
+    """
+    The long axis of a sky pill is North-South at ``theta=0`` and
+    East-West at ``theta=90 deg``. On a north-up WCS this is the image
+    y axis and x axis, respectively.
+    """
+
+    @pytest.mark.parametrize(('theta_deg', 'expected_deg'),
+                             [(0, 90), (90, 0)])
+    def test_sky_to_pixel(self, simple_wcs, theta_deg, expected_deg):
+        sky = SkyPillAperture(CENTER, length=3 * u.arcsec,
+                              width=2 * u.arcsec, theta=theta_deg * u.deg)
+        pix = sky.to_pixel(simple_wcs)
+        diff = _angle_diff_deg(pix.theta, expected_deg * u.deg)
+        assert abs((diff + 90) % 180 - 90) < 2e-5
+        assert_allclose(pix.length, 30.0, rtol=1e-6)
+        assert_allclose(pix.width, 20.0, rtol=1e-6)
+
+    @pytest.mark.parametrize(('theta_deg', 'expected_deg'),
+                             [(90, 0), (0, 90)])
+    def test_pixel_to_sky(self, simple_wcs, theta_deg, expected_deg):
+        pix = PillAperture(PIX_CENTER, length=6.0, width=2.0,
+                           theta=theta_deg * u.deg)
+        sky = pix.to_sky(simple_wcs)
+        diff = _angle_diff_deg(sky.theta, expected_deg * u.deg)
+        assert abs((diff + 90) % 180 - 90) < 2e-5
 
 
 class TestShearedWCSRoundTrip:
