@@ -14,6 +14,7 @@ from .rectangle_overlap cimport rect_vertices
 cdef extern from "math.h" nogil:
     double fabs(double x)
     double fmax(double x, double y)
+    double fmin(double x, double y)
 
 
 cdef double pill_overlap_single_subpixel(double x0, double y0,
@@ -99,7 +100,7 @@ cdef inline double pill_frac_core(double pxmin, double pymin,
     cdef double d2 = along * along + yrot * yrot
     cdef double r_outer = radius + margin
     cdef double r_inner = radius - margin
-    cdef double end_x, end_y
+    cdef double end_x, end_y, area
     cdef double poly_x[4]
     cdef double poly_y[4]
     cdef double buf_a_x[32]
@@ -144,7 +145,9 @@ cdef inline double pill_frac_core(double pxmin, double pymin,
                                             radius)
                 / (dx * dy))
 
-    return (pill_junction_overlap_exact(pxmin, pymin, pxmax, pymax,
-                                        half_straight, radius, cos_theta,
-                                        sin_theta)
-            / (dx * dy))
+    # The pixel straddles a junction line. The clamp removes rounding
+    # outside the valid range of the area.
+    area = pill_junction_overlap_exact(pxmin, pymin, pxmax, pymax,
+                                       half_straight, radius, cos_theta,
+                                       sin_theta)
+    return fmin(fmax(area, 0.0), dx * dy) / (dx * dy)

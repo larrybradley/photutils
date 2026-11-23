@@ -76,6 +76,100 @@ def test_outside_grid_is_zero():
     assert_array_equal(frac, 0.0)
 
 
+def integer_grid(xcen, ycen, length):
+    """
+    Return the grid edges, relative to the pill center, of a grid with
+    pixel centers at integer positions around a pill centered at
+    ``(xcen, ycen)``.
+    """
+    half = int(np.ceil(0.5 * length)) + 2
+    ixmin = int(np.floor(xcen)) - half
+    iymin = int(np.floor(ycen)) - half
+    n_pixels = 2 * half + 1
+    xmin = ixmin - 0.5 - xcen
+    ymin = iymin - 0.5 - ycen
+    return (xmin, xmin + n_pixels, ymin, ymin + n_pixels, n_pixels,
+            n_pixels)
+
+
+def check_exact_sum(xcen, ycen, length, width, theta):
+    frac = pill_overlap_grid(*integer_grid(xcen, ycen, length), length,
+                             width, theta, 1, 1)
+    assert_allclose(frac.sum(), pill_area(length, width), rtol=1e-12)
+    assert frac.min() >= 0.0
+    assert frac.max() <= 1.0 + 1e-14
+
+
+def trail_params(x0, y0, dx, dy, width):
+    """
+    Return the center, length, and theta of a pill whose trail runs
+    from ``(x0, y0)`` to ``(x0 + dx, y0 + dy)``.
+    """
+    return (x0 + 0.5 * dx, y0 + 0.5 * dy, np.hypot(dx, dy) + width,
+            np.arctan2(dy, dx))
+
+
+@pytest.mark.parametrize('theta_deg', [45.0, 135.0, 225.0, -45.0])
+@pytest.mark.parametrize('center', [(0.0, 0.0), (0.5, 0.5)])
+def test_exact_circle_junction_on_corners(theta_deg, center):
+    # With length equal to width, the junction line passes through the
+    # disk center. At 45 degrees it runs along a pixel diagonal, so it
+    # contains pixel corners when the center is on a pixel center or
+    # corner.
+    theta = np.deg2rad(theta_deg)
+    for width in np.arange(0.25, 8.01, 0.25):
+        check_exact_sum(*center, width, width, theta)
+
+
+@pytest.mark.parametrize('width', [0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0])
+def test_exact_trail_between_pixel_centers(width):
+    # The trail ends, and so the junction lines, pass through pixel
+    # centers. When dx and dy are both odd, the junction lines also
+    # pass through pixel corners.
+    for dx in range(7):
+        for dy in range(-7, 8):
+            if dx == 0 and dy <= 0:
+                continue
+            xcen, ycen, length, theta = trail_params(0, 0, dx, dy, width)
+            check_exact_sum(xcen, ycen, length, width, theta)
+
+
+@pytest.mark.parametrize('slope', [(1, 2), (2, 1), (1, 3), (3, 2),
+                                   (-1, 2), (-3, 1), (2, -5), (4, 3)])
+@pytest.mark.parametrize('width', [0.5, 1.0, 2.5, 5.0])
+def test_exact_rational_slope_junction_on_corners(slope, width):
+    # The pill center is on a pixel corner and the junction line passes
+    # through the pixel corner (a, b) at a rational slope, so it also
+    # passes through every corner (a - k * q, b + k * p).
+    p, q = slope
+    theta = np.arctan2(q, p)
+    for a, b in ((1, 0), (0, 1), (1, 1), (2, 1), (1, 3)):
+        half_straight = (a * p + b * q) / np.hypot(p, q)
+        if half_straight <= 0:
+            continue
+        length = 2.0 * half_straight + width
+        check_exact_sum(0.5, 0.5, length, width, theta)
+
+
+# The center, length, width, and theta of pills for which the triangle
+# fan formulation of the half-disk terms returned up to the whole disk
+# area for a single pixel.
+JUNCTION_REGRESSION_CASES = [
+    (20.0, 20.0, 6.0, 6.0, np.deg2rad(-45.0)),
+    (20.0, 20.0, 1.0, 1.0, np.deg2rad(45.0)),
+    (20.0, 20.0, np.hypot(6, 6) + 6, 6.0, np.arctan2(6, 6)),
+    (20.0, 20.0, np.hypot(2, 2) + 1, 1.0, np.arctan2(2, 2)),
+    (20.5, 21.5, np.hypot(1, 3) + 1.5, 1.5, np.arctan2(3, 1)),
+    (21.5, 23.5, np.hypot(3, 7) + 6, 6.0, np.arctan2(7, 3)),
+]
+
+
+@pytest.mark.parametrize(('xcen', 'ycen', 'length', 'width', 'theta'),
+                         JUNCTION_REGRESSION_CASES)
+def test_exact_junction_regression(xcen, ycen, length, width, theta):
+    check_exact_sum(xcen, ycen, length, width, theta)
+
+
 def test_invalid_inputs():
     args = (-5.0, 5.0, -5.0, 5.0, 10, 10, 6.0, 3.0, 0.0)
     with pytest.raises(ValueError, match='use_exact must be 0 or 1'):

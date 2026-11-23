@@ -101,6 +101,24 @@ class TestPillAperture(BaseTestRotatedPixelAperture):
         mask = aper.to_mask(method=method, subpixels=5)
         assert_allclose(mask.data.sum(), aper.area, rtol=rtol)
 
+    @pytest.mark.parametrize(('length', 'width', 'theta'),
+                             [(6.0, 6.0, -45 * u.deg),
+                              (1.0, 1.0, 45 * u.deg),
+                              (np.hypot(6, 6) + 6, 6.0, np.arctan2(6, 6))])
+    def test_exact_junction_on_corners(self, length, width, theta):
+        # Pixel corners lie on a junction line between the straight
+        # section and an end.
+        data = np.ones((41, 41))
+        aper = PillAperture((20, 20), length=length, width=width,
+                            theta=theta)
+        mask = aper.to_mask()
+        assert mask.data.max() <= 1.0
+        assert_allclose(mask.data.sum(), aper.area, rtol=1e-12)
+        tbl = aperture_photometry(data, aper)
+        assert_allclose(tbl['aperture_sum'][0], aper.area, rtol=1e-12)
+        stats = ApertureStats(data, aper)
+        assert_allclose(stats.sum, aper.area, rtol=1e-12)
+
     def test_photometry_on_ones(self):
         aper = PillAperture((25.3, 24.6), length=12.0, width=5.0,
                             theta=0.6)

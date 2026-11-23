@@ -19,8 +19,6 @@ import numpy as np
 
 cimport numpy as np
 
-from .core cimport overlap_area_triangle_unit_circle
-
 __all__ = ['pill_overlap_grid']
 
 
@@ -28,7 +26,7 @@ cdef extern from "math.h" nogil:
     double sin(double x)
     double cos(double x)
     double sqrt(double x)
-    double fmin(double x, double y)
+    double atan2(double y, double x)
     double floor(double x)
     double ceil(double x)
 
@@ -371,9 +369,13 @@ cdef double disk_convex_polygon_overlap(double *poly_x, double *poly_y,
     Exact area of overlap between a disk centered on the x-axis and a
     convex polygon.
 
-    The polygon is split into a triangle fan from its first vertex.
-    Each triangle is shifted to the disk center and scaled by ``1 /
-    radius`` so that its overlap with the unit circle can be computed.
+    The polygon is shifted to the disk center and scaled by ``1 /
+    radius``. For each polygon edge, the signed area of the unit disk
+    inside the triangle formed by the disk center and the edge is
+    added. The absolute value of the sum is the overlap area in units
+    of ``radius**2``. The sum needs no special cases for duplicate
+    vertices, zero-length edges, or vertices on the circle or at its
+    center.
 
     Parameters
     ----------
@@ -395,21 +397,86 @@ cdef double disk_convex_polygon_overlap(double *poly_x, double *poly_y,
         The area of overlap between the disk and the polygon.
     """
     cdef int k
-    cdef double inv_radius, x0, y0
+    cdef double inv_radius, x0, y0, x1, y1
     cdef double area = 0.0
 
     if n_poly < 3:
         return 0.0
 
     inv_radius = 1.0 / radius
-    x0 = (poly_x[0] - center_x) * inv_radius
-    y0 = poly_y[0] * inv_radius
-    for k in range(1, n_poly - 1):
-        area += overlap_area_triangle_unit_circle(
-            x0, y0,
-            (poly_x[k] - center_x) * inv_radius,
-            poly_y[k] * inv_radius,
-            (poly_x[k + 1] - center_x) * inv_radius,
-            poly_y[k + 1] * inv_radius)
+    x0 = (poly_x[n_poly - 1] - center_x) * inv_radius
+    y0 = poly_y[n_poly - 1] * inv_radius
+    for k in range(n_poly):
+        x1 = (poly_x[k] - center_x) * inv_radius
+        y1 = poly_y[k] * inv_radius
+        area += unit_disk_triangle_signed_area(x0, y0, x1, y1)
+        x0 = x1
+        y0 = y1
 
-    return area * radius * radius
+    return fabs(area) * radius * radius
+
+
+cdef double unit_disk_triangle_signed_area(double x0, double y0,
+                                           double x1, double y1
+                                           ) noexcept nogil:
+    """
+    Signed area of the overlap between the unit disk and the triangle
+    formed by the origin and the points (x0, y0) and (x1, y1).
+
+    The edge from (x0, y0) to (x1, y1) is split where it crosses the
+    unit circle. The part of the edge inside the circle contributes
+    the area of its triangle with the origin, and each part outside
+    the circle contributes the area of the circular sector it
+    subtends. The result is positive when the triangle is
+    counterclockwise.
+
+    Parameters
+    ----------
+    x0, y0 : double
+        The start point of the edge.
+
+    x1, y1 : double
+        The end point of the edge.
+
+    Returns
+    -------
+    area : double
+        The signed area of overlap.
+    """
+    cdef double dx = x1 - x0
+    cdef double dy = y1 - y0
+    cdef double a = dx * dx + dy * dy
+    cdef double b, c, disc, root, t_in, t_out
+    cdef double xin, yin, xout, yout
+    cdef double area
+
+    if a == 0.0:
+        return 0.0
+
+    # The edge points at parameter t are inside the circle for t
+    # between the two roots of a * t**2 + 2 * b * t + c = 0.
+    b = x0 * dx + y0 * dy
+    c = x0 * x0 + y0 * y0 - 1.0
+    disc = b * b - a * c
+    t_in = 1.0
+    t_out = 0.0
+    if disc > 0.0:
+        root = sqrt(disc)
+        t_in = fmax((-b - root) / a, 0.0)
+        t_out = fmin((-b + root) / a, 1.0)
+
+    # The edge is wholly outside the circle or tangent to it.
+    if t_in >= t_out:
+        return 0.5 * atan2(x0 * y1 - y0 * x1, x0 * x1 + y0 * y1)
+
+    xin = x0 + t_in * dx
+    yin = y0 + t_in * dy
+    xout = x0 + t_out * dx
+    yout = y0 + t_out * dy
+    area = 0.5 * (xin * yout - yin * xout)
+    if t_in > 0.0:
+        area += 0.5 * atan2(x0 * yin - y0 * xin, x0 * xin + y0 * yin)
+    if t_out < 1.0:
+        area += 0.5 * atan2(xout * y1 - yout * x1, xout * x1 + yout * y1)
+
+    return area
