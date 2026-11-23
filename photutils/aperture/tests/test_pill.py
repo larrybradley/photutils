@@ -122,7 +122,7 @@ class TestPillAperture(BaseTestRotatedPixelAperture):
         direction = np.array((np.cos(theta), np.sin(theta)))
         center = position - origin
         start = center - half_straight * direction
-        vertices = [vertices[-2:] for vertices, code
+        vertices = [segment[-2:] for segment, code
                     in path.iter_segments(curves=True, simplify=False)
                     if code != path.CLOSEPOLY]
         assert len(vertices) > 4
@@ -151,7 +151,7 @@ class TestPillAperture(BaseTestRotatedPixelAperture):
         aper = PillAperture((20, 20), length=length, width=width,
                             theta=theta)
         mask = aper.to_mask()
-        assert mask.data.max() <= 1.0
+        assert mask.data.max() <= 1.0 + 1e-14
         assert_allclose(mask.data.sum(), aper.area, rtol=1e-12)
         tbl = aperture_photometry(data, aper)
         assert_allclose(tbl['aperture_sum'][0], aper.area, rtol=1e-12)

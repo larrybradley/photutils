@@ -121,16 +121,18 @@ def test_exact_circle_junction_on_corners(theta_deg, center):
         check_exact_sum(*center, width, width, theta)
 
 
+@pytest.mark.parametrize('start', [(0.0, 0.0), (0.5, 0.5)])
 @pytest.mark.parametrize('width', [0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0])
-def test_exact_trail_between_pixel_centers(width):
+def test_exact_trail_between_grid_points(start, width):
     # The trail ends, and so the junction lines, pass through pixel
-    # centers. When dx and dy are both odd, the junction lines also
-    # pass through pixel corners.
+    # centers or through pixel corners. For a trail between pixel
+    # centers, the junction lines also pass through pixel corners when
+    # dx and dy are both odd.
     for dx in range(7):
         for dy in range(-7, 8):
             if dx == 0 and dy <= 0:
                 continue
-            xcen, ycen, length, theta = trail_params(0, 0, dx, dy, width)
+            xcen, ycen, length, theta = trail_params(*start, dx, dy, width)
             check_exact_sum(xcen, ycen, length, width, theta)
 
 
@@ -151,9 +153,20 @@ def test_exact_rational_slope_junction_on_corners(slope, width):
         check_exact_sum(0.5, 0.5, length, width, theta)
 
 
-# The center, length, width, and theta of pills for which the triangle
-# fan formulation of the half-disk terms returned up to the whole disk
-# area for a single pixel.
+@pytest.mark.parametrize('width', [2e-9, 6e-9, 2e-8, 2e-6])
+@pytest.mark.parametrize('center', [(0.0, 0.0), (0.5, 0.5), (0.5, 0.0),
+                                    (0.13, -0.29)])
+def test_exact_tiny_circle(width, center):
+    # The pill is far smaller than a pixel, so the pixel edges lie far
+    # outside the unit circle after they are scaled by the end radius.
+    for theta in np.linspace(-np.pi, np.pi, 41):
+        check_exact_sum(*center, width, width, theta)
+
+
+# The center, length, width, and theta of pills that have pixel corners
+# on a junction line. Clipping such a pixel at the line can leave
+# duplicate vertices or a polygon collapsed onto the line, which must
+# add nothing to the half-disk terms.
 JUNCTION_REGRESSION_CASES = [
     (20.0, 20.0, 6.0, 6.0, np.deg2rad(-45.0)),
     (20.0, 20.0, 1.0, 1.0, np.deg2rad(45.0)),

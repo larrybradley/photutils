@@ -446,7 +446,7 @@ cdef double unit_disk_triangle_signed_area(double x0, double y0,
     cdef double dx = x1 - x0
     cdef double dy = y1 - y0
     cdef double a = dx * dx + dy * dy
-    cdef double b, c, disc, root, t_in, t_out
+    cdef double b, cross, disc, root, t_in, t_out
     cdef double xin, yin, xout, yout
     cdef double area
 
@@ -454,10 +454,13 @@ cdef double unit_disk_triangle_signed_area(double x0, double y0,
         return 0.0
 
     # The edge points at parameter t are inside the circle for t
-    # between the two roots of a * t**2 + 2 * b * t + c = 0.
+    # between the two roots of a * t**2 + 2 * b * t + c = 0, where c
+    # is x0**2 + y0**2 - 1. The discriminant b**2 - a * c is written
+    # in terms of the cross product, which avoids the cancellation
+    # between its two terms when the edge is far from the circle.
     b = x0 * dx + y0 * dy
-    c = x0 * x0 + y0 * y0 - 1.0
-    disc = b * b - a * c
+    cross = x0 * dy - y0 * dx
+    disc = a - cross * cross
     t_in = 1.0
     t_out = 0.0
     if disc > 0.0:
