@@ -23,7 +23,8 @@ from photutils.geometry._pill_overlap import pill_overlap_grid
 from photutils.utils._wcs_helpers import (pixel_shape_to_sky_svd,
                                           sky_shape_to_pixel_svd)
 
-__all__ = ['PillAnnulus', 'PillAperture', 'SkyPillAperture']
+__all__ = ['PillAnnulus', 'PillAperture', 'SkyPillAnnulus',
+           'SkyPillAperture']
 
 
 def _pill_outline(half_straight, radius):
@@ -510,16 +511,62 @@ class PillAnnulus(_PillAnnulusMixin, _RotatableApertureMixin, PixelAperture):
         np.maximum(overlap, 0.0, out=overlap)
         return overlap
 
-    def to_sky(self, wcs):  # pragma: no cover
+    def to_sky(self, wcs):
         """
-        Convert the aperture to a sky aperture.
+        Convert the aperture to a `SkyPillAnnulus` object defined in
+        celestial coordinates.
 
         Parameters
         ----------
         wcs : WCS object
-            A world coordinate system (WCS) transformation.
+            A world coordinate system (WCS) transformation that
+            supports the `astropy shared interface for WCS
+            <https://docs.astropy.org/en/stable/wcs/wcsapi.html>`_
+            (e.g., `astropy.wcs.WCS`, `gwcs.wcs.WCS`).
+
+        Returns
+        -------
+        aperture : `SkyPillAnnulus` object
+            A `SkyPillAnnulus` object.
+
+        Notes
+        -----
+        The aperture shape parameters are converted using the local WCS
+        properties (pixel scale, rotation angle) evaluated at the first
+        aperture position. Because aperture objects require scalar shape
+        parameters, only a single reference position is used for the
+        conversion. For apertures with multiple positions used with a
+        WCS that has spatially-varying distortions, this may produce
+        inaccurate results for positions far from the first position.
+
+        Only the outer pill is converted. The inner width keeps its
+        ratio to the outer width, and the inner length follows from the
+        constant thickness. The inverse conversion then recovers the
+        inner shape.
+
+        The converted outer length is raised to the converted outer
+        width when the WCS would make it smaller. This can happen when
+        the length is equal or close to the width and the WCS has
+        unequal pixel scales or shear. The round trip between pixel and
+        sky apertures is then not preserved.
         """
-        raise NotImplementedError
+        xpos, ypos = np.transpose(self.positions)
+        positions = wcs.pixel_to_world(xpos, ypos)
+
+        first_pos = np.atleast_2d(self.positions)[0]
+        pixcoord = (float(first_pos[0]), float(first_pos[1]))
+        sky_length, sky_width, sky_angle = pixel_shape_to_sky_svd(
+            wcs, pixcoord, self.length_out, self.width_out,
+            self._theta_rad)
+
+        length_out = max(sky_length, sky_width)
+        width_in = sky_width * (self.width_in / self.width_out)
+        length_in = length_out - (sky_width - width_in)
+        return SkyPillAnnulus(positions=positions,
+                              length_in=Angle(length_in, 'arcsec'),
+                              length_out=Angle(length_out, 'arcsec'),
+                              width_out=Angle(sky_width, 'arcsec'),
+                              theta=sky_angle)
 
 
 class SkyPillAperture(_RotatableApertureMixin, SkyAperture):
@@ -641,3 +688,150 @@ class SkyPillAperture(_RotatableApertureMixin, SkyAperture):
         return PillAperture(positions=positions,
                             length=max(pix_length, pix_width),
                             width=pix_width, theta=pix_angle)
+
+
+class SkyPillAnnulus(_PillAnnulusMixin, _RotatableApertureMixin,
+                     SkyAperture):
+    """
+    A pill-shaped annulus aperture defined in sky coordinates.
+
+    The annulus is the region between an outer pill and a smaller inner
+    pill. Both pills share the same center, orientation, and straight
+    section, so the annulus has a constant thickness of ``(length_out -
+    length_in) / 2``. The inner width is derived as ``width_out -
+    (length_out - length_in)``. The aperture has a single fixed
+    size/shape, but it can have multiple positions (see the
+    ``positions`` input).
+
+    Parameters
+    ----------
+    positions : `~astropy.coordinates.SkyCoord`
+        The celestial coordinates of the aperture center(s). This can be
+        either scalar coordinates or an array of coordinates.
+
+    length_in : scalar `~astropy.units.Quantity`
+        The full length of the inner pill in angular units, measured
+        from tip to tip. For ``theta=0`` the long axis is along the
+        North-South axis.
+
+    length_out : scalar `~astropy.units.Quantity`
+        The full length of the outer pill in angular units, measured
+        from tip to tip. It must be greater than ``length_in`` and
+        greater than or equal to ``width_out``.
+
+    width_out : scalar `~astropy.units.Quantity`
+        The full width of the outer pill in angular units. The
+        difference ``length_out - length_in`` must be less than
+        ``width_out`` so that the inner width is positive. For
+        ``theta=0`` the width is along the East-West axis.
+
+    theta : scalar `~astropy.units.Quantity`, optional
+        The position angle (in angular units) of the pill "long axis",
+        measured from North (PA=0) toward East. This is counterclockwise
+        on an image displayed with North up and East to the left. North
+        and East are the directions of increasing latitude and longitude
+        in the coordinate frame of ``positions`` (e.g., ICRS or
+        Galactic). When the aperture is converted to pixels with a WCS
+        whose celestial frame differs from that frame, the angle is
+        converted to the equivalent angle in the WCS frame, so the
+        aperture keeps the same orientation on the sky.
+
+    Raises
+    ------
+    TypeError : `TypeError`
+        If any of ``length_in``, ``length_out``, or ``width_out`` is
+        not a `~astropy.units.Quantity`.
+
+    ValueError : `ValueError`
+        If any of ``length_in``, ``length_out``, or ``width_out`` is
+        not positive, if ``length_in`` is not less than ``length_out``,
+        if ``length_out`` is less than ``width_out``, or if
+        ``length_out - length_in`` is not less than ``width_out``.
+
+    Examples
+    --------
+    >>> from astropy.coordinates import SkyCoord
+    >>> import astropy.units as u
+    >>> from photutils.aperture import SkyPillAnnulus
+    >>> positions = SkyCoord(ra=[10.0, 20.0], dec=[30.0, 40.0], unit='deg')
+    >>> aper = SkyPillAnnulus(positions, 0.8*u.arcsec, 1.2*u.arcsec,
+    ...                       0.6*u.arcsec)
+    """
+
+    _params = ('positions', 'length_in', 'length_out', 'width_out', 'theta')
+    _ordered_pairs = (('length_in', 'length_out'),)
+    _ordered_pairs_inclusive = (('width_out', 'length_out'),)
+    positions = SkyCoordPositions('The center position(s) in sky coordinates.')
+    length_in = PositiveScalarAngle('The inner full length in angular '
+                                    'units, tip to tip.')
+    length_out = PositiveScalarAngle('The outer full length in angular '
+                                     'units, tip to tip.')
+    width_out = PositiveScalarAngle('The outer full width in angular '
+                                    'units.')
+    theta = ScalarAngle('The position angle (in angular units) of the '
+                        'pill long axis.')
+
+    def __init__(self, positions, length_in, length_out, width_out, *,
+                 theta=0.0 * u.deg):
+        self.positions = positions
+        self.length_in = length_in
+        self.length_out = length_out
+        self.width_out = width_out
+        self.theta = theta
+
+    def to_pixel(self, wcs):
+        """
+        Convert the aperture to a `PillAnnulus` object defined in
+        pixel coordinates.
+
+        Parameters
+        ----------
+        wcs : WCS object
+            A world coordinate system (WCS) transformation that
+            supports the `astropy shared interface for WCS
+            <https://docs.astropy.org/en/stable/wcs/wcsapi.html>`_
+            (e.g., `astropy.wcs.WCS`, `gwcs.wcs.WCS`).
+
+        Returns
+        -------
+        aperture : `PillAnnulus` object
+            A `PillAnnulus` object.
+
+        Notes
+        -----
+        The aperture shape parameters are converted using the local WCS
+        properties (pixel scale, rotation angle) evaluated at the first
+        aperture position. Because aperture objects require scalar shape
+        parameters, only a single reference position is used for the
+        conversion. For apertures with multiple positions used with a
+        WCS that has spatially-varying distortions, this may produce
+        inaccurate results for positions far from the first position.
+
+        Only the outer pill is converted. The inner width keeps its
+        ratio to the outer width, and the inner length follows from the
+        constant thickness. The inverse conversion then recovers the
+        inner shape.
+
+        The converted outer length is raised to the converted outer
+        width when the WCS would make it smaller. This can happen when
+        the length is equal or close to the width and the WCS has
+        unequal pixel scales or shear. The round trip between pixel and
+        sky apertures is then not preserved.
+        """
+        xpos, ypos = wcs.world_to_pixel(self.positions)
+        positions = np.transpose((xpos, ypos))
+
+        skypos = self.positions if self.isscalar else self.positions[0]
+        first_pixcoord = tuple(np.atleast_2d(positions)[0])
+        _, pix_length, pix_width, pix_angle = sky_shape_to_pixel_svd(
+            wcs, skypos,
+            self.length_out.to_value(u.arcsec),
+            self.width_out.to_value(u.arcsec),
+            self._theta_rad, pixcoord=first_pixcoord)
+
+        length_out = max(pix_length, pix_width)
+        width_in = pix_width * float(self.width_in / self.width_out)
+        length_in = length_out - (pix_width - width_in)
+        return PillAnnulus(positions=positions, length_in=length_in,
+                           length_out=length_out, width_out=pix_width,
+                           theta=pix_angle)

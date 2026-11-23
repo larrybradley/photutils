@@ -27,11 +27,12 @@ from numpy.testing import assert_allclose
 
 from photutils.aperture import (CircularAnnulus, CircularAperture,
                                 EllipticalAnnulus, EllipticalAperture,
-                                PillAperture, RectangularAnnulus,
+                                PillAnnulus, PillAperture, RectangularAnnulus,
                                 RectangularAperture, SkyCircularAnnulus,
                                 SkyCircularAperture, SkyEllipticalAnnulus,
-                                SkyEllipticalAperture, SkyPillAperture,
-                                SkyRectangularAnnulus, SkyRectangularAperture)
+                                SkyEllipticalAperture, SkyPillAnnulus,
+                                SkyPillAperture, SkyRectangularAnnulus,
+                                SkyRectangularAperture)
 from photutils.datasets import make_gwcs
 from photutils.utils._optional_deps import HAS_GWCS
 from photutils.utils.tests.wcs_test_helpers import SIP_WCS_PARAM, CountingWCS
@@ -73,6 +74,15 @@ _APERTURE_CASES = [
      'pix_cls': PillAperture,
      'pix_kw': {'length': 6, 'width': 2, 'theta': 45 * u.deg},
      'size_attrs': ('length', 'width'),
+     'has_angle': True},
+    {'id': 'pill_annulus',
+     'sky_cls': SkyPillAnnulus,
+     'sky_kw': {'length_in': 3 * u.arcsec, 'length_out': 4 * u.arcsec,
+                'width_out': 2 * u.arcsec, 'theta': 30 * u.deg},
+     'pix_cls': PillAnnulus,
+     'pix_kw': {'length_in': 6, 'length_out': 8, 'width_out': 4,
+                'theta': 45 * u.deg},
+     'size_attrs': ('length_in', 'length_out', 'width_out'),
      'has_angle': True},
     {'id': 'ellipse_annulus',
      'sky_cls': SkyEllipticalAnnulus,
@@ -804,6 +814,56 @@ class TestPillEqualLengthAndWidth:
         self._check(_make_nonsquare_wcs())
 
 
+class TestPillAnnulusConversion:
+    """
+    A pill annulus converts through its outer pill and keeps the inner
+    width in proportion to the outer width.
+    """
+
+    @pytest.mark.parametrize('wcs', ['simple_wcs', 'rotated_wcs',
+                                     'sheared_wcs', 'strongly_sheared_wcs',
+                                     'sip_wcs', 'flipped_wcs',
+                                     'galactic_wcs', 'swapped_wcs'],
+                             indirect=True)
+    def test_pill_annulus_matches_outer_pill(self, wcs):
+        annulus = PillAnnulus(PIX_CENTER, length_in=6.0, length_out=8.0,
+                              width_out=4.0, theta=0.5)
+        outer = PillAperture(PIX_CENTER, length=8.0, width=4.0, theta=0.5)
+        sky_annulus = annulus.to_sky(wcs)
+        sky_outer = outer.to_sky(wcs)
+        assert_quantity_allclose(sky_annulus.length_out, sky_outer.length)
+        assert_quantity_allclose(sky_annulus.width_out, sky_outer.width)
+        assert_quantity_allclose(sky_annulus.theta, sky_outer.theta)
+        assert_quantity_allclose(sky_annulus.width_in,
+                                 0.5 * sky_outer.width)
+
+    @pytest.mark.parametrize('wcs', ['simple_wcs', 'rotated_wcs',
+                                     'sheared_wcs', 'strongly_sheared_wcs',
+                                     'sip_wcs', 'flipped_wcs',
+                                     'galactic_wcs', 'swapped_wcs'],
+                             indirect=True)
+    def test_pill_annulus_circular_ring_stays_valid(self, wcs):
+        pix = PillAnnulus(PIX_CENTER, length_in=4.0, length_out=6.0,
+                          width_out=6.0, theta=0.5)
+        sky = pix.to_sky(wcs)
+        back = sky.to_pixel(wcs)
+        for aper in (sky, back):
+            assert 0 < aper.width_in < aper.width_out
+            assert aper.width_out <= aper.length_out
+            assert aper.length_in < aper.length_out
+
+    def test_unequal_pixel_scales(self):
+        wcs = _make_nonsquare_wcs()
+        pix = PillAnnulus(PIX_CENTER, length_in=4.0, length_out=6.0,
+                          width_out=6.0, theta=0.5)
+        sky = pix.to_sky(wcs)
+        back = sky.to_pixel(wcs)
+        for aper in (sky, back):
+            assert 0 < aper.width_in < aper.width_out
+            assert aper.width_out <= aper.length_out
+            assert aper.length_in < aper.length_out
+
+
 class TestCircleAsEllipse:
     """
     Tests for the ``as_ellipse`` keyword of the circular aperture
@@ -951,6 +1011,11 @@ _SKY_APERTURE_CASES = [
                                  width=2 * u.arcsec,
                                  theta=30 * u.deg), {},
                  id='pill'),
+    pytest.param(SkyPillAnnulus(CENTER, length_in=3 * u.arcsec,
+                                length_out=4 * u.arcsec,
+                                width_out=2 * u.arcsec,
+                                theta=30 * u.deg), {},
+                 id='pill_annulus'),
     pytest.param(SkyRectangularAnnulus(CENTER, w_in=1 * u.arcsec,
                                        w_out=2 * u.arcsec,
                                        h_out=1 * u.arcsec,
@@ -973,6 +1038,9 @@ _PIXEL_APERTURE_CASES = [
                  id='rectangle'),
     pytest.param(PillAperture(PIX_CENTER, length=5.0, width=3.0, theta=0.5),
                  id='pill'),
+    pytest.param(PillAnnulus(PIX_CENTER, length_in=6.0, length_out=8.0,
+                             width_out=4.0, theta=0.5),
+                 id='pill_annulus'),
     pytest.param(RectangularAnnulus(PIX_CENTER, w_in=3.0, w_out=5.0,
                                     h_out=3.0, theta=0.5),
                  id='rectangle_annulus'),

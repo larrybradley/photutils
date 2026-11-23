@@ -12,7 +12,8 @@ from numpy.testing import assert_allclose, assert_array_equal
 from photutils.aperture import (AperturePhotometry, ApertureStats,
                                 CircularAnnulus, CircularAperture,
                                 RectangularAperture, aperture_photometry)
-from photutils.aperture.pill import PillAnnulus, PillAperture, SkyPillAperture
+from photutils.aperture.pill import (PillAnnulus, PillAperture, SkyPillAnnulus,
+                                     SkyPillAperture)
 from photutils.aperture.tests.test_aperture_common import (
     BaseTestAperture, BaseTestRotatedPixelAperture)
 from photutils.utils._optional_deps import HAS_MATPLOTLIB
@@ -230,6 +231,85 @@ class TestSkyPillAperture(BaseTestAperture):
         match = "'length' must be greater than or equal to 'width'"
         with pytest.raises(ValueError, match=match):
             SkyPillAperture(SKYCOORD, length=4 * UNIT, width=5 * UNIT)
+
+
+class TestSkyPillAnnulus(BaseTestAperture):
+    aperture = SkyPillAnnulus(SKYCOORD, length_in=10.0 * UNIT,
+                              length_out=14.0 * UNIT, width_out=9.0 * UNIT,
+                              theta=30 * u.deg)
+    copy_param = 'length_out'
+    copy_value = 15.0 * UNIT
+
+    @staticmethod
+    @pytest.mark.parametrize('radius', RADII)
+    def test_invalid_params(radius):
+        match = "'length_in' must be greater than zero"
+        with pytest.raises(ValueError, match=match):
+            SkyPillAnnulus(SKYCOORD, length_in=radius * UNIT,
+                           length_out=14.0 * UNIT, width_out=9.0 * UNIT)
+        match = "'length_out' must be greater than zero"
+        with pytest.raises(ValueError, match=match):
+            SkyPillAnnulus(SKYCOORD, length_in=10.0 * UNIT,
+                           length_out=radius * UNIT, width_out=9.0 * UNIT)
+        match = "'width_out' must be greater than zero"
+        with pytest.raises(ValueError, match=match):
+            SkyPillAnnulus(SKYCOORD, length_in=10.0 * UNIT,
+                           length_out=14.0 * UNIT, width_out=radius * UNIT)
+
+    def test_length_ordering(self):
+        match = "'length_out' must be greater than 'length_in'"
+        with pytest.raises(ValueError, match=match):
+            SkyPillAnnulus(SKYCOORD, length_in=14.0 * UNIT,
+                           length_out=14.0 * UNIT, width_out=9.0 * UNIT)
+
+    def test_width_out_greater_than_length_out(self):
+        match = "'length_out' must be greater than or equal to 'width_out'"
+        with pytest.raises(ValueError, match=match):
+            SkyPillAnnulus(SKYCOORD, length_in=4.0 * UNIT,
+                           length_out=6.0 * UNIT, width_out=7.0 * UNIT)
+
+    @pytest.mark.parametrize('width_out', [6.0, 5.0])
+    def test_nonpositive_inner_width(self, width_out):
+        match = 'the inner width must be positive'
+        with pytest.raises(ValueError, match=match):
+            SkyPillAnnulus(SKYCOORD, length_in=4.0 * UNIT,
+                           length_out=10.0 * UNIT,
+                           width_out=width_out * UNIT)
+
+    def test_validation_on_mutation(self):
+        aper = SkyPillAnnulus(SKYCOORD, length_in=10.0 * UNIT,
+                              length_out=14.0 * UNIT, width_out=9.0 * UNIT)
+        match = 'the inner width must be positive'
+        with pytest.raises(ValueError, match=match):
+            aper.length_in = 4.0 * UNIT
+        assert aper.length_in == 10.0 * UNIT
+        with pytest.raises(ValueError, match=match):
+            aper.length_out = 20.0 * UNIT
+        assert aper.length_out == 14.0 * UNIT
+        with pytest.raises(ValueError, match=match):
+            aper.width_out = 4.0 * UNIT
+        assert aper.width_out == 9.0 * UNIT
+        aper.length_out = 16.0 * UNIT
+        assert_allclose(aper.width_in.to_value(UNIT), 3.0)
+
+    def test_mixed_angular_units(self):
+        aper = SkyPillAnnulus(SKYCOORD, length_in=10.0 * u.arcsec,
+                              length_out=0.005 * u.deg,
+                              width_out=0.004 * u.deg)
+        assert_allclose(aper.width_in.to_value(u.arcsec), 14.4 - 8.0)
+
+        match = 'the inner width must be positive'
+        with pytest.raises(ValueError, match=match):
+            SkyPillAnnulus(SKYCOORD, length_in=1.0 * u.arcsec,
+                           length_out=0.005 * u.deg,
+                           width_out=0.004 * u.deg)
+
+    def test_width_in(self):
+        aper = SkyPillAnnulus(SKYCOORD, length_in=24.0 * UNIT,
+                              length_out=30.0 * UNIT, width_out=16.0 * UNIT)
+        assert_allclose(aper.width_in.to_value(UNIT), 10.0)
+        with pytest.raises(AttributeError):
+            aper.width_in = 5.0 * UNIT
 
 
 class TestPillAnnulus(BaseTestRotatedPixelAperture):
