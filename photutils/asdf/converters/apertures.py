@@ -12,6 +12,7 @@ __all__ = ['CircularAnnulusConverter',
            'CircularApertureConverter',
            'EllipticalAnnulusConverter',
            'EllipticalApertureConverter',
+           'PillApertureConverter',
            'PolygonApertureConverter',
            'RectangularAnnulusConverter',
            'RectangularApertureConverter',
@@ -118,6 +119,19 @@ class EllipticalAnnulusConverter(_ApertureConverter):
              )
     aperture_params = ('a_in', 'a_out', 'b_out')
     optional_aperture_params = ('b_in', 'theta')
+
+
+class PillApertureConverter(_ApertureConverter):
+    """
+    ASDF converter for pill apertures.
+    """
+
+    tags = ('tag:astropy.org:photutils/aperture/pill_aperture-*',)
+    types = ('photutils.aperture.PillAperture',
+             'photutils.aperture.SkyPillAperture',
+             )
+    aperture_params = ('length', 'width')
+    optional_aperture_params = ('theta',)
 
 
 class PolygonApertureConverter(_ApertureConverter):

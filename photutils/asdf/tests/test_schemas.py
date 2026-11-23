@@ -57,6 +57,7 @@ SIZE_PARAMS = {
     'elliptical_aperture': ('a', 'b'),
     'elliptical_annulus': ('a_in', 'a_out', 'b_in', 'b_out'),
     'polygon_aperture': ('vertex_offsets',),
+    'pill_aperture': ('length', 'width'),
     'rectangular_aperture': ('w', 'h'),
     'rectangular_annulus': ('w_in', 'w_out', 'h_in', 'h_out'),
 }
@@ -253,15 +254,19 @@ def _quantity(value):
 def _sizes(names, *, sky=False):
     """
     Build the size parameters of an aperture in pixel or sky form.
+
+    The pill aperture needs ``length >= width``, so it gets fixed sizes.
     """
+    pill_sizes = {'length': 4.0, 'width': 3.0}
     values = {}
     for index, name in enumerate(names):
+        size = pill_sizes.get(name, index + 3.0)
         if name == 'vertex_offsets':
             values[name] = SKY_OFFSETS if sky else PIXEL_OFFSETS
         elif sky:
-            values[name] = _quantity(index + 3.0)
+            values[name] = _quantity(size)
         else:
-            values[name] = f'{index + 3.0}'
+            values[name] = f'{size}'
     return values
 
 
@@ -315,6 +320,7 @@ def test_mixed_pixel_and_sky_rejected(example):
 REQUIRED_SIZE_PARAMS = {
     'elliptical_aperture': ('a', 'b'),
     'elliptical_annulus': ('a_in', 'a_out', 'b_out'),
+    'pill_aperture': ('length', 'width'),
     'rectangular_aperture': ('w', 'h'),
     'rectangular_annulus': ('w_in', 'w_out', 'h_out'),
 }

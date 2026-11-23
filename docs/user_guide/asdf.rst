@@ -106,6 +106,9 @@ quantities.
     * - ``photutils/aperture/elliptical_annulus-1.0.0``
       - `~photutils.aperture.EllipticalAnnulus`,
         `~photutils.aperture.SkyEllipticalAnnulus`
+    * - ``photutils/aperture/pill_aperture-1.0.0``
+      - `~photutils.aperture.PillAperture`,
+        `~photutils.aperture.SkyPillAperture`
     * - ``photutils/aperture/polygon_aperture-1.0.0``
       - `~photutils.aperture.PolygonAperture`,
         `~photutils.aperture.SkyPolygonAperture`
@@ -160,11 +163,14 @@ of the form::
     tag:astropy.org:photutils/aperture/circular_aperture-1.0.0
     asdf://astropy.org/photutils/schemas/aperture/circular_aperture-1.0.0
 
-and the tags are collected in the extension manifest
-``asdf://astropy.org/photutils/manifests/photutils-1.0.0``. The schemas
-and the manifest ship inside Photutils and are registered with ``asdf``
-automatically, so ``asdf`` can validate a file without any network
-access.
+and the tags are collected in the extension manifests
+``asdf://astropy.org/photutils/manifests/photutils-1.1.0`` and
+``asdf://astropy.org/photutils/manifests/photutils-1.0.0``. The 1.1.0
+manifest adds the pill aperture tag to those of 1.0.0, and the 1.0.0
+manifest is retained so that files written with it remain readable. The
+schemas and the manifests ship inside Photutils and are registered with
+``asdf`` automatically, so ``asdf`` can validate a file without any
+network access.
 
 Tags and schemas are versioned independently of Photutils. A change
 to what a tag stores requires a new tag version, and the converters

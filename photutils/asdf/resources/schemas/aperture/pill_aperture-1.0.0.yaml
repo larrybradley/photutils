@@ -1,0 +1,145 @@
+%YAML 1.1
+---
+$schema: 'http://stsci.edu/schemas/yaml-schema/draft-01'
+id: 'asdf://astropy.org/photutils/schemas/aperture/pill_aperture-1.0.0'
+title: Pill aperture
+description: |
+  ASDF schema for serializing a pill aperture with one or more
+  positions, in pixel or sky coordinates.
+
+examples:
+  - - |
+      A PillAperture with a single position, a length of 5 pixels, a
+      width of 3 pixels, and a rotation angle of 80 degrees.
+    - |
+      !<tag:astropy.org:photutils/aperture/pill_aperture-1.0.0>
+        length: 5.0
+        positions: [10.0, 20.0]
+        theta: !<tag:astropy.org:astropy/coordinates/angle-1.2.0>
+          datatype: float64
+          unit: !unit/unit-1.0.0 deg
+          value: 80.0
+        width: 3.0
+  - - |
+      A SkyPillAperture with a single position, a length of 1 arcsec,
+      a width of 0.5 arcsec, and a position angle of 0 degrees.
+    - |
+      !<tag:astropy.org:photutils/aperture/pill_aperture-1.0.0>
+        length: !unit/quantity-1.3.0
+          datatype: float64
+          unit: !unit/unit-1.0.0 arcsec
+          value: 1.0
+        positions: !<tag:astropy.org:astropy/coordinates/skycoord-1.0.0>
+          dec: !<tag:astropy.org:astropy/coordinates/latitude-1.2.0>
+            datatype: float64
+            unit: !unit/unit-1.0.0 deg
+            value: 30.0
+          frame: icrs
+          ra: !<tag:astropy.org:astropy/coordinates/longitude-1.2.0>
+            datatype: float64
+            unit: !unit/unit-1.0.0 deg
+            value: 10.0
+            wrap_angle: !<tag:astropy.org:astropy/coordinates/angle-1.2.0>
+              datatype: float64
+              unit: !unit/unit-1.0.0 deg
+              value: 360.0
+          representation_type: spherical
+        theta: !unit/quantity-1.3.0
+          datatype: float64
+          unit: !unit/unit-1.0.0 deg
+          value: 0.0
+        width: !unit/quantity-1.3.0
+          datatype: float64
+          unit: !unit/unit-1.0.0 arcsec
+          value: 0.5
+
+type: object
+properties:
+  positions:
+    title: Aperture position(s).
+    description: |
+      The coordinates of the aperture center(s) in one of the following
+      formats.
+
+      If a PillAperture in pixel coordinates:
+
+        * single ``(x, y)`` pair as an array
+        * `numpy.ndarray` of ``(x, y)`` pairs
+
+      If a SkyPillAperture:
+
+        * `astropy.coordinates.SkyCoord` object
+    anyOf:
+      - type: array
+        items:
+          type: number
+        maxItems: 2
+        minItems: 2
+      - tag: 'tag:stsci.edu:asdf/core/ndarray-1.*'
+      - tag: 'tag:astropy.org:astropy/coordinates/skycoord-1.0.0'
+  length:
+    title: Length.
+    description: |
+      PillAperture: the full length of the pill in pixels, measured tip
+      to tip along the long axis. For ``theta=0`` the long axis is along
+      the x-axis.
+      SkyPillAperture: the full length of the pill in angular units,
+      measured tip to tip along the long axis. For ``theta=0`` the long
+      axis is along the North-South axis.
+    anyOf:
+      - type: number
+      - tag: 'tag:stsci.edu:asdf/unit/quantity-1.*'
+  width:
+    title: Width.
+    description: |
+      PillAperture: the full width of the pill in pixels, measured
+      across the long axis. This is the diameter of the rounded ends.
+      SkyPillAperture: the full width of the pill in angular units,
+      measured across the long axis. This is the diameter of the
+      rounded ends.
+    anyOf:
+      - type: number
+      - tag: 'tag:stsci.edu:asdf/unit/quantity-1.*'
+  theta:
+    title: Rotation angle.
+    description: |
+      PillAperture: the rotation angle of the long axis from the
+      positive x-axis, as an angular quantity or as a number in
+      radians. The rotation angle increases counterclockwise.
+      SkyPillAperture: the position angle (in angular units) of the
+      long axis. For a right-handed world coordinate system, the
+      position angle increases counterclockwise from North (PA=0).
+    anyOf:
+      - type: number
+      - tag: 'tag:stsci.edu:asdf/unit/quantity-1.*'
+      - tag: 'tag:astropy.org:astropy/coordinates/angle-1.*'
+required: [positions, length, width]
+additionalProperties: false
+# PillAperture and SkyPillAperture share a tag, so this requires a file
+# to use pixel values or angular quantities consistently. ``theta`` is
+# constrained only in the sky branch because PillAperture also accepts
+# an angular quantity.
+oneOf:
+  - title: Pixel coordinates
+    properties:
+      positions:
+        anyOf:
+          - type: array
+          - tag: 'tag:stsci.edu:asdf/core/ndarray-1.*'
+      length:
+        type: number
+      width:
+        type: number
+  - title: Sky coordinates
+    properties:
+      positions:
+        tag: 'tag:astropy.org:astropy/coordinates/skycoord-1.0.0'
+      length:
+        tag: 'tag:stsci.edu:asdf/unit/quantity-1.*'
+      width:
+        tag: 'tag:stsci.edu:asdf/unit/quantity-1.*'
+      theta:
+        anyOf:
+          - tag: 'tag:stsci.edu:asdf/unit/quantity-1.*'
+          - tag: 'tag:astropy.org:astropy/coordinates/angle-1.*'
+...

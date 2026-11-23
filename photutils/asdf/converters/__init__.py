@@ -23,6 +23,7 @@ if _ASDF_INSTALLED:
                             CircularApertureConverter,
                             EllipticalAnnulusConverter,
                             EllipticalApertureConverter,
+                            PillApertureConverter,
                             PolygonApertureConverter,
                             RectangularAnnulusConverter,
                             RectangularApertureConverter)
@@ -31,6 +32,7 @@ if _ASDF_INSTALLED:
                 'CircularApertureConverter',
                 'EllipticalAnnulusConverter',
                 'EllipticalApertureConverter',
+                'PillApertureConverter',
                 'PolygonApertureConverter',
                 'RectangularAnnulusConverter',
                 'RectangularApertureConverter',

@@ -34,6 +34,7 @@ APERTURE_EXAMPLES = [
     examples.sky_elliptical_annulus,
     examples.sky_elliptical_aperture,
     examples.sky_polygon_aperture,
+    examples.sky_pill_aperture,
     examples.sky_rectangular_aperture,
     examples.sky_rectangular_annulus,
 ]
@@ -42,6 +43,7 @@ APERTURE_EXAMPLES = [
 THETA_EXAMPLES = [
     examples.elliptical_annulus,
     examples.elliptical_aperture,
+    examples.pill_aperture,
     examples.rectangular_annulus,
     examples.rectangular_aperture,
 ]

@@ -48,6 +48,7 @@ parameters = {
     'EllipticalAnnulus': ['positions', 'a_in', 'a_out',
                           'b_in', 'b_out', 'theta'],
     'PolygonAperture': ['positions', 'vertex_offsets'],
+    'PillAperture': ['positions', 'length', 'width', 'theta'],
     'RectangularAperture': ['positions', 'w', 'h', 'theta'],
     'RectangularAnnulus': ['positions', 'w_in', 'w_out',
                            'h_in', 'h_out', 'theta'],
@@ -405,6 +406,29 @@ def sky_polygon_aperture():
                                r * np.sin(theta)]) * u.arcsec
     return (aperture.SkyPolygonAperture(sky, offsets),
             parameters['PolygonAperture'])
+
+
+def pill_aperture(theta):
+    """
+    Pill aperture in pixel space.
+
+    Parameters
+    ----------
+    theta : float, `~astropy.units.Quantity`, `~astropy.coordinates.Angle`
+        Rotation angle.
+    """
+    return (aperture.PillAperture((10, 20), 5, 3, theta=theta),
+            parameters['PillAperture'])
+
+
+def sky_pill_aperture():
+    """
+    Pill aperture on the sky.
+    """
+    positions = SkyCoord(ra=[10.0, 20.0], dec=[30.0, 40.0], unit='deg')
+    return (aperture.SkyPillAperture(positions, 1.0 * u.arcsec,
+                                     0.5 * u.arcsec),
+            parameters['PillAperture'])
 
 
 def rectangular_aperture(theta):

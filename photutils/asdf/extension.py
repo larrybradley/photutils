@@ -25,6 +25,7 @@ PHOTUTILS_APERTURE_CONVERTERS = [
     apertures.CircularAnnulusConverter(),
     apertures.EllipticalApertureConverter(),
     apertures.EllipticalAnnulusConverter(),
+    apertures.PillApertureConverter(),
     apertures.PolygonApertureConverter(),
     apertures.RectangularApertureConverter(),
     apertures.RectangularAnnulusConverter(),
@@ -61,6 +62,7 @@ PHOTUTILS_CONVERTERS = PHOTUTILS_PSF_CONVERTERS + PHOTUTILS_APERTURE_CONVERTERS
 # The order here is important. asdf will prefer to use extensions
 # that occur earlier in the list.
 PHOTUTILS_MANIFEST_URIS = [
+    'asdf://astropy.org/photutils/manifests/photutils-1.1.0',
     'asdf://astropy.org/photutils/manifests/photutils-1.0.0',
 ]
 
