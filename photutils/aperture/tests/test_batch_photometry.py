@@ -14,6 +14,7 @@ from numpy.testing import assert_allclose
 from photutils.aperture.circle import CircularAnnulus, CircularAperture
 from photutils.aperture.core import PixelAperture, _enable_batch_photometry
 from photutils.aperture.ellipse import EllipticalAnnulus, EllipticalAperture
+from photutils.aperture.pill import PillAperture
 from photutils.aperture.polygon import PolygonAperture
 from photutils.aperture.rectangle import (RectangularAnnulus,
                                           RectangularAperture)
@@ -48,6 +49,8 @@ APERTURES = [
     pytest.param(RectangularAnnulus(POSITIONS, w_in=3.0, w_out=8.0, h_out=5.0,
                                     theta=2.2),
                  id='rectangular_annulus'),
+    pytest.param(PillAperture(POSITIONS, length=12.0, width=5.0, theta=0.5),
+                 id='pill'),
     pytest.param(PolygonAperture.from_regular_polygon(POSITIONS, 6,
                                                       radius=5.5),
                  id='polygon_hexagon'),

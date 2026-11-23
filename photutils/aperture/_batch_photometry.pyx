@@ -32,13 +32,13 @@ from photutils.aperture._batch_results import BatchApertureSums
 
 from photutils.aperture._batch_outside cimport _ShapeSpec, outside_weight
 from photutils.aperture._batch_overlap cimport (
-    _CIRCLE, _CIRCULAR_ANNULUS, _ELLIPSE, _ELLIPTICAL_ANNULUS, _POLYGON,
+    _CIRCLE, _CIRCULAR_ANNULUS, _ELLIPSE, _ELLIPTICAL_ANNULUS, _PILL, _POLYGON,
     _RECTANGLE, _RECTANGULAR_ANNULUS, _SEG_CORRECTED, _SEG_NEIGHBOR,
     _SEG_UNCORRECTED, _circle_pixel_frac, _circular_annulus_pixel_frac,
     _classify_seg_pixel, _ellipse_pixel_frac, _elliptical_annulus_pixel_frac,
-    _polygon_pixel_frac, _presize_packed_offsets, _rect_pixel_frac,
-    _rectangular_annulus_pixel_frac, _resolve_seg_pixel, _round_half_away,
-    _seg_method_active, _source_grid_setup, real_t, seg_t)
+    _pill_pixel_frac, _polygon_pixel_frac, _presize_packed_offsets,
+    _rect_pixel_frac, _rectangular_annulus_pixel_frac, _resolve_seg_pixel,
+    _round_half_away, _seg_method_active, _source_grid_setup, real_t, seg_t)
 from photutils.geometry._polygon_overlap cimport (convex_edge_normals,
                                                   polygon_work_partition,
                                                   polygon_work_size)
@@ -64,6 +64,7 @@ SHAPE_ELLIPTICAL_ANNULUS = _ELLIPTICAL_ANNULUS
 SHAPE_RECTANGLE = _RECTANGLE
 SHAPE_RECTANGULAR_ANNULUS = _RECTANGULAR_ANNULUS
 SHAPE_POLYGON = _POLYGON
+SHAPE_PILL = _PILL
 
 # Column indices of the per-source ``flag_counts`` arrays returned by
 # the batch drivers (see ``batch_aperture_sums`` and
@@ -190,7 +191,8 @@ def batch_aperture_sums(const real_t[:, ::1] data, const real_t[:, ::1] error,
     shape_code : int
         The aperture shape code: 0=circle, 1=circular annulus,
         2=ellipse, 3=elliptical annulus, 4=rectangle, 5=rectangular
-        annulus, 6=polygon (see the module-level ``SHAPE_*`` constants).
+        annulus, 6=polygon, 7=pill (see the module-level ``SHAPE_*``
+        constants).
 
     params : 1D ndarray of float64 (C-contiguous) or `None`
         The aperture shape parameters, shared by all source positions.
@@ -205,6 +207,7 @@ def batch_aperture_sums(const real_t[:, ::1] data, const real_t[:, ::1] error,
         * polygon: the flattened counterclockwise vertex offsets
           ``(x0, y0, x1, y1, ...)`` relative to each position (at least
           3 vertices, i.e., 6 values)
+        * pill: ``(length, width, theta)``
 
         where ``theta`` is in radians.
 
@@ -434,6 +437,7 @@ def batch_aperture_sums(const real_t[:, ::1] data, const real_t[:, ::1] error,
     cdef double half_width_out = 0.0, half_height_out = 0.0
     cdef double bbox_dx_in = 0.0, bbox_dy_in = 0.0
     cdef double bbox_dx_out = 0.0, bbox_dy_out = 0.0
+    cdef double half_straight = 0.0, radius = 0.0
     cdef double poly_x_in[4]
     cdef double poly_y_in[4]
     cdef double poly_x_out[4]
@@ -514,6 +518,12 @@ def batch_aperture_sums(const real_t[:, ::1] data, const real_t[:, ::1] error,
                               + half_height_in * fabs(sin_theta))
                 bbox_dy_in = (half_width_in * fabs(sin_theta)
                               + half_height_in * fabs(cos_theta))
+        elif shape_code == _PILL:
+            half_straight = 0.5 * (params[0] - params[1])
+            radius = 0.5 * params[1]
+            theta = params[2]
+            cos_theta = cos(theta)
+            sin_theta = sin(theta)
         elif shape_code == _POLYGON:
             # ``params`` holds the flattened counterclockwise vertex
             # offsets (x0, y0, x1, y1, ...).
@@ -562,6 +572,8 @@ def batch_aperture_sums(const real_t[:, ::1] data, const real_t[:, ::1] error,
     sp.bbox_dy_in = bbox_dy_in
     sp.bbox_dx_out = bbox_dx_out
     sp.bbox_dy_out = bbox_dy_out
+    sp.half_straight = half_straight
+    sp.radius = radius
     sp.poly_x_in = poly_x_in
     sp.poly_y_in = poly_y_in
     sp.poly_x_out = poly_x_out
@@ -731,6 +743,11 @@ def batch_aperture_sums(const real_t[:, ::1] data, const real_t[:, ::1] error,
                             bbox_dx_out, bbox_dy_out, poly_x_in, poly_y_in,
                             poly_x_out, poly_y_out, buf_a_x, buf_a_y,
                             buf_b_x, buf_b_y, use_exact, subpixels)
+                    elif shape_code == _PILL:
+                        frac = _pill_pixel_frac(
+                            pxmin, pymin, dx, dy, pixel_radius,
+                            half_straight, radius, cos_theta, sin_theta,
+                            use_exact, subpixels)
                     else:
                         frac = _polygon_pixel_frac(
                             pxmin, pymin, dx, dy, pixel_radius,

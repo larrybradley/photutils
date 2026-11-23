@@ -7,9 +7,10 @@ import astropy.units as u
 import numpy as np
 import pytest
 from astropy.coordinates import SkyCoord
-from numpy.testing import assert_allclose
+from numpy.testing import assert_allclose, assert_array_equal
 
-from photutils.aperture import (CircularAperture, RectangularAperture,
+from photutils.aperture import (AperturePhotometry, ApertureStats,
+                                CircularAperture, RectangularAperture,
                                 aperture_photometry)
 from photutils.aperture.pill import PillAperture, SkyPillAperture
 from photutils.aperture.tests.test_aperture_common import (
@@ -105,6 +106,38 @@ class TestPillAperture(BaseTestRotatedPixelAperture):
                             theta=0.6)
         tbl = aperture_photometry(np.ones((50, 50)), aper)
         assert_allclose(tbl['aperture_sum'][0], aper.area, rtol=1e-10)
+
+
+class TestPillBatch:
+    data = np.random.default_rng(0).normal(10.0, 1.0, (60, 60))
+    positions = ((25.3, 24.6), (2.2, 30.1), (58.9, 58.2), (-20.0, 5.0))
+
+    @pytest.mark.parametrize('method', ['exact', 'center', 'subpixel'])
+    def test_batch_matches_mask(self, method):
+        aper = PillAperture(self.positions, length=12.0, width=5.0,
+                            theta=0.5)
+        assert aper._batch_shape_params() is not None
+        tbl = aperture_photometry(self.data, aper, method=method)
+        expected = [mask.multiply(self.data).sum()
+                    if mask.cutout(self.data) is not None else np.nan
+                    for mask in aper.to_mask(method=method)]
+        assert_allclose(tbl['aperture_sum'], expected, rtol=1e-13,
+                        equal_nan=True)
+
+    def test_stats_match_mask(self):
+        aper = PillAperture(self.positions[:3], length=12.0, width=5.0,
+                            theta=0.5)
+        stats = ApertureStats(self.data, aper)
+        expected = [mask.multiply(self.data).sum()
+                    for mask in aper.to_mask()]
+        assert_allclose(stats.sum, expected, rtol=1e-13)
+
+    def test_flags_match_rectangle(self):
+        pill = PillAperture(self.positions, length=12.0, width=5.0)
+        rect = RectangularAperture(self.positions, w=12.0, h=5.0)
+        flags_pill = AperturePhotometry(self.data, pill).flags
+        flags_rect = AperturePhotometry(self.data, rect).flags
+        assert_array_equal(flags_pill, flags_rect)
 
 
 class TestSkyPillAperture(BaseTestAperture):

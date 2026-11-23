@@ -21,7 +21,7 @@ from numpy.testing import assert_allclose, assert_array_equal
 import photutils.aperture.stats as stats_mod
 from photutils.aperture._batch_photometry import (SHAPE_CIRCLE,
                                                   SHAPE_CIRCULAR_ANNULUS,
-                                                  SHAPE_ELLIPSE,
+                                                  SHAPE_ELLIPSE, SHAPE_PILL,
                                                   SHAPE_RECTANGLE)
 from photutils.aperture._batch_stats import batch_aperture_gather
 from photutils.aperture.circle import CircularAperture
@@ -52,6 +52,7 @@ _GATHER_SPECS = [
     (SHAPE_CIRCULAR_ANNULUS, [5.0, 8.0], 8.0, 8.0),
     (SHAPE_ELLIPSE, [8.0, 5.0, 0.7], 8.0, 8.0),
     (SHAPE_RECTANGLE, [12.0, 7.0, 0.5], 7.0, 7.0),
+    (SHAPE_PILL, [12.0, 5.0, 0.5], 8.0, 8.0),
 ]
 
 

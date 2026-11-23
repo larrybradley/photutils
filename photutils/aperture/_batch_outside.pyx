@@ -18,9 +18,10 @@ Python builds.
 """
 
 from photutils.aperture._batch_overlap cimport (
-    _CIRCLE, _CIRCULAR_ANNULUS, _ELLIPSE, _ELLIPTICAL_ANNULUS, _RECTANGLE,
-    _RECTANGULAR_ANNULUS, _circle_pixel_frac, _circular_annulus_pixel_frac,
-    _ellipse_pixel_frac, _elliptical_annulus_pixel_frac, _polygon_pixel_frac,
+    _CIRCLE, _CIRCULAR_ANNULUS, _ELLIPSE, _ELLIPTICAL_ANNULUS, _PILL,
+    _RECTANGLE, _RECTANGULAR_ANNULUS, _circle_pixel_frac,
+    _circular_annulus_pixel_frac, _ellipse_pixel_frac,
+    _elliptical_annulus_pixel_frac, _pill_pixel_frac, _polygon_pixel_frac,
     _rect_pixel_frac, _rectangular_annulus_pixel_frac)
 
 __all__ = []
@@ -68,6 +69,11 @@ cdef inline double _shape_pixel_frac(const _ShapeSpec *sp, double pxmin,
             sp.bbox_dx_out, sp.bbox_dy_out, sp.poly_x_in, sp.poly_y_in,
             sp.poly_x_out, sp.poly_y_out, sp.buf_a_x, sp.buf_a_y,
             sp.buf_b_x, sp.buf_b_y, sp.use_exact, sp.subpixels)
+    if sp.shape_code == _PILL:
+        return _pill_pixel_frac(
+            pxmin, pymin, dx, dy, pixel_radius, sp.half_straight,
+            sp.radius, sp.cos_theta, sp.sin_theta, sp.use_exact,
+            sp.subpixels)
     return _polygon_pixel_frac(
         pxmin, pymin, dx, dy, pixel_radius, sp.poly_x, sp.poly_y,
         sp.n_poly, sp.pedge_nx, sp.pedge_ny, sp.pedge_c,

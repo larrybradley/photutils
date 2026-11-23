@@ -10,11 +10,13 @@ import astropy.units as u
 import numpy as np
 from astropy.coordinates import Angle
 
+from photutils.aperture._batch_photometry import SHAPE_PILL
 from photutils.aperture.attributes import (PixelPositions, PositiveScalar,
                                            PositiveScalarAngle, ScalarAngle,
                                            ScalarAngleOrValue,
                                            SkyCoordPositions)
 from photutils.aperture.core import (PixelAperture, SkyAperture,
+                                     _enable_batch_photometry,
                                      _RotatableApertureMixin,
                                      _update_method_subpixels_docstring)
 from photutils.geometry._pill_overlap import pill_overlap_grid
@@ -24,6 +26,7 @@ from photutils.utils._wcs_helpers import (pixel_shape_to_sky_svd,
 __all__ = ['PillAperture', 'SkyPillAperture']
 
 
+@_enable_batch_photometry
 class PillAperture(_RotatableApertureMixin, PixelAperture):
     """
     A pill-shaped aperture defined in pixel coordinates.
@@ -107,6 +110,9 @@ class PillAperture(_RotatableApertureMixin, PixelAperture):
         theta_rad = self._theta_rad
         return (half_straight * abs(math.cos(theta_rad)) + radius,
                 half_straight * abs(math.sin(theta_rad)) + radius)
+
+    def _batch_shape_params(self):
+        return SHAPE_PILL, (self.length, self.width, self._theta_rad)
 
     @cached_property
     def area(self):

@@ -11,8 +11,8 @@ from numpy.testing import assert_allclose, assert_array_equal
 from photutils.aperture import (APERTURE_FLAGS, AperturePhotometry,
                                 ApertureStats, CircularAnnulus,
                                 CircularAperture, EllipticalAperture,
-                                PolygonAperture, RectangularAperture,
-                                aperture_photometry)
+                                PillAperture, PolygonAperture,
+                                RectangularAperture, aperture_photometry)
 from photutils.aperture.flags import _counts_to_flag_bits
 from photutils.aperture.tests.conftest import (UNIT_SHAPE,
                                                NoBatchCircularAperture)
@@ -26,6 +26,9 @@ APERTURE_FACTORIES = [
                  id='ellipse'),
     pytest.param(lambda xy: RectangularAperture(xy, w=5.0, h=4.0, theta=0.3),
                  id='rectangle'),
+    pytest.param(lambda xy: PillAperture(xy, length=5.0, width=4.0,
+                                         theta=0.3),
+                 id='pill'),
 ]
 
 METHODS = [('exact', 5), ('center', 1), ('subpixel', 4)]

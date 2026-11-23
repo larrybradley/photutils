@@ -27,6 +27,8 @@ ctypedef struct _ShapeSpec:
     double bbox_dy_in
     double bbox_dx_out
     double bbox_dy_out
+    double half_straight
+    double radius
     double *poly_x_in
     double *poly_y_in
     double *poly_x_out

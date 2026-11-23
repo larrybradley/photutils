@@ -21,6 +21,7 @@ are safe to call without the GIL, including on free-threaded Python
 builds.
 """
 
+from photutils.geometry._pill_overlap cimport pill_frac_core
 from photutils.geometry._polygon_overlap cimport (
     convex_polygon_pixel_overlap, convex_polygon_pixel_subpixel,
     polygon_pixel_overlap)
@@ -66,6 +67,7 @@ cdef enum:
     _RECTANGLE = 4
     _RECTANGULAR_ANNULUS = 5
     _POLYGON = 6
+    _PILL = 7
 
 
 cdef inline Py_ssize_t _round_half_away(double x) noexcept nogil:
@@ -1105,6 +1107,61 @@ cdef inline double _rectangular_annulus_pixel_frac(
                               ayrot, poly_x_in, poly_y_in, buf_a_x, buf_a_y,
                               buf_b_x, buf_b_y, use_exact, subpixels))
     return frac if frac > 0.0 else 0.0
+
+
+cdef inline double _pill_pixel_frac(double pxmin, double pymin,
+                                    double dx, double dy, double margin,
+                                    double half_straight, double radius,
+                                    double cos_theta, double sin_theta,
+                                    int use_exact,
+                                    int subpixels) noexcept nogil:
+    """
+    Fraction of a single pixel that overlaps a pill with straight
+    section half length ``half_straight`` and end radius ``radius``,
+    rotated by ``theta`` (given as ``cos_theta``/``sin_theta``) and
+    centered on the origin.
+
+    This calls ``pill_frac_core``, the same per-pixel core used by
+    ``pill_overlap_grid``, so the result is identical to the grid
+    function.
+
+    Parameters
+    ----------
+    pxmin, pymin : double
+        The lower edges of the pixel, relative to the pill center.
+
+    dx, dy : double
+        The pixel width and height.
+
+    margin : double
+        Half the pixel diagonal.
+
+    half_straight : double
+        Half the length of the straight section.
+
+    radius : double
+        The radius of the pill ends.
+
+    cos_theta, sin_theta : double
+        The cosine and sine of the pill rotation angle ``theta``.
+
+    use_exact : int
+        Set to 1 to use the exact geometric overlap calculation. Set
+        to 0 to use subpixel sampling instead.
+
+    subpixels : int
+        The number of subpixels (per dimension) used when
+        ``use_exact`` is 0.
+
+    Returns
+    -------
+    frac : double
+        The fraction (0 to 1) of the pixel's area that overlaps the
+        pill.
+    """
+    return pill_frac_core(pxmin, pymin, pxmin + dx, pymin + dy, dx, dy,
+                          margin, half_straight, radius, cos_theta,
+                          sin_theta, use_exact, subpixels)
 
 
 cdef inline double _polygon_pixel_frac(double pxmin, double pymin,

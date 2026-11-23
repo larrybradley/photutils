@@ -11,15 +11,15 @@ from numpy.testing import assert_allclose, assert_array_equal
 
 from photutils.aperture import (CircularAnnulus, CircularAperture,
                                 EllipticalAnnulus, EllipticalAperture,
-                                PolygonAperture, RectangularAnnulus,
-                                RectangularAperture)
+                                PillAperture, PolygonAperture,
+                                RectangularAnnulus, RectangularAperture)
 from photutils.aperture._batch_photometry import (FLAG_COL_BBOX_CLIPPED,
                                                   FLAG_COL_N_PIXELS,
                                                   SHAPE_CIRCLE,
                                                   SHAPE_CIRCULAR_ANNULUS,
                                                   SHAPE_ELLIPSE,
                                                   SHAPE_ELLIPTICAL_ANNULUS,
-                                                  SHAPE_RECTANGLE,
+                                                  SHAPE_PILL, SHAPE_RECTANGLE,
                                                   SHAPE_RECTANGULAR_ANNULUS,
                                                   batch_aperture_sums)
 from photutils.aperture._common import batch_mask_plane
@@ -53,6 +53,7 @@ _BATCH_SPECS = [
     (SHAPE_ELLIPTICAL_ANNULUS, [4.0, 2.0, 8.0, 5.0, 0.7], 8.0, 8.0),
     (SHAPE_RECTANGLE, [12.0, 7.0, 0.5], 7.0, 7.0),
     (SHAPE_RECTANGULAR_ANNULUS, [6.0, 4.0, 12.0, 7.0, 0.5], 7.0, 7.0),
+    (SHAPE_PILL, [12.0, 5.0, 0.5], 8.0, 8.0),
 ]
 
 
@@ -277,6 +278,7 @@ _OUTSIDE_WEIGHT_APERTURES = [
     lambda pos: RectangularAperture(pos, w=12.0, h=5.0, theta=0.5),
     lambda pos: RectangularAnnulus(pos, w_in=5.0, w_out=12.0, h_out=5.0,
                                    theta=0.5),
+    lambda pos: PillAperture(pos, length=12.0, width=5.0, theta=0.5),
     # A nonconvex (L-shaped) polygon
     lambda pos: PolygonAperture(pos, [(-6, -6), (6, -6), (6, -1),
                                       (-1, -1), (-1, 6), (-6, 6)]),
