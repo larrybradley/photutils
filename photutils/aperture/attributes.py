@@ -45,6 +45,13 @@ class ApertureAttribute:
         if not isinstance(value, (u.Quantity, SkyCoord)):
             value = float(value)
         self._validate_ordered_pairs(instance, value)
+        # Owner classes can define ``_validate_assignment(name, value)``
+        # to check relations among more than two parameters. It runs
+        # before the value is stored, so a failed check leaves the
+        # instance unchanged.
+        validate_assignment = getattr(instance, '_validate_assignment', None)
+        if validate_assignment is not None:
+            validate_assignment(self.name, value)
         # No need to reset if not already in the instance dict
         if self.name in instance.__dict__:
             self._reset_cached_properties(instance)

@@ -23,7 +23,59 @@ from photutils.geometry._pill_overlap import pill_overlap_grid
 from photutils.utils._wcs_helpers import (pixel_shape_to_sky_svd,
                                           sky_shape_to_pixel_svd)
 
-__all__ = ['PillAperture', 'SkyPillAperture']
+__all__ = ['PillAnnulus', 'PillAperture', 'SkyPillAperture']
+
+
+def _pill_outline(half_straight, radius):
+    """
+    Return the outline of a pill in the pill frame.
+
+    The outline is the right cap, the top side, the left cap, and the
+    bottom side. The long axis lies along the x-axis and the pill is
+    centered on the origin.
+
+    Parameters
+    ----------
+    half_straight : float
+        Half the length of the straight section between the cap
+        centers.
+
+    radius : float
+        The radius of the semicircular caps.
+
+    Returns
+    -------
+    vertices : `~numpy.ndarray`
+        The path vertices, with shape ``(N, 2)``.
+
+    codes : `~numpy.ndarray`
+        The matplotlib path codes, with shape ``(N,)``.
+    """
+    # matplotlib is an optional dependency
+    from matplotlib.path import Path
+
+    right = Path.arc(-90.0, 90.0)
+    left = Path.arc(90.0, 270.0)
+    vertices = np.concatenate((right.vertices * radius
+                               + [half_straight, 0.0],
+                               left.vertices * radius
+                               + [-half_straight, 0.0],
+                               [[0.0, 0.0]]))
+    codes = np.concatenate((right.codes, left.codes, [Path.CLOSEPOLY]))
+    # The second arc starts with a straight side, not a new subpath.
+    codes[len(right.codes)] = Path.LINETO
+    return vertices, codes
+
+
+def _rotation_matrix(theta_rad):
+    """
+    Return the matrix that rotates row-vector vertices counterclockwise
+    by ``theta_rad``.
+    """
+    cos_theta = math.cos(theta_rad)
+    sin_theta = math.sin(theta_rad)
+    return np.array([[cos_theta, sin_theta],
+                     [-sin_theta, cos_theta]])
 
 
 @_enable_batch_photometry
@@ -151,28 +203,9 @@ class PillAperture(_RotatableApertureMixin, PixelAperture):
         xy_positions, patch_kwargs = self._define_patch_params(origin=origin,
                                                                **kwargs)
 
-        half_straight = 0.5 * (self.length - self.width)
-        radius = 0.5 * self.width
-
-        # The outline in the pill frame is the right cap, the top side,
-        # the left cap, and the bottom side.
-        right = Path.arc(-90.0, 90.0)
-        left = Path.arc(90.0, 270.0)
-        vertices = np.concatenate((right.vertices * radius
-                                   + [half_straight, 0.0],
-                                   left.vertices * radius
-                                   + [-half_straight, 0.0],
-                                   [[0.0, 0.0]]))
-        codes = np.concatenate((right.codes, left.codes, [Path.CLOSEPOLY]))
-        # The second arc starts with a straight side, not a new subpath.
-        codes[len(right.codes)] = Path.LINETO
-
-        theta_rad = self._theta_rad
-        cos_theta = math.cos(theta_rad)
-        sin_theta = math.sin(theta_rad)
-        rotation = np.array([[cos_theta, sin_theta],
-                             [-sin_theta, cos_theta]])
-        vertices = vertices @ rotation
+        vertices, codes = _pill_outline(0.5 * (self.length - self.width),
+                                        0.5 * self.width)
+        vertices = vertices @ _rotation_matrix(self._theta_rad)
 
         patches = [mpatches.PathPatch(Path(vertices + xy_position, codes),
                                       **patch_kwargs)
@@ -240,6 +273,241 @@ class PillAperture(_RotatableApertureMixin, PixelAperture):
         width = Angle(sky_width, 'arcsec')
         return SkyPillAperture(positions=positions, length=length,
                                width=width, theta=sky_angle)
+
+
+class _PillAnnulusMixin:
+    """
+    Mixin that provides the derived inner width and the cross-parameter
+    validation of a constant-thickness pill annulus.
+
+    The annulus is the region between an outer pill and an inner pill
+    that share the same straight section and are offset by a constant
+    thickness. The inner width is ``width_out - (length_out -
+    length_in)``.
+    """
+
+    @property
+    def width_in(self):
+        """
+        The full width of the inner pill, which is the diameter of its
+        semicircular ends.
+        """
+        return self.width_out - (self.length_out - self.length_in)
+
+    def _validate_assignment(self, name, value):
+        """
+        Validate that the inner width stays positive.
+
+        The check is skipped until ``length_in``, ``length_out``, and
+        ``width_out`` are all set.
+        """
+        values = {key: self.__dict__.get(key)
+                  for key in ('length_in', 'length_out', 'width_out')}
+        values[name] = value
+        if any(val is None for val in values.values()):
+            return
+
+        thickness = values['length_out'] - values['length_in']
+        if not thickness < values['width_out']:
+            msg = ("'length_out' - 'length_in' must be less than "
+                   "'width_out' (the inner width must be positive)")
+            raise ValueError(msg)
+
+
+@_enable_batch_photometry
+class PillAnnulus(_PillAnnulusMixin, _RotatableApertureMixin, PixelAperture):
+    """
+    A pill-shaped annulus aperture defined in pixel coordinates.
+
+    The annulus is the region between an outer pill and a smaller inner
+    pill. Both pills share the same center, orientation, and straight
+    section, so the annulus has a constant thickness of ``(length_out -
+    length_in) / 2``. The inner width is derived as ``width_out -
+    (length_out - length_in)``. The aperture has a single fixed
+    size/shape, but it can have multiple positions (see the
+    ``positions`` input).
+
+    Parameters
+    ----------
+    positions : array_like
+        The pixel coordinates of the aperture center(s) in one of the
+        following formats:
+
+        * single ``(x, y)`` pair as a tuple, list, or `~numpy.ndarray`
+        * tuple, list, or `~numpy.ndarray` of ``(x, y)`` pairs
+
+    length_in : float
+        The full length of the inner pill in pixels, measured from tip
+        to tip. For ``theta=0`` the long axis is along the x-axis.
+
+    length_out : float
+        The full length of the outer pill in pixels, measured from tip
+        to tip. It must be greater than ``length_in`` and greater than
+        or equal to ``width_out``.
+
+    width_out : float
+        The full width of the outer pill in pixels. The difference
+        ``length_out - length_in`` must be less than ``width_out`` so
+        that the inner width is positive.
+
+    theta : float or `~astropy.units.Quantity`, optional
+        The rotation angle of the long axis as an angular quantity
+        (`~astropy.units.Quantity` or `~astropy.coordinates.Angle`) or
+        value in radians (as a float) from the positive x-axis. The
+        rotation angle increases counterclockwise.
+
+    Raises
+    ------
+    ValueError : `ValueError`
+        If any of ``length_in``, ``length_out``, or ``width_out`` is
+        not positive, if ``length_in`` is not less than ``length_out``,
+        if ``length_out`` is less than ``width_out``, or if
+        ``length_out - length_in`` is not less than ``width_out``.
+
+    Examples
+    --------
+    >>> from astropy.coordinates import Angle
+    >>> from photutils.aperture import PillAnnulus
+
+    >>> theta = Angle(80, 'deg')
+    >>> aper = PillAnnulus([10.0, 20.0], 8.0, 12.0, 6.0)
+    >>> aper = PillAnnulus((10.0, 20.0), 8.0, 12.0, 6.0, theta=theta)
+
+    >>> pos1 = (10.0, 20.0)  # (x, y)
+    >>> pos2 = (30.0, 40.0)
+    >>> pos3 = (50.0, 60.0)
+    >>> aper = PillAnnulus([pos1, pos2, pos3], 8.0, 12.0, 6.0)
+    >>> aper = PillAnnulus((pos1, pos2, pos3), 8.0, 12.0, 6.0,
+    ...                    theta=theta)
+    """
+
+    _params = ('positions', 'length_in', 'length_out', 'width_out', 'theta')
+    _ordered_pairs = (('length_in', 'length_out'),)
+    _ordered_pairs_inclusive = (('width_out', 'length_out'),)
+    positions = PixelPositions('The center pixel position(s).')
+    length_in = PositiveScalar('The inner full length in pixels, tip to '
+                               'tip.')
+    length_out = PositiveScalar('The outer full length in pixels, tip to '
+                                'tip.')
+    width_out = PositiveScalar('The outer full width in pixels.')
+    theta = ScalarAngleOrValue('The counterclockwise rotation angle as an '
+                               'angular Quantity or a value in radians from '
+                               'the positive x-axis.')
+
+    def __init__(self, positions, length_in, length_out, width_out, *,
+                 theta=0.0):
+        self.positions = positions
+        self.length_in = length_in
+        self.length_out = length_out
+        self.width_out = width_out
+        self.theta = theta
+
+    @cached_property
+    def _xy_extents(self):
+        """
+        The half-width and half-height of the bounding box of the outer
+        pill.
+        """
+        half_straight = 0.5 * (self.length_out - self.width_out)
+        radius = 0.5 * self.width_out
+        theta_rad = self._theta_rad
+        return (half_straight * abs(math.cos(theta_rad)) + radius,
+                half_straight * abs(math.sin(theta_rad)) + radius)
+
+    @cached_property
+    def area(self):
+        """
+        The exact geometric area of the aperture shape.
+        """
+        straight = self.length_out - self.width_out
+        thickness = 0.5 * (self.length_out - self.length_in)
+        radius_out = 0.5 * self.width_out
+        radius_in = 0.5 * self.width_in
+        return (2.0 * straight * thickness
+                + np.pi * (radius_out**2 - radius_in**2))
+
+    def _to_patch(self, *, origin=(0, 0), **kwargs):
+        """
+        Return a `~matplotlib.patches.Patch` for the aperture.
+
+        Parameters
+        ----------
+        origin : array_like, optional
+            The ``(x, y)`` position of the origin of the displayed
+            image.
+
+        **kwargs : dict, optional
+            Any keyword arguments accepted by
+            `matplotlib.patches.Patch`.
+
+        Returns
+        -------
+        patch : `~matplotlib.patches.Patch` or list of \
+                `~matplotlib.patches.Patch`
+            A patch for the aperture. If the aperture is scalar then a
+            single `~matplotlib.patches.Patch` is returned, otherwise a
+            list of `~matplotlib.patches.Patch` is returned.
+        """
+        # matplotlib is an optional dependency
+        import matplotlib.patches as mpatches
+        from matplotlib.path import Path
+
+        xy_positions, patch_kwargs = self._define_patch_params(origin=origin,
+                                                               **kwargs)
+
+        half_straight = 0.5 * (self.length_out - self.width_out)
+        rotation = _rotation_matrix(self._theta_rad)
+        vertices_in, codes_in = _pill_outline(half_straight,
+                                              0.5 * self.width_in)
+        vertices_out, codes_out = _pill_outline(half_straight,
+                                                0.5 * self.width_out)
+        vertices_in = vertices_in @ rotation
+        vertices_out = vertices_out @ rotation
+
+        patches = []
+        for xy_position in xy_positions:
+            patch_inner = mpatches.PathPatch(
+                Path(vertices_in + xy_position, codes_in))
+            patch_outer = mpatches.PathPatch(
+                Path(vertices_out + xy_position, codes_out))
+            path = self._make_annulus_path(patch_inner, patch_outer)
+            patches.append(mpatches.PathPatch(path, **patch_kwargs))
+
+        if self.isscalar:
+            return patches[0]
+
+        return patches
+
+    @_update_method_subpixels_docstring
+    def _compute_overlap(self, edges, nx, ny, use_exact, subpixels):
+        """
+        Compute the overlap of the aperture on the pixel grid.
+
+        <compute_overlap_docs>
+        """
+        overlap = pill_overlap_grid(edges[0], edges[1], edges[2],
+                                    edges[3], nx, ny, self.length_out,
+                                    self.width_out, self._theta_rad,
+                                    use_exact, subpixels)
+        overlap -= pill_overlap_grid(edges[0], edges[1], edges[2],
+                                     edges[3], nx, ny, self.length_in,
+                                     self.width_in, self._theta_rad,
+                                     use_exact, subpixels)
+        # Clip tiny negative values arising from floating-point noise in
+        # the subtraction.
+        np.maximum(overlap, 0.0, out=overlap)
+        return overlap
+
+    def to_sky(self, wcs):  # pragma: no cover
+        """
+        Convert the aperture to a sky aperture.
+
+        Parameters
+        ----------
+        wcs : WCS object
+            A world coordinate system (WCS) transformation.
+        """
+        raise NotImplementedError
 
 
 class SkyPillAperture(_RotatableApertureMixin, SkyAperture):

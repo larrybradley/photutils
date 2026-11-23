@@ -10,9 +10,9 @@ from astropy.coordinates import SkyCoord
 from numpy.testing import assert_allclose, assert_array_equal
 
 from photutils.aperture import (AperturePhotometry, ApertureStats,
-                                CircularAperture, RectangularAperture,
-                                aperture_photometry)
-from photutils.aperture.pill import PillAperture, SkyPillAperture
+                                CircularAnnulus, CircularAperture,
+                                RectangularAperture, aperture_photometry)
+from photutils.aperture.pill import PillAnnulus, PillAperture, SkyPillAperture
 from photutils.aperture.tests.test_aperture_common import (
     BaseTestAperture, BaseTestRotatedPixelAperture)
 from photutils.utils._optional_deps import HAS_MATPLOTLIB
@@ -230,3 +230,174 @@ class TestSkyPillAperture(BaseTestAperture):
         match = "'length' must be greater than or equal to 'width'"
         with pytest.raises(ValueError, match=match):
             SkyPillAperture(SKYCOORD, length=4 * UNIT, width=5 * UNIT)
+
+
+class TestPillAnnulus(BaseTestRotatedPixelAperture):
+    aperture = PillAnnulus(POSITIONS, length_in=10.0, length_out=14.0,
+                           width_out=9.0, theta=np.pi / 2.0)
+    copy_param = 'length_out'
+    copy_value = 15.0
+
+    @staticmethod
+    @pytest.mark.parametrize('radius', RADII)
+    def test_invalid_params(radius):
+        match = "'length_in' must be a positive scalar"
+        with pytest.raises(ValueError, match=match):
+            PillAnnulus(POSITIONS, length_in=radius, length_out=14.0,
+                        width_out=9.0)
+        match = "'length_out' must be a positive scalar"
+        with pytest.raises(ValueError, match=match):
+            PillAnnulus(POSITIONS, length_in=10.0, length_out=radius,
+                        width_out=9.0)
+        match = "'width_out' must be a positive scalar"
+        with pytest.raises(ValueError, match=match):
+            PillAnnulus(POSITIONS, length_in=10.0, length_out=14.0,
+                        width_out=radius)
+
+    def test_length_ordering(self):
+        match = "'length_out' must be greater than 'length_in'"
+        with pytest.raises(ValueError, match=match):
+            PillAnnulus(POSITIONS, length_in=14.0, length_out=14.0,
+                        width_out=9.0)
+
+    def test_width_out_greater_than_length_out(self):
+        match = "'length_out' must be greater than or equal to 'width_out'"
+        with pytest.raises(ValueError, match=match):
+            PillAnnulus(POSITIONS, length_in=4.0, length_out=6.0,
+                        width_out=7.0)
+
+    @pytest.mark.parametrize('width_out', [6.0, 5.0])
+    def test_nonpositive_inner_width(self, width_out):
+        match = 'the inner width must be positive'
+        with pytest.raises(ValueError, match=match):
+            PillAnnulus(POSITIONS, length_in=4.0, length_out=10.0,
+                        width_out=width_out)
+
+    def test_validation_on_mutation(self):
+        aper = PillAnnulus(POSITIONS, length_in=10.0, length_out=14.0,
+                           width_out=9.0)
+        match = 'the inner width must be positive'
+        with pytest.raises(ValueError, match=match):
+            aper.length_in = 4.0
+        assert aper.length_in == 10.0
+        with pytest.raises(ValueError, match=match):
+            aper.length_out = 20.0
+        assert aper.length_out == 14.0
+        with pytest.raises(ValueError, match=match):
+            aper.width_out = 4.0
+        assert aper.width_out == 9.0
+        area = aper.area
+        bbox = aper.bbox
+        aper.length_out = 16.0
+        assert_allclose(aper.width_in, 3.0)
+        assert aper.area != area
+        assert aper.bbox != bbox
+
+    def test_width_in(self):
+        aper = PillAnnulus((10, 20), length_in=24.0, length_out=30.0,
+                           width_out=16.0)
+        assert_allclose(aper.width_in, 10.0)
+        with pytest.raises(AttributeError):
+            aper.width_in = 5.0
+
+    def test_area(self):
+        aper = PillAnnulus((10, 20), length_in=24.0, length_out=30.0,
+                           width_out=16.0)
+        assert_allclose(aper.area, 84.0 + 39.0 * np.pi)
+
+    @pytest.mark.parametrize('theta', [0.0, 0.6, 2.1, -1.0])
+    def test_outer_minus_inner(self, theta):
+        xypos = (30.3, 29.6)
+        shape = (60, 60)
+        annulus = PillAnnulus(xypos, length_in=24.0, length_out=30.0,
+                              width_out=16.0, theta=theta)
+        outer = PillAperture(xypos, length=30.0, width=16.0, theta=theta)
+        inner = PillAperture(xypos, length=24.0, width=10.0, theta=theta)
+        assert annulus.bbox == outer.bbox
+        expected = (outer.to_mask().to_image(shape)
+                    - inner.to_mask().to_image(shape))
+        assert_allclose(annulus.to_mask().to_image(shape), expected,
+                        atol=1e-12)
+
+    def test_circle_limit(self):
+        pill = PillAnnulus((10.3, 20.6), length_in=6.0, length_out=10.0,
+                           width_out=10.0, theta=0.4)
+        circ = CircularAnnulus((10.3, 20.6), r_in=3.0, r_out=5.0)
+        assert pill.bbox == circ.bbox
+        assert_allclose(pill.to_mask().data, circ.to_mask().data,
+                        atol=1e-12)
+
+    @pytest.mark.parametrize(
+        ('length_in', 'length_out', 'width_out'),
+        [(24.0, 30.0, 16.0), (12.0, 12.2, 5.0), (7.01, 12.0, 5.0)])
+    @pytest.mark.parametrize('theta', [0.0, 0.6, 2.1, -1.0])
+    def test_exact_mask_sum(self, theta, length_in, length_out,
+                            width_out):
+        # The second case is a ring far thinner than a pixel and the
+        # third has an inner width far below one pixel.
+        aper = PillAnnulus((35.3, 34.6), length_in=length_in,
+                           length_out=length_out, width_out=width_out,
+                           theta=theta)
+        data = aper.to_mask().data
+        assert_allclose(data.sum(), aper.area, rtol=1e-9)
+        assert data.min() >= 0.0
+        assert data.max() <= 1.0 + 1e-14
+
+    @pytest.mark.parametrize(
+        ('length_in', 'length_out', 'width_out', 'theta'),
+        [(4.0, 6.0, 6.0, 45 * u.deg),
+         (np.hypot(2, 2) + 1, np.hypot(2, 2) + 3, 3.0, np.arctan2(2, 2)),
+         (np.hypot(6, 6) + 2, np.hypot(6, 6) + 6, 6.0, np.arctan2(6, 6))])
+    def test_exact_junction_on_corners(self, length_in, length_out,
+                                       width_out, theta):
+        # Pixel corners lie on the junction lines of both pills.
+        data = np.ones((41, 41))
+        aper = PillAnnulus((20, 20), length_in=length_in,
+                           length_out=length_out, width_out=width_out,
+                           theta=theta)
+        mask = aper.to_mask()
+        assert mask.data.min() >= 0.0
+        assert mask.data.max() <= 1.0 + 1e-14
+        assert_allclose(mask.data.sum(), aper.area, rtol=1e-12)
+        tbl = aperture_photometry(data, aper)
+        assert_allclose(tbl['aperture_sum'][0], aper.area, rtol=1e-12)
+        stats = ApertureStats(data, aper)
+        assert_allclose(stats.sum, aper.area, rtol=1e-12)
+
+    @pytest.mark.parametrize(('method', 'rtol'),
+                             [('center', 0.05), ('subpixel', 0.01)])
+    def test_approximate_methods(self, method, rtol):
+        aper = PillAnnulus((35.3, 34.6), length_in=24.0, length_out=30.0,
+                           width_out=16.0, theta=0.6)
+        mask = aper.to_mask(method=method, subpixels=5)
+        assert_allclose(mask.data.sum(), aper.area, rtol=rtol)
+
+    @pytest.mark.skipif(not HAS_MATPLOTLIB, reason='matplotlib is required')
+    def test_patch_has_empty_interior(self):
+        # matplotlib is an optional dependency
+        from matplotlib.path import Path
+
+        position = np.array((10.3, 20.6))
+        origin = np.array((1.5, -2.0))
+        theta = 0.6
+        aper = PillAnnulus(position, length_in=24.0, length_out=30.0,
+                           width_out=16.0, theta=theta)
+        path = aper._to_patch(origin=origin).get_path()
+        center = position - origin
+        across = np.array((-np.sin(theta), np.cos(theta)))
+
+        def is_filled(point):
+            # Path.contains_point ignores holes, so sum the signed
+            # winding of each closed outline to apply the nonzero rule.
+            winding = 0
+            for polygon in path.to_polygons(closed_only=True):
+                x, y = polygon[:, 0], polygon[:, 1]
+                orientation = np.sign(np.sum(x * np.roll(y, -1)
+                                             - np.roll(x, -1) * y))
+                if Path(polygon).contains_point(point):
+                    winding += orientation
+            return winding != 0
+
+        assert not is_filled(center)
+        assert is_filled(center + 6.5 * across)
+        assert not is_filled(center + 9.0 * across)
