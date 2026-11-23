@@ -66,6 +66,8 @@ coordinates.
      - `~photutils.aperture.SkyRectangularAperture`
    * - `~photutils.aperture.RectangularAnnulus`
      - `~photutils.aperture.SkyRectangularAnnulus`
+   * - `~photutils.aperture.PillAperture`
+     - `~photutils.aperture.SkyPillAperture`
    * - `~photutils.aperture.PolygonAperture`
      - `~photutils.aperture.SkyPolygonAperture`
 
@@ -82,7 +84,8 @@ accepts a list of :class:`~photutils.aperture.Aperture` and/or
 
 The :func:`~photutils.aperture.region_to_aperture` convenience function
 can be used to convert a `regions.Region` object to the corresponding
-:class:`~photutils.aperture.Aperture` object.
+:class:`~photutils.aperture.Aperture` object. The pill apertures have no
+equivalent `regions.Region` class, so they cannot be converted.
 
 
 .. _creating-aperture-objects:
@@ -213,6 +216,73 @@ semiaxes of 4 and 2 pixels::
     using a WCS with significant spatial variations, the converted
     aperture shapes may become increasingly inaccurate for positions
     farther from the first position.
+
+
+.. _pill-apertures:
+
+Pill Apertures
+^^^^^^^^^^^^^^
+
+The `~photutils.aperture.PillAperture` and
+`~photutils.aperture.SkyPillAperture` classes define a pill-shaped
+aperture, also called a stadium. A pill is a rectangle with a
+semicircular cap on each short end. It is the region within a fixed
+distance of a line segment, so it matches the shape of a point source
+that trails, for example, a moving object or a star trailed by tracking
+errors, much better than an ellipse does.
+
+The ``length`` is the full tip-to-tip length along the long axis,
+including both round ends. The ``width`` is the full width across the
+long axis, which is also the diameter of the round ends. The ``length``
+must be greater than or equal to the ``width``, and a pill with equal
+values is a circle. The straight part of the pill, which is the length
+of the trail that the aperture covers, is ``length - width``. The
+``theta`` keyword is the angle of the long axis. For a pixel aperture
+it is measured counterclockwise from the positive x axis. For a sky
+aperture it is the position angle measured from North toward East::
+
+    >>> from photutils.aperture import PillAperture
+    >>> aperture = PillAperture((31.4, 32.9), length=20.0, width=6.0,
+    ...                         theta=0.5)
+    >>> print(aperture.area)  # doctest: +FLOAT_CMP
+    112.27433388230814
+
+The pill apertures support the ``'exact'``, ``'center'``, and
+``'subpixel'`` methods. There are no pill annulus classes. The
+following example simulates a source trailed over 14 pixels at an angle
+of 30 degrees and overplots a pill aperture with the same trail length
+and orientation. The ``length`` of the aperture is the trail length plus
+the ``width``:
+
+.. plot::
+    :include-source: true
+
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from photutils.aperture import PillAperture
+
+    # Sum a Gaussian over closely spaced points along the trail.
+    ny, nx = 41, 61
+    yy, xx = np.mgrid[:ny, :nx]
+    x0, y0 = 30.0, 20.0
+    trail_length = 14.0
+    theta = np.deg2rad(30.0)
+    sigma = 1.8
+    data = np.zeros((ny, nx))
+    for step in np.linspace(-0.5 * trail_length, 0.5 * trail_length, 57):
+        xc = x0 + step * np.cos(theta)
+        yc = y0 + step * np.sin(theta)
+        data += np.exp(-((xx - xc)**2 + (yy - yc)**2) / (2 * sigma**2))
+    rng = np.random.default_rng(0)
+    data = data * 100.0 / 57 + rng.normal(0.0, 1.0, data.shape)
+
+    width = 4.0 * sigma
+    aperture = PillAperture((x0, y0), length=trail_length + width,
+                            width=width, theta=theta)
+
+    fig, ax = plt.subplots()
+    ax.imshow(data, origin='lower')
+    aperture.plot(ax=ax, color='white', lw=2)
 
 
 Polygon Apertures

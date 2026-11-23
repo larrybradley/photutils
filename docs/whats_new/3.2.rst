@@ -143,6 +143,30 @@ columns in the same priority order. See :ref:`build-epsf` for more
 details.
 
 
+Pill Apertures for Trailed Sources
+==================================
+
+The new `~photutils.aperture.PillAperture` and
+`~photutils.aperture.SkyPillAperture` classes define a pill-shaped
+(stadium) aperture, which is a rectangle with a semicircular cap on
+each short end. It is the shape of a point source that trails, for
+example, a moving object or a star trailed by tracking errors. The
+``length`` is the tip-to-tip length including both round ends, the
+``width`` is the width across the long axis, and ``length - width``
+is the trail length. For a source trailed by about 12 pixels at 30
+degrees in an image ``data``::
+
+    >>> import numpy as np
+    >>> from photutils.aperture import AperturePhotometry, PillAperture
+    >>> aperture = PillAperture((31.4, 32.9), length=16.0, width=4.0,
+    ...                         theta=np.deg2rad(30.0))
+    >>> phot = AperturePhotometry(data, aperture)
+
+The pill apertures support the ``'exact'``, ``'center'``, and
+``'subpixel'`` methods and work with `~photutils.aperture.ApertureStats`
+and ASDF files. See :ref:`pill-apertures` for more details.
+
+
 Dependency Version Updates
 ==========================
 

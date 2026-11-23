@@ -13,11 +13,12 @@ from numpy.testing import assert_allclose
 
 from photutils.aperture import (CircularAnnulus, CircularAperture,
                                 EllipticalAnnulus, EllipticalAperture,
-                                PolygonAperture, RectangularAnnulus,
-                                RectangularAperture, SkyCircularAnnulus,
-                                SkyCircularAperture, SkyEllipticalAnnulus,
-                                SkyEllipticalAperture, SkyPolygonAperture,
-                                SkyRectangularAnnulus, SkyRectangularAperture)
+                                PillAperture, PolygonAperture,
+                                RectangularAnnulus, RectangularAperture,
+                                SkyCircularAnnulus, SkyCircularAperture,
+                                SkyEllipticalAnnulus, SkyEllipticalAperture,
+                                SkyPolygonAperture, SkyRectangularAnnulus,
+                                SkyRectangularAperture)
 from photutils.aperture.region_converters import (_scalar_aperture_to_region,
                                                   _shapely_polygon_to_region,
                                                   aperture_to_region,
@@ -568,6 +569,16 @@ class TestApertureToRegion:
         match = 'Cannot convert input aperture to a Region object'
         with pytest.raises(TypeError, match=match):
             _scalar_aperture_to_region(_FakeAperture())
+
+    @pytest.mark.skipif(not HAS_REGIONS, reason='regions is required')
+    def test_pill_unsupported(self):
+        """
+        Test that a pill aperture has no regions equivalent.
+        """
+        aperture = PillAperture((10, 20), length=6.0, width=3.0)
+        match = 'Cannot convert input aperture to a Region object'
+        with pytest.raises(TypeError, match=match):
+            aperture_to_region(aperture)
 
 
 class TestShapelyConversions:

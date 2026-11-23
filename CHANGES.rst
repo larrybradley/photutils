@@ -9,6 +9,15 @@ General
 New Features
 ^^^^^^^^^^^^
 
+- ``photutils.aperture``
+
+  - Added the ``PillAperture`` and ``SkyPillAperture`` classes, which
+    define a pill-shaped (stadium) aperture. A pill is the region
+    within a fixed distance of a line segment, so it matches the shape
+    of a trailed source. The apertures support the ``'exact'``,
+    ``'center'``, and ``'subpixel'`` methods, batch photometry, and
+    ASDF serialization. [#NNNN]
+
 - ``photutils.background``
 
   - Added a ``make_morans_i_mask`` function to make a source
