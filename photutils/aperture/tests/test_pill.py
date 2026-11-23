@@ -6,15 +6,19 @@ Tests for the pill module.
 import astropy.units as u
 import numpy as np
 import pytest
+from astropy.coordinates import SkyCoord
 from numpy.testing import assert_allclose
 
 from photutils.aperture import (CircularAperture, RectangularAperture,
                                 aperture_photometry)
-from photutils.aperture.pill import PillAperture
+from photutils.aperture.pill import PillAperture, SkyPillAperture
 from photutils.aperture.tests.test_aperture_common import (
-    BaseTestRotatedPixelAperture)
+    BaseTestAperture, BaseTestRotatedPixelAperture)
 
 POSITIONS = [(10, 20), (30, 40), (50, 60), (70, 80)]
+RA, DEC = np.transpose(POSITIONS)
+SKYCOORD = SkyCoord(ra=RA, dec=DEC, unit='deg')
+UNIT = u.arcsec
 RADII = (0.0, -1.0, -np.inf)
 
 
@@ -101,3 +105,28 @@ class TestPillAperture(BaseTestRotatedPixelAperture):
                             theta=0.6)
         tbl = aperture_photometry(np.ones((50, 50)), aper)
         assert_allclose(tbl['aperture_sum'][0], aper.area, rtol=1e-10)
+
+
+class TestSkyPillAperture(BaseTestAperture):
+    aperture = SkyPillAperture(SKYCOORD, length=10.0 * UNIT,
+                               width=5.0 * UNIT, theta=30 * u.deg)
+    copy_param = 'length'
+    copy_value = 20.0 * UNIT
+
+    @staticmethod
+    @pytest.mark.parametrize('radius', RADII)
+    def test_invalid_params(radius):
+        match = "'length' must be greater than zero"
+        with pytest.raises(ValueError, match=match):
+            SkyPillAperture(SKYCOORD, length=radius * UNIT,
+                            width=5.0 * UNIT, theta=30 * u.deg)
+
+        match = "'width' must be greater than zero"
+        with pytest.raises(ValueError, match=match):
+            SkyPillAperture(SKYCOORD, length=10.0 * UNIT,
+                            width=radius * UNIT, theta=30 * u.deg)
+
+    def test_length_less_than_width(self):
+        match = "'length' must be greater than or equal to 'width'"
+        with pytest.raises(ValueError, match=match):
+            SkyPillAperture(SKYCOORD, length=4 * UNIT, width=5 * UNIT)

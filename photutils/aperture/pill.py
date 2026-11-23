@@ -6,15 +6,22 @@ Pill-shaped (stadium) aperture in pixel coordinates.
 import math
 from functools import cached_property
 
+import astropy.units as u
 import numpy as np
+from astropy.coordinates import Angle
 
 from photutils.aperture.attributes import (PixelPositions, PositiveScalar,
-                                           ScalarAngleOrValue)
-from photutils.aperture.core import (PixelAperture, _RotatableApertureMixin,
+                                           PositiveScalarAngle, ScalarAngle,
+                                           ScalarAngleOrValue,
+                                           SkyCoordPositions)
+from photutils.aperture.core import (PixelAperture, SkyAperture,
+                                     _RotatableApertureMixin,
                                      _update_method_subpixels_docstring)
 from photutils.geometry._pill_overlap import pill_overlap_grid
+from photutils.utils._wcs_helpers import (pixel_shape_to_sky_svd,
+                                          sky_shape_to_pixel_svd)
 
-__all__ = ['PillAperture']
+__all__ = ['PillAperture', 'SkyPillAperture']
 
 
 class PillAperture(_RotatableApertureMixin, PixelAperture):
@@ -183,14 +190,163 @@ class PillAperture(_RotatableApertureMixin, PixelAperture):
 
     def to_sky(self, wcs):
         """
-        Convert the aperture to a sky aperture.
-
-        This conversion is not implemented yet.
+        Convert the aperture to a `SkyPillAperture` object defined in
+        celestial coordinates.
 
         Parameters
         ----------
         wcs : WCS object
-            A world coordinate system (WCS) transformation.
+            A world coordinate system (WCS) transformation that
+            supports the `astropy shared interface for WCS
+            <https://docs.astropy.org/en/stable/wcs/wcsapi.html>`_
+            (e.g., `astropy.wcs.WCS`, `gwcs.wcs.WCS`).
+
+        Returns
+        -------
+        aperture : `SkyPillAperture` object
+            A `SkyPillAperture` object.
+
+        Notes
+        -----
+        The aperture shape parameters are converted using the local WCS
+        properties (pixel scale, rotation angle) evaluated at the first
+        aperture position. Because aperture objects require scalar shape
+        parameters, only a single reference position is used for the
+        conversion. For apertures with multiple positions used with a
+        WCS that has spatially-varying distortions, this may produce
+        inaccurate results for positions far from the first position.
+
+        The converted length is raised to the converted width when the
+        WCS would make it smaller, which can happen for a pill whose
+        length is equal to its width.
         """
-        msg = 'PillAperture.to_sky is not implemented yet'
-        raise NotImplementedError(msg)
+        xpos, ypos = np.transpose(self.positions)
+        positions = wcs.pixel_to_world(xpos, ypos)
+
+        first_pos = np.atleast_2d(self.positions)[0]
+        pixcoord = (float(first_pos[0]), float(first_pos[1]))
+        sky_length, sky_width, sky_angle = pixel_shape_to_sky_svd(
+            wcs, pixcoord, self.length, self.width, self._theta_rad)
+
+        length = Angle(max(sky_length, sky_width), 'arcsec')
+        width = Angle(sky_width, 'arcsec')
+        return SkyPillAperture(positions=positions, length=length,
+                               width=width, theta=sky_angle)
+
+
+class SkyPillAperture(_RotatableApertureMixin, SkyAperture):
+    """
+    A pill-shaped aperture defined in sky coordinates.
+
+    A pill, also called a stadium, is a rectangle with a semicircular
+    cap on each short end. The aperture has a single fixed size/shape,
+    but it can have multiple positions (see the ``positions`` input).
+
+    Parameters
+    ----------
+    positions : `~astropy.coordinates.SkyCoord`
+        The celestial coordinates of the aperture center(s). This can be
+        either scalar coordinates or an array of coordinates.
+
+    length : scalar `~astropy.units.Quantity`
+        The full length of the pill in angular units, measured from tip
+        to tip and including both semicircular ends. For ``theta=0``
+        the long axis is along the North-South axis. It must be greater
+        than or equal to ``width``.
+
+    width : scalar `~astropy.units.Quantity`
+        The full width of the pill in angular units, which is also the
+        diameter of the semicircular ends. For ``theta=0`` the width is
+        along the East-West axis.
+
+    theta : scalar `~astropy.units.Quantity`, optional
+        The position angle (in angular units) of the pill "long axis",
+        measured from North (PA=0) toward East. This is counterclockwise
+        on an image displayed with North up and East to the left. North
+        and East are the directions of increasing latitude and longitude
+        in the coordinate frame of ``positions`` (e.g., ICRS or
+        Galactic). When the aperture is converted to pixels with a WCS
+        whose celestial frame differs from that frame, the angle is
+        converted to the equivalent angle in the WCS frame, so the
+        aperture keeps the same orientation on the sky.
+
+    Raises
+    ------
+    TypeError : `TypeError`
+        If either ``length`` or ``width`` is not a
+        `~astropy.units.Quantity`.
+
+    ValueError : `ValueError`
+        If either ``length`` or ``width`` is not positive, or if
+        ``length`` is less than ``width``.
+
+    Examples
+    --------
+    >>> from astropy.coordinates import SkyCoord
+    >>> import astropy.units as u
+    >>> from photutils.aperture import SkyPillAperture
+    >>> positions = SkyCoord(ra=[10.0, 20.0], dec=[30.0, 40.0], unit='deg')
+    >>> aper = SkyPillAperture(positions, 1.0*u.arcsec, 0.5*u.arcsec)
+    """
+
+    _params = ('positions', 'length', 'width', 'theta')
+    _ordered_pairs_inclusive = (('width', 'length'),)
+    positions = SkyCoordPositions('The center position(s) in sky coordinates.')
+    length = PositiveScalarAngle('The full length in angular units, tip to '
+                                 'tip.')
+    width = PositiveScalarAngle('The full width in angular units.')
+    theta = ScalarAngle('The position angle (in angular units) of the '
+                        'pill long axis.')
+
+    def __init__(self, positions, length, width, *, theta=0.0 * u.deg):
+        self.positions = positions
+        self.length = length
+        self.width = width
+        self.theta = theta
+
+    def to_pixel(self, wcs):
+        """
+        Convert the aperture to a `PillAperture` object defined in
+        pixel coordinates.
+
+        Parameters
+        ----------
+        wcs : WCS object
+            A world coordinate system (WCS) transformation that
+            supports the `astropy shared interface for WCS
+            <https://docs.astropy.org/en/stable/wcs/wcsapi.html>`_
+            (e.g., `astropy.wcs.WCS`, `gwcs.wcs.WCS`).
+
+        Returns
+        -------
+        aperture : `PillAperture` object
+            A `PillAperture` object.
+
+        Notes
+        -----
+        The aperture shape parameters are converted using the local WCS
+        properties (pixel scale, rotation angle) evaluated at the first
+        aperture position. Because aperture objects require scalar shape
+        parameters, only a single reference position is used for the
+        conversion. For apertures with multiple positions used with a
+        WCS that has spatially-varying distortions, this may produce
+        inaccurate results for positions far from the first position.
+
+        The converted length is raised to the converted width when the
+        WCS would make it smaller, which can happen for a pill whose
+        length is equal to its width.
+        """
+        xpos, ypos = wcs.world_to_pixel(self.positions)
+        positions = np.transpose((xpos, ypos))
+
+        skypos = self.positions if self.isscalar else self.positions[0]
+        first_pixcoord = tuple(np.atleast_2d(positions)[0])
+        _, pix_length, pix_width, pix_angle = sky_shape_to_pixel_svd(
+            wcs, skypos,
+            self.length.to_value(u.arcsec),
+            self.width.to_value(u.arcsec),
+            self._theta_rad, pixcoord=first_pixcoord)
+
+        return PillAperture(positions=positions,
+                            length=max(pix_length, pix_width),
+                            width=pix_width, theta=pix_angle)

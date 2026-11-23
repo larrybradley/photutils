@@ -27,9 +27,10 @@ from numpy.testing import assert_allclose
 
 from photutils.aperture import (CircularAnnulus, CircularAperture,
                                 EllipticalAnnulus, EllipticalAperture,
-                                RectangularAnnulus, RectangularAperture,
-                                SkyCircularAnnulus, SkyCircularAperture,
-                                SkyEllipticalAnnulus, SkyEllipticalAperture,
+                                PillAperture, RectangularAnnulus,
+                                RectangularAperture, SkyCircularAnnulus,
+                                SkyCircularAperture, SkyEllipticalAnnulus,
+                                SkyEllipticalAperture, SkyPillAperture,
                                 SkyRectangularAnnulus, SkyRectangularAperture)
 from photutils.datasets import make_gwcs
 from photutils.utils._optional_deps import HAS_GWCS
@@ -741,6 +742,32 @@ def _pixel_ellipse_boundary(aperture, *, n_points=90):
     return x, y
 
 
+class TestPillEqualLengthAndWidth:
+    """
+    A pill with equal length and width converts to a valid pill for any
+    WCS, including one with unequal pixel scales.
+    """
+
+    @staticmethod
+    def _check(wcs):
+        pix = PillAperture(PIX_CENTER, length=4.0, width=4.0, theta=0.5)
+        sky = pix.to_sky(wcs)
+        assert sky.length >= sky.width
+        back = sky.to_pixel(wcs)
+        assert back.length >= back.width
+
+    @pytest.mark.parametrize('wcs', ['simple_wcs', 'rotated_wcs',
+                                     'sheared_wcs', 'strongly_sheared_wcs',
+                                     'sip_wcs', 'flipped_wcs',
+                                     'galactic_wcs', 'swapped_wcs'],
+                             indirect=True)
+    def test_fixture_wcs(self, wcs):
+        self._check(wcs)
+
+    def test_unequal_pixel_scales(self):
+        self._check(_make_nonsquare_wcs())
+
+
 class TestCircleAsEllipse:
     """
     Tests for the ``as_ellipse`` keyword of the circular aperture
@@ -884,6 +911,10 @@ _SKY_APERTURE_CASES = [
                                         h=1 * u.arcsec,
                                         theta=30 * u.deg), {},
                  id='rectangle'),
+    pytest.param(SkyPillAperture(CENTER, length=3 * u.arcsec,
+                                 width=2 * u.arcsec,
+                                 theta=30 * u.deg), {},
+                 id='pill'),
     pytest.param(SkyRectangularAnnulus(CENTER, w_in=1 * u.arcsec,
                                        w_out=2 * u.arcsec,
                                        h_out=1 * u.arcsec,
@@ -904,6 +935,8 @@ _PIXEL_APERTURE_CASES = [
                  id='ellipse_annulus'),
     pytest.param(RectangularAperture(PIX_CENTER, w=5.0, h=3.0, theta=0.5),
                  id='rectangle'),
+    pytest.param(PillAperture(PIX_CENTER, length=5.0, width=3.0, theta=0.5),
+                 id='pill'),
     pytest.param(RectangularAnnulus(PIX_CENTER, w_in=3.0, w_out=5.0,
                                     h_out=3.0, theta=0.5),
                  id='rectangle_annulus'),
