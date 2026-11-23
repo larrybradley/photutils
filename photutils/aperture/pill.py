@@ -11,6 +11,7 @@ import numpy as np
 from astropy.coordinates import Angle
 
 from photutils.aperture._batch_photometry import SHAPE_PILL
+from photutils.aperture._batch_stats import SHAPE_PILL_ANNULUS
 from photutils.aperture.attributes import (PixelPositions, PositiveScalar,
                                            PositiveScalarAngle, ScalarAngle,
                                            ScalarAngleOrValue,
@@ -328,6 +329,7 @@ class _PillAnnulusMixin:
             raise ValueError(msg)
 
 
+@_enable_batch_photometry
 class PillAnnulus(_PillAnnulusMixin, _RotatableApertureMixin, PixelAperture):
     """
     A pill-shaped annulus aperture defined in pixel coordinates.
@@ -377,6 +379,14 @@ class PillAnnulus(_PillAnnulusMixin, _RotatableApertureMixin, PixelAperture):
         if ``length_out`` is less than ``width_out``, or if
         ``length_out - length_in`` is not less than ``width_out``.
 
+    Notes
+    -----
+    `~photutils.aperture.ApertureStats` uses the fast batch code path
+    for the pixel-value statistics of this aperture. The aperture sums
+    use the mask-based code path, so the ``n_threads`` keyword of
+    `~photutils.aperture.AperturePhotometry` has no effect for this
+    aperture.
+
     Examples
     --------
     >>> from astropy.coordinates import Angle
@@ -397,6 +407,7 @@ class PillAnnulus(_PillAnnulusMixin, _RotatableApertureMixin, PixelAperture):
     _params = ('positions', 'length_in', 'length_out', 'width_out', 'theta')
     _ordered_pairs = (('length_in', 'length_out'),)
     _ordered_pairs_inclusive = (('width_out', 'length_out'),)
+    _batch_sums_supported = False
     positions = PixelPositions('The center pixel position(s).')
     length_in = PositiveScalar('The inner full length in pixels, tip to '
                                'tip.')
@@ -426,6 +437,10 @@ class PillAnnulus(_PillAnnulusMixin, _RotatableApertureMixin, PixelAperture):
         theta_rad = self._theta_rad
         return (half_straight * abs(math.cos(theta_rad)) + radius,
                 half_straight * abs(math.sin(theta_rad)) + radius)
+
+    def _batch_shape_params(self):
+        return SHAPE_PILL_ANNULUS, (self.length_in, self.length_out,
+                                    self.width_out, self._theta_rad)
 
     @cached_property
     def area(self):

@@ -946,6 +946,13 @@ class PixelAperture(Aperture):
         return (np.array(aperture_sums), np.array(aperture_sum_errs),
                 np.array(areas), flag_counts, overlap)
 
+    # Whether the batch photometry driver (``batch_aperture_sums``)
+    # supports the shape given by ``_batch_shape_params``. If `False`,
+    # the aperture sums use the mask-based code path, while the
+    # ``ApertureStats`` pixel-value statistics can still use the batch
+    # gather driver.
+    _batch_sums_supported = True
+
     def _batch_shape_params(self):
         """
         The aperture shape code and parameters for the batch Cython
@@ -1029,6 +1036,8 @@ class PixelAperture(Aperture):
             that the caller must resolve to the precise outside-weight
             test (see `_resolve_outside_weights`).
         """
+        if not self._batch_sums_supported:
+            return None
         inputs = batch_driver_inputs(
             self, data, error=error, mask=mask, method=method,
             subpixels=subpixels, segmentation=segmentation, labels=labels,

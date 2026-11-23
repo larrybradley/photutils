@@ -68,6 +68,7 @@ cdef enum:
     _RECTANGULAR_ANNULUS = 5
     _POLYGON = 6
     _PILL = 7
+    _PILL_ANNULUS = 8
 
 
 cdef inline Py_ssize_t _round_half_away(double x) noexcept nogil:
@@ -1162,6 +1163,77 @@ cdef inline double _pill_pixel_frac(double pxmin, double pymin,
     return pill_frac_core(pxmin, pymin, pxmin + dx, pymin + dy, dx, dy,
                           margin, half_straight, radius, cos_theta,
                           sin_theta, use_exact, subpixels)
+
+
+cdef inline double _pill_annulus_pixel_frac(double pxmin, double pymin,
+                                            double dx, double dy,
+                                            double margin,
+                                            double half_straight,
+                                            double radius_in,
+                                            double radius_out,
+                                            double cos_theta,
+                                            double sin_theta, int use_exact,
+                                            int subpixels) noexcept nogil:
+    """
+    Fraction of a single pixel that overlaps a pill annulus, centered
+    on the origin.
+
+    The inner and outer pills share the straight section half length
+    ``half_straight`` and the rotation angle ``theta`` (given as
+    ``cos_theta``/``sin_theta``). The result is the outer
+    ``pill_frac_core`` result minus the inner one, the same per-pixel
+    core used by ``pill_overlap_grid``.
+
+    Parameters
+    ----------
+    pxmin, pymin : double
+        The lower edges of the pixel, relative to the annulus center.
+
+    dx, dy : double
+        The pixel width and height.
+
+    margin : double
+        Half the pixel diagonal.
+
+    half_straight : double
+        Half the length of the shared straight section.
+
+    radius_in : double
+        The radius of the inner pill ends.
+
+    radius_out : double
+        The radius of the outer pill ends.
+
+    cos_theta, sin_theta : double
+        The cosine and sine of the shared rotation angle ``theta``.
+
+    use_exact : int
+        Set to 1 to use the exact geometric overlap calculation. Set
+        to 0 to use subpixel sampling instead.
+
+    subpixels : int
+        The number of subpixels (per dimension) used when
+        ``use_exact`` is 0.
+
+    Returns
+    -------
+    frac : double
+        The fraction (0 to 1) of the pixel's area that overlaps the
+        annulus. The result is clamped at zero to remove tiny negative
+        values from floating-point noise (an annulus overlap can never
+        be negative).
+    """
+    cdef double pxmax = pxmin + dx
+    cdef double pymax = pymin + dy
+    cdef double frac
+
+    frac = (pill_frac_core(pxmin, pymin, pxmax, pymax, dx, dy, margin,
+                           half_straight, radius_out, cos_theta, sin_theta,
+                           use_exact, subpixels)
+            - pill_frac_core(pxmin, pymin, pxmax, pymax, dx, dy, margin,
+                             half_straight, radius_in, cos_theta, sin_theta,
+                             use_exact, subpixels))
+    return frac if frac > 0.0 else 0.0
 
 
 cdef inline double _polygon_pixel_frac(double pxmin, double pymin,

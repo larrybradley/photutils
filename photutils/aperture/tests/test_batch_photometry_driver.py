@@ -22,6 +22,7 @@ from photutils.aperture._batch_photometry import (FLAG_COL_BBOX_CLIPPED,
                                                   SHAPE_PILL, SHAPE_RECTANGLE,
                                                   SHAPE_RECTANGULAR_ANNULUS,
                                                   batch_aperture_sums)
+from photutils.aperture._batch_stats import SHAPE_PILL_ANNULUS
 from photutils.aperture._common import batch_mask_plane
 
 N_THREADS = 8
@@ -221,6 +222,21 @@ def test_params_per_source_invalid():
         batch_aperture_sums(data, None, None, positions, SHAPE_ELLIPSE,
                             None, 2.0, 2.0, 0.0, 0.0, 1, 1,
                             params_per_source=np.zeros((2, 1)))
+
+
+def test_pill_annulus_not_supported():
+    """
+    Test that the batch photometry driver rejects the pill annulus
+    shape code, which only the gather driver supports.
+    """
+    data = np.ones((20, 20))
+    positions = np.array([[10.0, 10.0]])
+    params = np.array([8.0, 12.0, 7.0, 0.5])
+    match = f'Invalid shape_code: {SHAPE_PILL_ANNULUS}'
+    with pytest.raises(ValueError, match=match):
+        batch_aperture_sums(data, None, None, positions,
+                            SHAPE_PILL_ANNULUS, params, 8.0, 8.0, 0.0,
+                            0.0, 1, 1)
 
 
 def test_weights_out():

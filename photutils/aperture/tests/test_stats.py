@@ -29,7 +29,7 @@ from photutils.aperture.ellipse import (EllipticalAnnulus, EllipticalAperture,
                                         SkyEllipticalAperture)
 from photutils.aperture.flags import APERTURE_FLAGS
 from photutils.aperture.photometry import AperturePhotometry
-from photutils.aperture.pill import PillAperture
+from photutils.aperture.pill import PillAnnulus, PillAperture
 from photutils.aperture.rectangle import (RectangularAnnulus,
                                           RectangularAperture)
 from photutils.aperture.stats import (_BLOCK_MAX_PIXELS, _MAD_STD_SCALE,
@@ -820,6 +820,8 @@ class TestMaskPathParity(BaseApertureStatsData):
                            8, 12, 9, theta=0.3),
         PillAperture(((145.1, 168.3), (84.7, 224.1), (48.3, 200.3)),
                      12, 5, theta=0.5),
+        PillAnnulus(((145.1, 168.3), (84.7, 224.1), (48.3, 200.3)),
+                    8, 12, 7, theta=0.5),
     ])
     @pytest.mark.parametrize('sigma_clip', [
         None,

@@ -17,7 +17,7 @@ import scipy
 import photutils
 from photutils.aperture import (CircularAnnulus, CircularAperture,
                                 EllipticalAnnulus, EllipticalAperture,
-                                PillAperture, PolygonAperture,
+                                PillAnnulus, PillAperture, PolygonAperture,
                                 RectangularAnnulus, RectangularAperture)
 from photutils.datasets import make_wcs
 from photutils.utils._optional_deps import HAS_BOTTLENECK
@@ -247,6 +247,9 @@ def make_apertures(positions):
                             theta=theta)),
         ('PillAperture',
          PillAperture(positions, length=14.0, width=10.0, theta=theta)),
+        ('PillAnnulus',
+         PillAnnulus(positions, length_in=14.0, length_out=20.0,
+                     width_out=16.0, theta=theta)),
         ('PolygonAperture',
          PolygonAperture.from_regular_polygon(positions, n_vertices=6,
                                               radius=8.0)),

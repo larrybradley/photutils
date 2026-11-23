@@ -1119,7 +1119,9 @@ class ApertureStats:
         variance, and area are recomputed over the survivors.
 
         `None` is returned (and the mask-based code path is used) when
-        the fast batch driver is unavailable (see `_batch_inputs`).
+        the fast batch driver is unavailable (see `_batch_inputs`) or
+        when the batch photometry driver does not support the aperture
+        shape (its ``_batch_sums_supported`` attribute is `False`).
 
         The result is a `_BatchGather` with the ``sum_aper``,
         ``var_aper``, ``sum_area``, ``starts``, ``overlap``, and
@@ -1131,7 +1133,8 @@ class ApertureStats:
         and only the flat per-source outputs are kept (see
         `_merge_sum_gathers`), so ``starts`` is `None`.
         """
-        if self._batch_inputs is None:
+        if (self._batch_inputs is None
+                or not self._pixel_aperture._batch_sums_supported):
             return None
         edges = self._block_edges
         if len(edges) == 2:

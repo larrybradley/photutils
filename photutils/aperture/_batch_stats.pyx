@@ -33,13 +33,14 @@ import numpy as np
 from photutils.aperture._batch_photometry import N_FLAG_COLS
 
 from photutils.aperture._batch_overlap cimport (
-    _CIRCLE, _CIRCULAR_ANNULUS, _ELLIPSE, _ELLIPTICAL_ANNULUS, _PILL, _POLYGON,
-    _RECTANGLE, _RECTANGULAR_ANNULUS, _SEG_CORRECTED, _SEG_NEIGHBOR,
-    _SEG_UNCORRECTED, _circle_pixel_frac, _circular_annulus_pixel_frac,
-    _classify_seg_pixel, _ellipse_pixel_frac, _elliptical_annulus_pixel_frac,
-    _pill_pixel_frac, _polygon_pixel_frac, _presize_packed_offsets,
-    _rect_pixel_frac, _rectangular_annulus_pixel_frac, _resolve_seg_pixel,
-    _round_half_away, _seg_method_active, _source_grid_setup, real_t, seg_t)
+    _CIRCLE, _CIRCULAR_ANNULUS, _ELLIPSE, _ELLIPTICAL_ANNULUS, _PILL,
+    _PILL_ANNULUS, _POLYGON, _RECTANGLE, _RECTANGULAR_ANNULUS, _SEG_CORRECTED,
+    _SEG_NEIGHBOR, _SEG_UNCORRECTED, _circle_pixel_frac,
+    _circular_annulus_pixel_frac, _classify_seg_pixel, _ellipse_pixel_frac,
+    _elliptical_annulus_pixel_frac, _pill_annulus_pixel_frac, _pill_pixel_frac,
+    _polygon_pixel_frac, _presize_packed_offsets, _rect_pixel_frac,
+    _rectangular_annulus_pixel_frac, _resolve_seg_pixel, _round_half_away,
+    _seg_method_active, _source_grid_setup, real_t, seg_t)
 from photutils.geometry._polygon_overlap cimport (convex_edge_normals,
                                                   polygon_work_partition,
                                                   polygon_work_size)
@@ -59,6 +60,10 @@ cdef extern from "math.h" nogil:
     double ceil(double x)
     bint isfinite(double x)
     const double NAN
+
+# Python-level alias of the pill annulus shape code. The pill annulus is
+# supported by the gather driver only, not by ``batch_aperture_sums``.
+SHAPE_PILL_ANNULUS = _PILL_ANNULUS
 
 # Scale factor that converts the median absolute deviation to a robust
 # estimate of the standard deviation (1 / scipy.stats.norm.ppf(0.75)).
@@ -532,10 +537,17 @@ def batch_aperture_gather(const real_t[:, ::1] data,
         The ``(x, y)`` source positions with shape ``(n_sources, 2)``.
 
     shape_code : int
-        The aperture shape code (see `_batch_photometry`).
+        The aperture shape code. Codes 0 to 7 are those of
+        `_batch_photometry`. Code 8 (``SHAPE_PILL_ANNULUS``) is the
+        pill annulus, which
+        `~photutils.aperture._batch_photometry.batch_aperture_sums`
+        does not accept.
 
     params : 1D ndarray of float64 (C-contiguous)
-        The aperture shape parameters (see `_batch_photometry`).
+        The aperture shape parameters. For codes 0 to 7 they are those
+        of `_batch_photometry`. For the pill annulus they are
+        ``(length_in, length_out, width_out, theta)``, with ``theta``
+        in radians.
 
     ext_x, ext_y : float
         The aperture bounding-box half-extents.
@@ -659,11 +671,12 @@ def batch_aperture_gather(const real_t[:, ::1] data,
     cdef double theta = 0.0, cos_theta = 1.0, sin_theta = 0.0
     cdef double hw_in = 0.0, hh_in = 0.0, hw_out = 0.0, hh_out = 0.0
     cdef double bdx_in = 0.0, bdy_in = 0.0, bdx_out = 0.0, bdy_out = 0.0
-    cdef double half_straight = 0.0, radius = 0.0
+    cdef double half_straight = 0.0, radius = 0.0, radius_in = 0.0
 
-    # The per-pixel loop selects the pill by this flag, not by its shape
-    # code (see ``_batch_photometry``).
+    # The per-pixel loop selects the pill and the pill annulus by these
+    # flags, not by their shape codes (see ``_batch_photometry``).
     cdef bint is_pill = 0
+    cdef bint is_pill_annulus = 0
 
     cdef double poly_x_in[4]
     cdef double poly_y_in[4]
@@ -737,6 +750,14 @@ def batch_aperture_gather(const real_t[:, ::1] data,
         half_straight = 0.5 * (params[0] - params[1])
         radius = 0.5 * params[1]
         theta = params[2]
+        cos_theta = cos(theta)
+        sin_theta = sin(theta)
+    elif shape_code == _PILL_ANNULUS:
+        is_pill_annulus = 1
+        half_straight = 0.5 * (params[1] - params[2])
+        radius = 0.5 * params[2]
+        radius_in = radius - 0.5 * (params[1] - params[0])
+        theta = params[3]
         cos_theta = cos(theta)
         sin_theta = sin(theta)
     elif shape_code == _POLYGON:
@@ -869,6 +890,11 @@ def batch_aperture_gather(const real_t[:, ::1] data,
                             pxmin, pymin, dx, dy, pixel_radius,
                             half_straight, radius, cos_theta, sin_theta,
                             0, 1)
+                    elif is_pill_annulus:
+                        cfrac = _pill_annulus_pixel_frac(
+                            pxmin, pymin, dx, dy, pixel_radius,
+                            half_straight, radius_in, radius, cos_theta,
+                            sin_theta, 0, 1)
                     else:
                         cfrac = _polygon_pixel_frac(
                             pxmin, pymin, dx, dy, pixel_radius, poly_x,

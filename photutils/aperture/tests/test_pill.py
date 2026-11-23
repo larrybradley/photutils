@@ -33,6 +33,14 @@ class NoBatchPillAperture(PillAperture):
     """
 
 
+class NoBatchPillAnnulus(PillAnnulus):
+    """
+    A `PillAnnulus` subclass that does not opt in to the batch Cython
+    driver (it is not decorated with ``_enable_batch_photometry``),
+    forcing the mask-based code path.
+    """
+
+
 class TestPillAperture(BaseTestRotatedPixelAperture):
     aperture = PillAperture(POSITIONS, length=10.0, width=5.0,
                             theta=np.pi / 2.0)
@@ -206,6 +214,62 @@ class TestPillBatch:
         flags_rect = AperturePhotometry(self.data, rect).flags
         assert_array_equal(flags_pill, flags_mask)
         assert_array_equal(flags_pill, flags_rect)
+
+
+class TestPillAnnulusBatch:
+    """
+    Tests for the batch code paths of `PillAnnulus`.
+
+    The pixel-value statistics of `ApertureStats` use the batch gather
+    driver, while the aperture sums use the mask-based code path.
+    """
+
+    data = np.random.default_rng(0).normal(10.0, 1.0, (60, 60))
+    positions = ((25.3, 24.6), (2.2, 30.1), (58.9, 58.2), (-20.0, 5.0))
+    sizes = {'length_in': 8.0, 'length_out': 12.0,  # noqa: RUF012
+             'width_out': 7.0}
+
+    def test_batch_sums_supported(self):
+        assert PillAnnulus._batch_sums_supported is False
+        assert PillAperture._batch_sums_supported is True
+
+    def test_stats_match_mask_path(self):
+        aper = PillAnnulus(self.positions, **self.sizes, theta=0.5)
+        nobatch = NoBatchPillAnnulus(self.positions, **self.sizes,
+                                     theta=0.5)
+        stats = ApertureStats(self.data, aper)
+        stats_nobatch = ApertureStats(self.data, nobatch)
+        assert stats._batch_inputs is not None
+        assert stats_nobatch._batch_inputs is None
+        for prop in ('median', 'mean', 'std', 'min', 'max', 'sum'):
+            assert_allclose(getattr(stats, prop),
+                            getattr(stats_nobatch, prop), rtol=1e-13,
+                            equal_nan=True, err_msg=prop)
+        assert_array_equal(stats.flags, stats_nobatch.flags)
+
+    @pytest.mark.parametrize('theta', [0.5, np.pi / 2])
+    @pytest.mark.parametrize('method', ['exact', 'center', 'subpixel'])
+    def test_photometry_matches_mask(self, method, theta):
+        aper = PillAnnulus(self.positions, **self.sizes, theta=theta)
+        tbl = aperture_photometry(self.data, aper, method=method)
+        expected = [mask.multiply(self.data).sum()
+                    if mask.cutout(self.data) is not None else np.nan
+                    for mask in aper.to_mask(method=method)]
+        assert_allclose(tbl['aperture_sum'], expected, rtol=1e-13,
+                        equal_nan=True)
+
+    def test_flags_match_mask_path(self):
+        aper = PillAnnulus(self.positions, **self.sizes, theta=0.5)
+        nobatch = NoBatchPillAnnulus(self.positions, **self.sizes,
+                                     theta=0.5)
+        assert_array_equal(AperturePhotometry(self.data, aper).flags,
+                           AperturePhotometry(self.data, nobatch).flags)
+
+    def test_n_threads(self):
+        aper = PillAnnulus(self.positions, **self.sizes, theta=0.5)
+        flux1 = AperturePhotometry(self.data, aper, n_threads=1).flux
+        flux2 = AperturePhotometry(self.data, aper, n_threads=2).flux
+        assert_array_equal(flux2, flux1)
 
 
 class TestSkyPillAperture(BaseTestAperture):
