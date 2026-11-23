@@ -149,7 +149,7 @@ Pill Apertures for Trailed Sources
 The new `~photutils.aperture.PillAperture` and
 `~photutils.aperture.SkyPillAperture` classes define a pill-shaped
 (stadium) aperture, which is a rectangle with a semicircular cap on
-each short end. It is the shape of a point source that trails, for
+each end. It is the shape of a point source that trails, for
 example, a moving object or a star trailed by tracking errors. The
 ``length`` is the tip-to-tip length including both round ends, the
 ``width`` is the width across the long axis, and ``length - width``

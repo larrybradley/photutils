@@ -86,6 +86,7 @@ properties:
       SkyPillAperture: the full length of the pill in angular units,
       measured tip to tip along the long axis. For ``theta=0`` the long
       axis is along the North-South axis.
+      The length must be greater than or equal to the width.
     anyOf:
       - type: number
       - tag: 'tag:stsci.edu:asdf/unit/quantity-1.*'
@@ -93,10 +94,11 @@ properties:
     title: Width.
     description: |
       PillAperture: the full width of the pill in pixels, measured
-      across the long axis. This is the diameter of the rounded ends.
+      across the long axis. This is the diameter of the semicircular
+      ends.
       SkyPillAperture: the full width of the pill in angular units,
       measured across the long axis. This is the diameter of the
-      rounded ends.
+      semicircular ends.
     anyOf:
       - type: number
       - tag: 'tag:stsci.edu:asdf/unit/quantity-1.*'

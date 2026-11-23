@@ -1,6 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 """
-Pill-shaped (stadium) aperture in pixel coordinates.
+Pill-shaped (stadium) apertures in both pixel and sky coordinates.
 """
 
 import math
@@ -32,9 +32,9 @@ class PillAperture(_RotatableApertureMixin, PixelAperture):
     A pill-shaped aperture defined in pixel coordinates.
 
     A pill, also called a stadium, is a rectangle with a semicircular
-    cap on each short end. It is the region within a fixed distance of
-    a line segment. The aperture has a single fixed size/shape, but it
-    can have multiple positions (see the ``positions`` input).
+    cap on each end. It is the region within a fixed distance of a line
+    segment. The aperture has a single fixed size/shape, but it can
+    have multiple positions (see the ``positions`` input).
 
     Parameters
     ----------
@@ -223,8 +223,10 @@ class PillAperture(_RotatableApertureMixin, PixelAperture):
         inaccurate results for positions far from the first position.
 
         The converted length is raised to the converted width when the
-        WCS would make it smaller, which can happen for a pill whose
-        length is equal to its width.
+        WCS would make it smaller. This can happen when the length is
+        equal or close to the width and the WCS has unequal pixel
+        scales or shear. The round trip between pixel and sky
+        apertures is then not preserved.
         """
         xpos, ypos = np.transpose(self.positions)
         positions = wcs.pixel_to_world(xpos, ypos)
@@ -245,8 +247,9 @@ class SkyPillAperture(_RotatableApertureMixin, SkyAperture):
     A pill-shaped aperture defined in sky coordinates.
 
     A pill, also called a stadium, is a rectangle with a semicircular
-    cap on each short end. The aperture has a single fixed size/shape,
-    but it can have multiple positions (see the ``positions`` input).
+    cap on each end. It is the region within a fixed distance of a line
+    segment. The aperture has a single fixed size/shape, but it can
+    have multiple positions (see the ``positions`` input).
 
     Parameters
     ----------
@@ -339,8 +342,10 @@ class SkyPillAperture(_RotatableApertureMixin, SkyAperture):
         inaccurate results for positions far from the first position.
 
         The converted length is raised to the converted width when the
-        WCS would make it smaller, which can happen for a pill whose
-        length is equal to its width.
+        WCS would make it smaller. This can happen when the length is
+        equal or close to the width and the WCS has unequal pixel
+        scales or shear. The round trip between pixel and sky
+        apertures is then not preserved.
         """
         xpos, ypos = wcs.world_to_pixel(self.positions)
         positions = np.transpose((xpos, ypos))

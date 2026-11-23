@@ -85,7 +85,9 @@ accepts a list of :class:`~photutils.aperture.Aperture` and/or
 The :func:`~photutils.aperture.region_to_aperture` convenience function
 can be used to convert a `regions.Region` object to the corresponding
 :class:`~photutils.aperture.Aperture` object. The pill apertures have no
-equivalent `regions.Region` class, so they cannot be converted.
+equivalent `regions.Region` class, so the
+:func:`~photutils.aperture.aperture_to_region` function cannot convert
+them to `regions.Region` objects.
 
 
 .. _creating-aperture-objects:
@@ -226,7 +228,7 @@ Pill Apertures
 The `~photutils.aperture.PillAperture` and
 `~photutils.aperture.SkyPillAperture` classes define a pill-shaped
 aperture, also called a stadium. A pill is a rectangle with a
-semicircular cap on each short end. It is the region within a fixed
+semicircular cap on each end. It is the region within a fixed
 distance of a line segment, so it matches the shape of a point source
 that trails, for example, a moving object or a star trailed by tracking
 errors, much better than an ellipse does.
@@ -238,7 +240,7 @@ must be greater than or equal to the ``width``, and a pill with equal
 values is a circle. The straight part of the pill, which is the length
 of the trail that the aperture covers, is ``length - width``. The
 ``theta`` keyword is the angle of the long axis. For a pixel aperture
-it is measured counterclockwise from the positive x axis. For a sky
+it is measured counterclockwise from the positive x-axis. For a sky
 aperture it is the position angle measured from North toward East::
 
     >>> from photutils.aperture import PillAperture
@@ -288,8 +290,8 @@ the ``width``:
 Polygon Apertures
 ^^^^^^^^^^^^^^^^^
 
-In addition to the built-in circular, elliptical, and
-rectangular shapes, arbitrary polygon apertures are
+In addition to the built-in circular, elliptical, rectangular,
+and pill shapes, arbitrary polygon apertures are
 supported via the `~photutils.aperture.PolygonAperture` and
 `~photutils.aperture.SkyPolygonAperture` classes. Like the other
 aperture types, a polygon aperture has a single fixed shape (defined by
