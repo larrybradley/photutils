@@ -53,11 +53,14 @@ class ApertureAttribute:
     def _validate_ordered_pairs(self, instance, value):
         """
         Validate the ordering invariants between related parameters
-        declared by the owner class in ``_ordered_pairs``.
+        declared by the owner class.
 
         ``_ordered_pairs`` is a tuple of ``(inner, outer)`` parameter
         name pairs, where the inner value must be strictly less than the
-        outer value (e.g., an annulus inner and outer radius). The check
+        outer value (e.g., an annulus inner and outer radius).
+        ``_ordered_pairs_inclusive`` is a tuple of ``(smaller, larger)``
+        name pairs, where the smaller value must be less than or equal
+        to the larger value (e.g., a pill width and length). The check
         runs whenever either parameter of a pair is assigned, comparing
         the new value against the other parameter's current value. It is
         skipped while the other parameter is not yet set (e.g., partway
@@ -74,6 +77,21 @@ class ApertureAttribute:
                 other = instance.__dict__.get(inner)
                 if other is not None and not value > other:
                     msg = f'{outer!r} must be greater than {inner!r}'
+                    raise ValueError(msg)
+
+        for smaller, larger in getattr(instance, '_ordered_pairs_inclusive',
+                                       ()):
+            if self.name == smaller:
+                other = instance.__dict__.get(larger)
+                if other is not None and not other >= value:
+                    msg = (f'{larger!r} must be greater than or equal to '
+                           f'{smaller!r}')
+                    raise ValueError(msg)
+            elif self.name == larger:
+                other = instance.__dict__.get(smaller)
+                if other is not None and not value >= other:
+                    msg = (f'{larger!r} must be greater than or equal to '
+                           f'{smaller!r}')
                     raise ValueError(msg)
 
     def _reset_cached_properties(self, instance):

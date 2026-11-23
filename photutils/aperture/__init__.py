@@ -11,6 +11,7 @@ from .ellipse import *  # noqa: F403
 from .flags import *  # noqa: F403
 from .mask import *  # noqa: F403
 from .photometry import *  # noqa: F403
+from .pill import *  # noqa: F403
 from .polygon import *  # noqa: F403
 from .rectangle import *  # noqa: F403
 from .stats import *  # noqa: F403
