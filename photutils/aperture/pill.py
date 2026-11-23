@@ -71,6 +71,16 @@ def _rotation_matrix(theta_rad):
     """
     Return the matrix that rotates row-vector vertices counterclockwise
     by ``theta_rad``.
+
+    Parameters
+    ----------
+    theta_rad : float
+        The rotation angle in radians.
+
+    Returns
+    -------
+    rotation : 2D `~numpy.ndarray`
+        The ``(2, 2)`` rotation matrix to right-multiply vertices by.
     """
     cos_theta = math.cos(theta_rad)
     sin_theta = math.sin(theta_rad)
@@ -301,8 +311,11 @@ class _PillAnnulusMixin:
         The check is skipped until ``length_in``, ``length_out``, and
         ``width_out`` are all set.
         """
-        values = {key: self.__dict__.get(key)
-                  for key in ('length_in', 'length_out', 'width_out')}
+        sizes = ('length_in', 'length_out', 'width_out')
+        if name not in sizes:
+            return
+
+        values = {key: self.__dict__.get(key) for key in sizes}
         values[name] = value
         if any(val is None for val in values.values()):
             return
@@ -314,7 +327,6 @@ class _PillAnnulusMixin:
             raise ValueError(msg)
 
 
-@_enable_batch_photometry
 class PillAnnulus(_PillAnnulusMixin, _RotatableApertureMixin, PixelAperture):
     """
     A pill-shaped annulus aperture defined in pixel coordinates.

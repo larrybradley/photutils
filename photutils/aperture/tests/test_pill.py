@@ -387,7 +387,7 @@ class TestPillAnnulus(BaseTestRotatedPixelAperture):
         across = np.array((-np.sin(theta), np.cos(theta)))
 
         def is_filled(point):
-            # Path.contains_point ignores holes, so sum the signed
+            # Matplotlib's contains_point ignores holes, so sum the signed
             # winding of each closed outline to apply the nonzero rule.
             winding = 0
             for polygon in path.to_polygons(closed_only=True):
