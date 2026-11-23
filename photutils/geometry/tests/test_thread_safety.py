@@ -14,6 +14,7 @@ from numpy.testing import assert_array_equal
 
 from photutils.geometry import (circular_overlap_grid, elliptical_overlap_grid,
                                 rectangular_overlap_grid)
+from photutils.geometry._pill_overlap import pill_overlap_grid
 from photutils.geometry._polygon_overlap import polygon_overlap_grid
 
 N_THREADS = 8
@@ -51,6 +52,14 @@ def test_rectangular_overlap_grid_threadsafe(use_exact):
     def fn():
         return rectangular_overlap_grid(-15.0, 15.0, -15.0, 15.0, 200, 200,
                                         12.0, 7.0, 0.5, use_exact, 5)
+    _run_concurrent(fn)
+
+
+@pytest.mark.parametrize('use_exact', [1, 0])
+def test_pill_overlap_grid_threadsafe(use_exact):
+    def fn():
+        return pill_overlap_grid(-15.0, 15.0, -15.0, 15.0, 200, 200,
+                                 20.0, 8.0, 0.5, use_exact, 5)
     _run_concurrent(fn)
 
 

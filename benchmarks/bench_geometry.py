@@ -5,10 +5,10 @@ Benchmarks for the photutils.geometry subpackage.
 
 The benchmarks cover the per-call cost of the overlap grid functions
 (circular_overlap_grid, elliptical_overlap_grid,
-rectangular_overlap_grid, and polygon_overlap_grid) for each overlap
-method (exact, center, and subpixel), the scaling with grid size, and
-the scaling of the polygon overlap with the number of vertices for
-convex and nonconvex polygons.
+rectangular_overlap_grid, pill_overlap_grid, and polygon_overlap_grid)
+for each overlap method (exact, center, and subpixel), the scaling with
+grid size, and the scaling of the polygon overlap with the number of
+vertices for convex and nonconvex polygons.
 
 Run ``python benchmarks/bench_geometry.py --help`` to see the
 available options.
@@ -23,6 +23,7 @@ from bench_helpers import (add_memory_argument, print_environment,
 
 from photutils.geometry import (circular_overlap_grid, elliptical_overlap_grid,
                                 rectangular_overlap_grid)
+from photutils.geometry._pill_overlap import pill_overlap_grid
 from photutils.geometry._polygon_overlap import polygon_overlap_grid
 
 # The theta used for all rotated shapes
@@ -98,6 +99,8 @@ def make_grid_functions(grid_size, *, fill_frac=0.4, n_vertices=6):
                             0.6 * radius, THETA)),
         ('rectangle', partial(rectangular_overlap_grid, *grid_args,
                               1.6 * radius, 1.0 * radius, THETA)),
+        ('pill', partial(pill_overlap_grid, *grid_args, 1.6 * radius,
+                         0.8 * radius, THETA)),
         (f'polygon ({n_vertices} vert)',
          partial(polygon_overlap_grid, *grid_args, vertices_x, vertices_y)),
     ]
