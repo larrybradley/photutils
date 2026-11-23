@@ -438,6 +438,14 @@ def batch_aperture_sums(const real_t[:, ::1] data, const real_t[:, ::1] error,
     cdef double bbox_dx_in = 0.0, bbox_dy_in = 0.0
     cdef double bbox_dx_out = 0.0, bbox_dy_out = 0.0
     cdef double half_straight = 0.0, radius = 0.0
+
+    # The per-pixel loop selects the pill by this flag, not by its shape
+    # code. A comparison against the shape code would join the decision
+    # tree that the compiler builds from the other shape-code
+    # comparisons in that loop, which changes the branch sequence taken
+    # by every other shape.
+    cdef bint is_pill = 0
+
     cdef double poly_x_in[4]
     cdef double poly_y_in[4]
     cdef double poly_x_out[4]
@@ -519,6 +527,7 @@ def batch_aperture_sums(const real_t[:, ::1] data, const real_t[:, ::1] error,
                 bbox_dy_in = (half_width_in * fabs(sin_theta)
                               + half_height_in * fabs(cos_theta))
         elif shape_code == _PILL:
+            is_pill = 1
             half_straight = 0.5 * (params[0] - params[1])
             radius = 0.5 * params[1]
             theta = params[2]
@@ -743,7 +752,7 @@ def batch_aperture_sums(const real_t[:, ::1] data, const real_t[:, ::1] error,
                             bbox_dx_out, bbox_dy_out, poly_x_in, poly_y_in,
                             poly_x_out, poly_y_out, buf_a_x, buf_a_y,
                             buf_b_x, buf_b_y, use_exact, subpixels)
-                    elif shape_code == _PILL:
+                    elif is_pill:
                         frac = _pill_pixel_frac(
                             pxmin, pymin, dx, dy, pixel_radius,
                             half_straight, radius, cos_theta, sin_theta,

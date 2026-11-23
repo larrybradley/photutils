@@ -660,6 +660,11 @@ def batch_aperture_gather(const real_t[:, ::1] data,
     cdef double hw_in = 0.0, hh_in = 0.0, hw_out = 0.0, hh_out = 0.0
     cdef double bdx_in = 0.0, bdy_in = 0.0, bdx_out = 0.0, bdy_out = 0.0
     cdef double half_straight = 0.0, radius = 0.0
+
+    # The per-pixel loop selects the pill by this flag, not by its shape
+    # code (see ``_batch_photometry``).
+    cdef bint is_pill = 0
+
     cdef double poly_x_in[4]
     cdef double poly_y_in[4]
     cdef double poly_x_out[4]
@@ -728,6 +733,7 @@ def batch_aperture_gather(const real_t[:, ::1] data,
             bdx_in = hw_in * fabs(cos_theta) + hh_in * fabs(sin_theta)
             bdy_in = hw_in * fabs(sin_theta) + hh_in * fabs(cos_theta)
     elif shape_code == _PILL:
+        is_pill = 1
         half_straight = 0.5 * (params[0] - params[1])
         radius = 0.5 * params[1]
         theta = params[2]
@@ -858,7 +864,7 @@ def batch_aperture_gather(const real_t[:, ::1] data,
                             bdx_in, bdy_in, bdx_out, bdy_out, poly_x_in,
                             poly_y_in, poly_x_out, poly_y_out, buf_a_x,
                             buf_a_y, buf_b_x, buf_b_y, 0, 1)
-                    elif shape_code == _PILL:
+                    elif is_pill:
                         cfrac = _pill_pixel_frac(
                             pxmin, pymin, dx, dy, pixel_radius,
                             half_straight, radius, cos_theta, sin_theta,
