@@ -134,8 +134,8 @@ def bench_aperture_types(size, n_sources, n_threads_list, *, repeats=3,
             partial(_compute_all_properties, data, aperture, error=error,
                     wcs=wcs, sigma_clip=sigma_clip,
                     all_properties=all_properties), repeats=repeats)
-        print(f'{name:>22}{f"{t_median:.3f}s":>10}'
-              f'{f"{t_all:.3f}s":>12}{f"{t_all_clip:.3f}s":>16}')
+        print(f'{name:>22}{f"{t_median:.4f}s":>10}'
+              f'{f"{t_all:.4f}s":>12}{f"{t_all_clip:.4f}s":>16}')
 
     if len(n_threads_list) == 1:
         return

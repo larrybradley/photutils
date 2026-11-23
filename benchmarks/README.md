@@ -38,13 +38,19 @@ python benchmarks/bench_aperture_stats.py --which threads --n-threads 1,4,12
 
 ## Aperture photometry (`bench_aperture_photometry.py`)
 
-Benchmarks for `AperturePhotometry`: computing the flux (with an
-error array) for all of the pixel-based aperture types and each
-overlap method (exact, center, and subpixel).
+Benchmarks for `AperturePhotometry`:
+
+- computing the flux (with an error array) for all of the pixel-based
+  aperture types and each overlap method (exact, center, and subpixel)
+- computing the flux for all of the pixel-based aperture types over a
+  set of input configurations: the data only, an error array and a
+  mask, float32 data, a segmentation image with the `'mask'` and
+  `'correct'` mask methods, and apertures clipped by the image edge
 
 ```bash
 python benchmarks/bench_aperture_photometry.py
 python benchmarks/bench_aperture_photometry.py --n-sources 100000
+python benchmarks/bench_aperture_photometry.py --which inputs --repeats 10
 ```
 
 ## SEP comparison (`bench_aperture_sep.py`)
